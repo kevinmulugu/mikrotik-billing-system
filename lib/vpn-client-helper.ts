@@ -25,7 +25,7 @@ export async function testRouterConnection(
   connection: RouterConnection
 ): Promise<{ success: boolean; error?: string; routerInfo?: any }> {
   try {
-    const baseUrl = `http://${connection.ipAddress}:${connection.port}`;
+    const baseUrl = `http://${connection.ipAddress}`;
     const auth = btoa(`${connection.username}:${connection.password}`);
 
     const response = await fetch(`${baseUrl}/rest/system/resource`, {
@@ -70,7 +70,7 @@ export async function pushVPNConfigToRouter(
   onProgress?: (stage: string, progress: number) => void
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const baseUrl = `http://${connection.ipAddress}:${connection.port}`;
+    const baseUrl = `http://${connection.ipAddress}`;
     const auth = btoa(`${connection.username}:${connection.password}`);
 
     // Stage 1: Create WireGuard interface
