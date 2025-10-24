@@ -398,21 +398,26 @@ export class VPNProvisioner {
       }
 
       // Increment to next IP for future use
-      const [a, b, c, d] = nextIP.split('.').map(Number);
-      let nextD = d + 1;
-      let nextC = c;
-      let nextB = b;
+      const [octet1, octet2, octet3, octet4] = nextIP.split('.').map(Number);
+      
+      // We're working with 10.99.x.x network
+      // So we only increment octet3 and octet4
+      let newOctet4 = octet4 + 1;
+      let newOctet3 = octet3;
 
-      if (nextD > 254) {
-        nextD = 1;
-        nextC += 1;
-      }
-      if (nextC > 255) {
-        nextC = 1;
-        nextB += 1;
+      // Handle overflow from 4th octet to 3rd octet
+      if (newOctet4 > 254) {
+        newOctet4 = 1;
+        newOctet3 += 1;
       }
 
-      const newNextIP = `10.99.${nextB}.${nextC}.${nextD}`;
+      // Handle overflow from 3rd octet (pool exhausted)
+      if (newOctet3 > 255) {
+        throw new Error('VPN IP pool exhausted - no more IPs available in 10.99.0.0/16');
+      }
+
+      // Build new IP using original first two octets (10.99)
+      const newNextIP = `${octet1}.${octet2}.${newOctet3}.${newOctet4}`;
 
       await db.collection('vpn_ip_pool').updateOne(
         { network: this.VPN_NETWORK },
