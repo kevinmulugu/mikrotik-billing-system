@@ -1,7 +1,12 @@
 // scripts/init-vpn-collections.ts
 // Run this to initialize VPN-related collections in MongoDB
+import * as dotenv from 'dotenv';
+import * as path from 'path';
+
 
 import clientPromise from '../lib/mongodb';
+// Load environment variables
+dotenv.config({ path: path.resolve(__dirname, '.env.local') });
 
 async function initVPNCollections() {
   try {

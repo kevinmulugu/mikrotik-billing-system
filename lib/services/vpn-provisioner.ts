@@ -46,6 +46,26 @@ interface WireGuardKeypair {
   publicKey: string;
 }
 
+interface VPNSetupScriptRequest {
+  routerName: string;
+  routerModel: string;
+  ipAddress: string;
+  userId: string;
+}
+
+interface VPNSetupScriptResult {
+  success: boolean;
+  setupToken?: string;
+  script?: string;
+  vpnIP?: string;
+  expiresIn?: number;
+  instructions?: {
+    steps: string[];
+  };
+  error?: string;
+  details?: string;
+}
+
 // ============================================
 // VPN PROVISIONER SERVICE
 // ============================================
@@ -59,7 +79,155 @@ export class VPNProvisioner {
   private static readonly VPN_SSH_KEY = process.env.VPN_SSH_KEY || '';
 
   /**
-   * Main method: Provision VPN for a router
+   * NEW PUBLIC METHOD: Generate VPN setup script for manual router configuration
+   * This method is called by the API route to generate a script that users can
+   * paste into their MikroTik router terminal
+   */
+  static async generateVPNSetupScript(
+    data: VPNSetupScriptRequest
+  ): Promise<VPNSetupScriptResult> {
+    console.log(`[VPN Script] Generating VPN setup script for ${data.routerName}...`);
+
+    try {
+      // Step 1: Generate unique setup token
+      const setupToken = crypto.randomBytes(32).toString('hex');
+
+      // Step 2: Generate WireGuard keypair for router
+      console.log(`[VPN Script] Generating WireGuard keypair...`);
+      const keypair = await this.generateWireGuardKeypair();
+      console.log(`[VPN Script] ✓ Keypair generated`);
+
+      // Step 3: Allocate VPN IP from pool
+      console.log(`[VPN Script] Allocating VPN IP address...`);
+      const vpnIP = await this.getNextAvailableVPNIP();
+      console.log(`[VPN Script] ✓ Assigned VPN IP: ${vpnIP}`);
+
+      // Step 4: Register peer on VPN server
+      console.log(`[VPN Script] Registering peer on VPN server...`);
+      const peerRegistered = await this.addPeerToServer(keypair.publicKey, vpnIP);
+      
+      if (!peerRegistered) {
+        throw new Error('Failed to register peer on VPN server');
+      }
+      console.log(`[VPN Script] ✓ Peer registered on server`);
+
+      // Step 5: Store VPN configuration temporarily in database
+      const client = await clientPromise;
+      const db = client.db(process.env.MONGODB_DB_NAME || 'mikrotik_billing');
+
+      await db.collection('vpn_setup_tokens').insertOne({
+        token: setupToken,
+        userId: new ObjectId(data.userId),
+        routerInfo: {
+          name: data.routerName,
+          model: data.routerModel,
+          ipAddress: data.ipAddress,
+        },
+        vpnConfig: {
+          clientPrivateKey: keypair.privateKey,
+          clientPublicKey: keypair.publicKey,
+          serverPublicKey: this.VPN_SERVER_PUBLIC_KEY,
+          vpnIP,
+          endpoint: this.VPN_SERVER_ENDPOINT,
+          allowedIPs: this.VPN_NETWORK,
+          persistentKeepalive: 25,
+        },
+        status: 'pending',
+        createdAt: new Date(),
+        expiresAt: new Date(Date.now() + 30 * 60 * 1000), // 30 minutes
+      });
+
+      console.log(`[VPN Script] ✓ Setup token saved to database`);
+
+      // Step 6: Generate MikroTik configuration script
+      const appUrl = process.env.NEXTAUTH_URL || 'https://yourapp.com';
+      const configUrl = `${appUrl}/api/vpn/config/${setupToken}`;
+
+      const mikrotikScript = this.generateMikroTikScript({
+        configUrl,
+        vpnIP,
+        clientPrivateKey: keypair.privateKey,
+        serverPublicKey: this.VPN_SERVER_PUBLIC_KEY,
+        endpoint: this.VPN_SERVER_ENDPOINT,
+        allowedIPs: this.VPN_NETWORK,
+        serverIP: this.VPN_SERVER_IP,
+      });
+
+      console.log(`[VPN Script] ✅ VPN setup script generated successfully`);
+
+      // Step 7: Return the script and metadata
+      return {
+        success: true,
+        setupToken,
+        script: mikrotikScript,
+        vpnIP,
+        expiresIn: 1800, // 30 minutes in seconds
+        instructions: {
+          steps: [
+            'Open your router terminal (Winbox → New Terminal, or WebFig → Terminal)',
+            'Copy the entire script below',
+            'Paste it into the router terminal and press Enter',
+            'Wait 10-15 seconds for VPN to connect',
+            'Click "Verify VPN" button below',
+          ],
+        },
+      };
+
+    } catch (error) {
+      console.error(`[VPN Script] ❌ Failed to generate VPN setup script:`, error);
+      
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+        details: error instanceof Error ? error.stack : undefined,
+      };
+    }
+  }
+
+  /**
+   * Generate MikroTik script for router configuration
+   */
+  private static generateMikroTikScript(config: {
+    configUrl: string;
+    vpnIP: string;
+    clientPrivateKey: string;
+    serverPublicKey: string;
+    endpoint: string;
+    allowedIPs: string;
+    serverIP: string;
+  }): string {
+    const [endpointHost, endpointPort] = config.endpoint.split(':');
+
+    return `# MikroTik VPN Auto-Setup Script
+# Generated: ${new Date().toISOString()}
+# VPN IP: ${config.vpnIP}
+
+:log info "Starting VPN setup...";
+
+# Create WireGuard interface
+/interface wireguard add name=wg-mgmt private-key="${config.clientPrivateKey}" listen-port=13231 comment="Management VPN";
+
+# Add VPN server as peer
+/interface wireguard peers add interface=wg-mgmt public-key="${config.serverPublicKey}" endpoint-address=${endpointHost} endpoint-port=${endpointPort} allowed-address=${config.allowedIPs} persistent-keepalive=25s comment="VPN Server";
+
+# Assign VPN IP to interface
+/ip address add address=${config.vpnIP}/32 interface=wg-mgmt comment="VPN Management IP";
+
+# Add route to VPN network
+/ip route add dst-address=${config.allowedIPs} gateway=wg-mgmt comment="VPN Network Route";
+
+# Enable WireGuard interface (if disabled)
+/interface wireguard enable wg-mgmt;
+
+:log info "VPN setup complete! IP: ${config.vpnIP}";
+
+# Notify server that setup is complete (optional - router will be verified via VPN connectivity test)
+:log info "Setup token: Check VPN connectivity from portal";`;
+  }
+
+  /**
+   * Main method: Provision VPN for a router (EXISTING METHOD - NO CHANGES)
+   * This is used for automatic provisioning when the system has direct access to the router
    */
   static async provisionRouterVPN(data: RouterVPNData): Promise<VPNProvisioningResult> {
     console.log(`[VPN] Starting VPN provisioning for router...`);
@@ -151,7 +319,7 @@ export class VPNProvisioner {
   }
 
   /**
-   * Generate WireGuard keypair
+   * Generate WireGuard keypair using actual WireGuard tools
    */
   private static async generateWireGuardKeypair(): Promise<WireGuardKeypair> {
     try {
@@ -176,7 +344,7 @@ export class VPNProvisioner {
   }
 
   /**
-   * Get next available VPN IP from pool
+   * Get next available VPN IP from pool with database tracking
    */
   private static async getNextAvailableVPNIP(): Promise<string> {
     try {
