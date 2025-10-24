@@ -1,4 +1,4 @@
-// src/app/api/routers/add/route.ts - Enhanced with Full Configuration
+// src/app/api/routers/add/route.ts - Enhanced with VPN Provisioning
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
@@ -7,6 +7,7 @@ import clientPromise from '@/lib/mongodb';
 import { ObjectId } from 'mongodb';
 import { MikroTikService } from '@/lib/services/mikrotik';
 import { MikroTikOrchestrator } from '@/lib/services/mikrotik-orchestrator';
+import VPNProvisioner from '@/lib/services/vpn-provisioner';
 
 interface AddRouterRequest {
   name: string;
@@ -137,6 +138,71 @@ export async function POST(req: NextRequest) {
     const macAddress = await MikroTikService.getRouterMacAddress(connectionConfig);
     const identity = await MikroTikService.getIdentity(connectionConfig);
 
+    // ============================================
+    // VPN PROVISIONING (NEW SECTION)
+    // ============================================
+    
+    console.log(`[Router Add] Starting VPN provisioning...`);
+    
+    let vpnTunnel: any = null;
+    let vpnProvisioningSuccess = false;
+    let vpnError: string | undefined;
+
+    try {
+      const vpnResult = await VPNProvisioner.provisionRouterVPN({
+        routerId: 'temp-id', // Will be updated after router creation
+        customerId: customer._id,
+        localConnection: connectionConfig,
+      });
+
+      console.log(`[Router Add] VPN Provisioning Result:`, vpnResult);
+
+      if (vpnResult.success && vpnResult.vpnConfig) {
+        vpnProvisioningSuccess = true;
+        vpnTunnel = {
+          enabled: true,
+          clientPublicKey: vpnResult.vpnConfig.clientPublicKey,
+          serverPublicKey: vpnResult.vpnConfig.serverPublicKey,
+          assignedVPNIP: vpnResult.vpnIP,
+          status: 'connected',
+          lastHandshake: new Date(),
+          provisionedAt: new Date(),
+        };
+
+        // Switch to VPN IP for remaining operations
+        console.log(`[Router Add] ✓ VPN provisioned, switching to VPN IP: ${vpnResult.vpnIP}`);
+        connectionConfig.ipAddress = vpnResult.vpnIP!;
+
+      } else {
+        vpnError = vpnResult.error || 'VPN provisioning failed';
+        console.warn(`[Router Add] ⚠ VPN provisioning failed: ${vpnError}`);
+        
+        // Create VPN tunnel object with failed status
+        vpnTunnel = {
+          enabled: false,
+          status: 'failed',
+          error: vpnError,
+          lastAttempt: new Date(),
+        };
+      }
+
+    } catch (vpnException) {
+      vpnError = vpnException instanceof Error ? vpnException.message : 'VPN exception occurred';
+      console.error(`[Router Add] ❌ VPN provisioning exception:`, vpnException);
+      
+      // Create VPN tunnel object with failed status
+      vpnTunnel = {
+        enabled: false,
+        status: 'failed',
+        error: vpnError,
+        lastAttempt: new Date(),
+      };
+    }
+
+    // ============================================
+    // END VPN PROVISIONING
+    // ============================================
+
     // Encrypt API password
     const encryptedPassword = MikroTikService.encryptPassword(body.apiPassword);
 
@@ -161,13 +227,19 @@ export async function POST(req: NextRequest) {
         },
       },
       connection: {
-        ipAddress: body.ipAddress,
+        localIP: body.ipAddress,              // Original local IP
+        vpnIP: vpnTunnel?.assignedVPNIP,      // VPN management IP (if provisioned)
+        preferVPN: vpnProvisioningSuccess,     // Use VPN for management if available
+        ipAddress: vpnProvisioningSuccess 
+          ? vpnTunnel.assignedVPNIP 
+          : body.ipAddress,                    // Current active IP
         port: parseInt(body.port) || 8728,
         apiUser: body.apiUser || 'admin',
         apiPassword: encryptedPassword,
         restApiEnabled: true,
         sshEnabled: false,
       },
+      vpnTunnel: vpnTunnel,  // Add VPN tunnel configuration
       configuration: {
         hotspot: {
           enabled: body.hotspotEnabled,
@@ -218,12 +290,23 @@ export async function POST(req: NextRequest) {
       updatedAt: new Date(),
     };
 
-    // Insert router into database first
+    // Insert router into database
     const insertResult = await db.collection('routers').insertOne(routerDocument);
     const routerId = insertResult.insertedId.toString();
 
+    console.log(`[Router Add] ✓ Router created with ID: ${routerId}`);
+
+    // Update VPN tunnel with actual router ID
+    if (vpnProvisioningSuccess && vpnTunnel) {
+      await db.collection('vpn_tunnels').updateOne(
+        { 'vpnConfig.clientPublicKey': vpnTunnel.clientPublicKey },
+        { $set: { routerId: insertResult.insertedId } }
+      );
+      console.log(`[Router Add] ✓ VPN tunnel updated with router ID`);
+    }
+
     // Execute full router configuration
-    console.log(`Starting configuration for router ${routerId}...`);
+    console.log(`[Router Add] Starting router configuration...`);
     
     const configResult = await MikroTikOrchestrator.configureRouter(connectionConfig, {
       hotspotEnabled: body.hotspotEnabled,
@@ -276,12 +359,12 @@ export async function POST(req: NextRequest) {
         type: 'create',
         resource: 'router',
         resourceId: insertResult.insertedId,
-        description: `Added new router: ${body.name}`,
+        description: `Added new router: ${body.name}${vpnProvisioningSuccess ? ' (with VPN)' : ''}`,
       },
       changes: {
         before: null,
         after: routerDocument,
-        fields: ['router_created'],
+        fields: ['router_created', vpnProvisioningSuccess ? 'vpn_enabled' : 'vpn_pending'],
       },
       metadata: {
         sessionId: '',
@@ -292,31 +375,43 @@ export async function POST(req: NextRequest) {
       timestamp: new Date(),
     });
 
-    // Return success response
-    return NextResponse.json(
-      {
-        success: true,
-        message: 'Router added successfully',
-        routerId: routerId,
-        router: {
-          id: routerId,
-          name: body.name,
-          model: body.model,
-          ipAddress: body.ipAddress,
-          status: configResult.success ? 'online' : 'warning',
-          location: body.location.name || body.location.county,
-          macAddress: macAddress,
-          firmwareVersion: connectionTest.data?.routerInfo.version,
-        },
-        configuration: {
-          success: configResult.success,
-          completedSteps: configResult.completedSteps,
-          failedSteps: configResult.failedSteps,
-          warnings: configResult.warnings,
-        },
+    // Prepare response
+    const responseData = {
+      success: true,
+      message: vpnProvisioningSuccess 
+        ? 'Router added successfully with secure VPN management'
+        : 'Router added successfully (VPN setup pending)',
+      routerId: routerId,
+      router: {
+        id: routerId,
+        name: body.name,
+        model: body.model,
+        ipAddress: body.ipAddress,
+        vpnIP: vpnTunnel?.assignedVPNIP,
+        vpnEnabled: vpnProvisioningSuccess,
+        status: configResult.success ? 'online' : 'warning',
+        location: body.location.name || body.location.county,
+        macAddress: macAddress,
+        firmwareVersion: connectionTest.data?.routerInfo.version,
       },
-      { status: 201 }
-    );
+      vpn: {
+        enabled: vpnProvisioningSuccess,
+        status: vpnTunnel?.status,
+        vpnIP: vpnTunnel?.assignedVPNIP,
+        error: vpnError,
+      },
+      configuration: {
+        success: configResult.success,
+        completedSteps: configResult.completedSteps,
+        failedSteps: configResult.failedSteps,
+        warnings: configResult.warnings,
+      },
+    };
+
+    console.log(`[Router Add] ✅ Router onboarding complete`);
+
+    return NextResponse.json(responseData, { status: 201 });
+
   } catch (error) {
     console.error('Add Router API Error:', error);
     return NextResponse.json(

@@ -373,6 +373,7 @@ export function HotspotUserTable({ routerId }: HotspotUserTableProps) {
       const interval = setInterval(fetchUsers, 30000)
       return () => clearInterval(interval)
     }
+    return undefined
   }, [session, routerId])
 
   useEffect(() => {

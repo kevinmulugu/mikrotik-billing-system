@@ -290,7 +290,8 @@ export const SecuritySettings: React.FC = () => {
                 onChange={(e) => {
                   setPasswordForm({ ...passwordForm, currentPassword: e.target.value });
                   if (passwordErrors.currentPassword) {
-                    setPasswordErrors({ ...passwordErrors, currentPassword: undefined });
+                    const { currentPassword, ...rest } = passwordErrors;
+                    setPasswordErrors(rest);
                   }
                 }}
               />
@@ -319,13 +320,14 @@ export const SecuritySettings: React.FC = () => {
               <Input
                 type={showNewPassword ? "text" : "password"}
                 placeholder="Enter new password"
-                value={passwordForm.newPassword}
                 onChange={(e) => {
                   setPasswordForm({ ...passwordForm, newPassword: e.target.value });
                   if (passwordErrors.newPassword) {
-                    setPasswordErrors({ ...passwordErrors, newPassword: undefined });
+                    const { newPassword, ...rest } = passwordErrors;
+                    setPasswordErrors(rest);
                   }
                 }}
+                
               />
               <Button
                 type="button"
@@ -375,12 +377,11 @@ export const SecuritySettings: React.FC = () => {
             <div className="relative">
               <Input
                 type={showConfirmPassword ? "text" : "password"}
-                placeholder="Confirm new password"
-                value={passwordForm.confirmPassword}
                 onChange={(e) => {
                   setPasswordForm({ ...passwordForm, confirmPassword: e.target.value });
                   if (passwordErrors.confirmPassword) {
-                    setPasswordErrors({ ...passwordErrors, confirmPassword: undefined });
+                    const { confirmPassword, ...rest } = passwordErrors;
+                    setPasswordErrors(rest);
                   }
                 }}
               />

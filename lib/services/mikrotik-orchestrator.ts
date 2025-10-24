@@ -92,11 +92,13 @@ export class MikroTikOrchestrator {
             'service-name': 'pppoe-ether2',
             interface: pppoeInterfaces[0] ?? 'ether2',
             'default-profile': 'default',
+            enabled: 'yes',
           },
           {
             'service-name': 'pppoe-ether3',
             interface: pppoeInterfaces[1] ?? 'ether3',
             'default-profile': 'default',
+            enabled: 'yes',
           },
         ]);
 

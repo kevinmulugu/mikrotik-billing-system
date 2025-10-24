@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { useSession } from "next-auth/react"
-import { useForm } from "react-hook-form"
+import { useForm, type SubmitHandler, type Resolver } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
 import { toast } from "sonner"
@@ -196,7 +196,8 @@ export function AddPPPoEUserForm({ routerId }: AddPPPoEUserFormProps) {
   const [loading, setLoading] = useState(false)
 
   const form = useForm<AddPPPoEUserForm>({
-    resolver: zodResolver(addPPPoEUserSchema),
+    resolver: zodResolver(addPPPoEUserSchema) as unknown as Resolver<AddPPPoEUserForm>,
+    mode: "onChange",
     defaultValues: {
       username: "",
       password: "",
@@ -282,7 +283,7 @@ export function AddPPPoEUserForm({ routerId }: AddPPPoEUserFormProps) {
   }
 
   // Submit form
-  const onSubmit = async (data: AddPPPoEUserForm) => {
+  const onSubmit: SubmitHandler<AddPPPoEUserForm> = async (data) => {
     try {
       setLoading(true)
 
@@ -645,7 +646,7 @@ export function AddPPPoEUserForm({ routerId }: AddPPPoEUserFormProps) {
                               max={10240}
                               className="pl-9"
                               {...field}
-                              onChange={(e) => field.onChange(parseInt(e.target.value) || 0)}
+                              onChange={(e) => field.onChange(e.currentTarget.valueAsNumber || 0)}
                             />
                           </div>
                         </FormControl>
@@ -673,7 +674,7 @@ export function AddPPPoEUserForm({ routerId }: AddPPPoEUserFormProps) {
                               max={51200}
                               className="pl-9"
                               {...field}
-                              onChange={(e) => field.onChange(parseInt(e.target.value) || 0)}
+                              onChange={(e) => field.onChange(e.currentTarget.valueAsNumber || 0)}
                             />
                           </div>
                         </FormControl>
@@ -701,7 +702,7 @@ export function AddPPPoEUserForm({ routerId }: AddPPPoEUserFormProps) {
                               className="pl-9"
                               placeholder="0 for unlimited"
                               {...field}
-                              onChange={(e) => field.onChange(parseInt(e.target.value) || 0)}
+                              onChange={(e) => field.onChange(e.currentTarget.valueAsNumber || 0)}
                             />
                           </div>
                         </FormControl>
@@ -728,7 +729,7 @@ export function AddPPPoEUserForm({ routerId }: AddPPPoEUserFormProps) {
                               min={1}
                               className="pl-9"
                               {...field}
-                              onChange={(e) => field.onChange(parseInt(e.target.value) || 0)}
+                              onChange={(e) => field.onChange(e.currentTarget.valueAsNumber || 0)}
                             />
                           </div>
                         </FormControl>
@@ -780,7 +781,7 @@ export function AddPPPoEUserForm({ routerId }: AddPPPoEUserFormProps) {
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Billing Cycle</FormLabel>
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                        <Select onValueChange={field.onChange} value={field.value}>
                           <FormControl>
                             <SelectTrigger>
                               <SelectValue />
@@ -828,7 +829,7 @@ export function AddPPPoEUserForm({ routerId }: AddPPPoEUserFormProps) {
                             min={0}
                             max={30}
                             {...field}
-                            onChange={(e) => field.onChange(parseInt(e.target.value) || 0)}
+                            onChange={(e) => field.onChange(e.currentTarget.valueAsNumber || 0)}
                           />
                         </FormControl>
                         <FormDescription>
@@ -955,7 +956,7 @@ export function AddPPPoEUserForm({ routerId }: AddPPPoEUserFormProps) {
                             min={1}
                             max={10}
                             {...field}
-                            onChange={(e) => field.onChange(parseInt(e.target.value) || 1)}
+                            onChange={(e) => field.onChange(e.currentTarget.valueAsNumber || 1)}
                           />
                         </FormControl>
                         <FormDescription>
@@ -980,7 +981,7 @@ export function AddPPPoEUserForm({ routerId }: AddPPPoEUserFormProps) {
                             max={3600}
                             placeholder="0 = no timeout"
                             {...field}
-                            onChange={(e) => field.onChange(parseInt(e.target.value) || 0)}
+                            onChange={(e) => field.onChange(e.currentTarget.valueAsNumber || 0)}
                           />
                         </FormControl>
                         <FormDescription>
@@ -1005,7 +1006,7 @@ export function AddPPPoEUserForm({ routerId }: AddPPPoEUserFormProps) {
                             max={86400}
                             placeholder="0 = no timeout"
                             {...field}
-                            onChange={(e) => field.onChange(parseInt(e.target.value) || 0)}
+                            onChange={(e) => field.onChange(e.currentTarget.valueAsNumber || 0)}
                           />
                         </FormControl>
                         <FormDescription>

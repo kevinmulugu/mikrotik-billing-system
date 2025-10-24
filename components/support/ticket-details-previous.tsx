@@ -104,7 +104,6 @@ export const TicketDetails: React.FC<TicketDetailsProps> = ({ ticketId, onBack }
     assignedTo: {
       id: "support-1",
       name: "John Support",
-      avatar: undefined,
     },
     router: {
       id: "router-123",
@@ -129,7 +128,6 @@ export const TicketDetails: React.FC<TicketDetailsProps> = ({ ticketId, onBack }
           id: "support-1",
           name: "John Support",
           role: "support",
-          avatar: undefined,
         },
         message:
           "Hello! I've reviewed your router status and I can see it's online. Let me check a few things:\n\n1. Can you verify the WAN interface is receiving an IP address?\n2. Are there any error messages in the router logs?\n\nI'm checking your router configuration remotely now.",
@@ -154,7 +152,6 @@ export const TicketDetails: React.FC<TicketDetailsProps> = ({ ticketId, onBack }
           id: "support-1",
           name: "John Support",
           role: "support",
-          avatar: undefined,
         },
         message:
           "I found the issue! Your DNS servers were incorrectly configured. I've updated them to use:\n- Primary: 8.8.8.8\n- Secondary: 8.8.4.4\n\nYour internet should be working now. Can you please test and confirm?",

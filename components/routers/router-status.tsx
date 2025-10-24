@@ -130,6 +130,7 @@ export const RouterStatus: React.FC<RouterStatusProps> = ({
 
       return () => clearInterval(interval);
     }
+    return undefined;
   }, [autoRefresh, refreshInterval]);
 
   const handleRefresh = async () => {

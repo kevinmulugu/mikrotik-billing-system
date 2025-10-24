@@ -153,7 +153,7 @@ export const SignInForm: React.FC<SignInFormProps> = ({
               <SocialLogin 
                 callbackUrl={callbackUrl}
                 showEmailOption={false}
-                onSuccess={onSuccess}
+                {...(onSuccess && { onSuccess })}
               />
 
               <div className="relative">

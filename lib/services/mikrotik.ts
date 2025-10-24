@@ -92,6 +92,7 @@ interface PPPoEServerConfig {
   interface: string;
   'default-profile': string;
   disabled?: string;
+  enabled?: string;
 }
 
 interface PPPProfileConfig {
@@ -125,6 +126,7 @@ interface HotspotServerConfig {
   interface: string;
   'address-pool': string;
   profile: string;
+  disabled?: string;
 }
 
 interface HotspotUserConfig {

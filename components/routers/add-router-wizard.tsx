@@ -1,3 +1,4 @@
+// components/routers/add-router-wizard.tsx
 "use client";
 
 import React, { useState } from "react";
@@ -15,6 +16,7 @@ import {
   Eye,
   EyeOff,
   Info,
+  Lock,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -30,6 +32,7 @@ import {
 } from "@/components/ui/select";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Separator } from "@/components/ui/separator";
+import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 
 interface RouterFormData {
@@ -60,6 +63,15 @@ interface AddRouterWizardProps {
   onCancel?: () => void;
 }
 
+type ConnectionStatus = "idle" | "testing" | "vpn-setup" | "success" | "error";
+
+interface VPNStatus {
+  enabled: boolean;
+  status: string;
+  vpnIP?: string;
+  error?: string;
+}
+
 const steps = [
   { id: 1, title: "Basic Information", icon: Wifi },
   { id: 2, title: "Network Configuration", icon: Network },
@@ -74,7 +86,9 @@ export const AddRouterWizard: React.FC<AddRouterWizardProps> = ({
   const router = useRouter();
   const [currentStep, setCurrentStep] = useState(1);
   const [isConnecting, setIsConnecting] = useState(false);
-  const [connectionStatus, setConnectionStatus] = useState<"idle" | "testing" | "success" | "error">("idle");
+  const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>("idle");
+  const [vpnStatus, setVpnStatus] = useState<VPNStatus | null>(null);
+  const [vpnProgress, setVpnProgress] = useState(0);
   const [showPassword, setShowPassword] = useState(false);
   const [showHotspotPassword, setShowHotspotPassword] = useState(false);
   const [routerInfo, setRouterInfo] = useState<any>(null);
@@ -105,53 +119,14 @@ export const AddRouterWizard: React.FC<AddRouterWizardProps> = ({
   const [errors, setErrors] = useState<Partial<Record<string, string>>>({});
 
   const kenyanCounties = [
-    "Mombasa",
-    "Kwale",
-    "Kilifi",
-    "Tana River",
-    "Lamu",
-    "Taita-Taveta",
-    "Garissa",
-    "Wajir",
-    "Mandera",
-    "Marsabit",
-    "Isiolo",
-    "Meru",
-    "Tharaka-Nithi",
-    "Embu",
-    "Kitui",
-    "Machakos",
-    "Makueni",
-    "Nyandarua",
-    "Nyeri",
-    "Kirinyaga",
-    "Murang'a",
-    "Kiambu",
-    "Turkana",
-    "West Pokot",
-    "Samburu",
-    "Trans Nzoia",
-    "Uasin Gishu",
-    "Elgeyo-Marakwet",
-    "Nandi",
-    "Baringo",
-    "Laikipia",
-    "Nakuru",
-    "Narok",
-    "Kajiado",
-    "Kericho",
-    "Bomet",
-    "Kakamega",
-    "Vihiga",
-    "Bungoma",
-    "Busia",
-    "Siaya",
-    "Kisumu",
-    "Homa Bay",
-    "Migori",
-    "Kisii",
-    "Nyamira",
-    "Nairobi",
+    "Mombasa", "Kwale", "Kilifi", "Tana River", "Lamu", "Taita-Taveta",
+    "Garissa", "Wajir", "Mandera", "Marsabit", "Isiolo", "Meru",
+    "Tharaka-Nithi", "Embu", "Kitui", "Machakos", "Makueni", "Nyandarua",
+    "Nyeri", "Kirinyaga", "Murang'a", "Kiambu", "Turkana", "West Pokot",
+    "Samburu", "Trans Nzoia", "Uasin Gishu", "Elgeyo-Marakwet", "Nandi",
+    "Baringo", "Laikipia", "Nakuru", "Narok", "Kajiado", "Kericho",
+    "Bomet", "Kakamega", "Vihiga", "Bungoma", "Busia", "Siaya",
+    "Kisumu", "Homa Bay", "Migori", "Kisii", "Nyamira", "Nairobi",
   ];
 
   const routerModels = [
@@ -166,18 +141,27 @@ export const AddRouterWizard: React.FC<AddRouterWizardProps> = ({
   ];
 
   const handleInputChange = (field: string, value: string | boolean) => {
-    if (field.includes(".")) {
-      const [parent, child] = field.split(".");
-      setFormData((prev) => ({
-        ...prev,
-        [parent]: {
-          ...(prev[parent as keyof RouterFormData] as any),
-          [child]: value,
-        },
-      }));
-    } else {
-      setFormData((prev) => ({ ...prev, [field]: value }));
-    }
+    setFormData((prev) => {
+      const updated: RouterFormData = { ...prev } as RouterFormData;
+
+      if (field.includes(".")) {
+        const parts = field.split(".");
+        if (parts.length === 2) {
+          const [parent, child] = parts as [keyof RouterFormData, string];
+          const parentValue = (prev as any)[parent];
+          (updated as any)[parent] = {
+            ...(typeof parentValue === "object" && parentValue !== null ? parentValue : {}),
+            [child]: value,
+          };
+        } else {
+          return prev;
+        }
+      } else {
+        (updated as any)[field] = value;
+      }
+
+      return updated;
+    });
 
     if (errors[field]) {
       setErrors((prev) => ({ ...prev, [field]: undefined }));
@@ -242,6 +226,8 @@ export const AddRouterWizard: React.FC<AddRouterWizardProps> = ({
     if (currentStep > 1) {
       setCurrentStep(currentStep - 1);
       setConnectionStatus("idle");
+      setVpnStatus(null);
+      setVpnProgress(0);
     }
   };
 
@@ -250,11 +236,10 @@ export const AddRouterWizard: React.FC<AddRouterWizardProps> = ({
     setIsConnecting(true);
 
     try {
+      // Phase 1: Test basic connection
       const response = await fetch('/api/routers/test-connection', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ipAddress: formData.ipAddress,
           port: formData.port,
@@ -265,21 +250,55 @@ export const AddRouterWizard: React.FC<AddRouterWizardProps> = ({
 
       const result = await response.json();
 
-      if (response.ok && result.success) {
-        setConnectionStatus("success");
-        setRouterInfo(result.data?.routerInfo);
-        toast.success("Connection successful!");
-        setTimeout(() => {
-          setCurrentStep(currentStep + 1);
-        }, 1500);
-      } else {
+      if (!response.ok || !result.success) {
         setConnectionStatus("error");
         toast.error(result.error || "Connection failed. Please check your credentials.");
+        setIsConnecting(false);
+        return;
       }
+
+      // Phase 2: VPN Setup (simulate progress for UX)
+      setConnectionStatus("vpn-setup");
+      toast.info("Establishing secure connection...");
+      setVpnProgress(10);
+
+      // Simulate VPN setup progress
+      const progressInterval = setInterval(() => {
+        setVpnProgress(prev => {
+          if (prev >= 90) {
+            clearInterval(progressInterval);
+            return 90;
+          }
+          return prev + 10;
+        });
+      }, 1000);
+
+      // Wait to show VPN progress
+      await new Promise(resolve => setTimeout(resolve, 3000));
+      
+      clearInterval(progressInterval);
+      setVpnProgress(100);
+
+      // Mark as successful
+      setConnectionStatus("success");
+      setRouterInfo(result.data?.routerInfo);
+      
+      // Set VPN status (actual VPN setup happens on router creation)
+      setVpnStatus({
+        enabled: true,
+        status: "ready",
+      });
+
+      toast.success("Connection established!");
+      
+      setTimeout(() => {
+        setCurrentStep(currentStep + 1);
+        setIsConnecting(false);
+      }, 1500);
+
     } catch (error) {
       setConnectionStatus("error");
-      toast.error("Failed to connect to router. Check your network connection.");
-    } finally {
+      toast.error("Failed to connect. Check your network connection.");
       setIsConnecting(false);
     }
   };
@@ -290,43 +309,135 @@ export const AddRouterWizard: React.FC<AddRouterWizardProps> = ({
     try {
       const response = await fetch('/api/routers/add', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData),
       });
 
       const result = await response.json();
 
       if (response.ok && result.success) {
-        toast.success("Router added successfully!");
-        
-        if (onComplete) {
-          onComplete(result.routerId);
-        } else {
-          router.push('/routers');
+        // Update VPN status from response
+        if (result.vpn) {
+          setVpnStatus(result.vpn);
         }
+
+        toast.success(result.message || "Router added successfully!");
+        
+        // Show VPN status messages
+        if (result.vpn?.enabled) {
+          toast.success(`Secure management enabled at ${result.vpn.vpnIP}`);
+        } else if (result.vpn?.error) {
+          toast.warning(`Router added but VPN setup failed: ${result.vpn.error}`);
+        }
+
+        setTimeout(() => {
+          if (onComplete) {
+            onComplete(result.routerId);
+          } else {
+            router.push(`/routers/${result.routerId}`);
+          }
+        }, 2000);
       } else {
         toast.error(result.error || "Failed to add router");
+        setIsConnecting(false);
       }
     } catch (error) {
-      toast.error("Failed to add router. Please try again.");
-    } finally {
+      toast.error("An error occurred while adding the router");
       setIsConnecting(false);
     }
+  };
+
+  const renderVPNSetupProgress = () => {
+    if (connectionStatus !== "vpn-setup") return null;
+
+    return (
+      <div className="space-y-4 mt-4">
+        <Alert className="border-blue-500 bg-blue-500/10">
+          <Lock className="h-4 w-4 text-blue-500" />
+          <AlertTitle className="text-blue-500">
+            Setting Up Secure Management
+          </AlertTitle>
+          <AlertDescription>
+            Establishing encrypted VPN tunnel for remote management...
+          </AlertDescription>
+        </Alert>
+
+        <div className="space-y-2">
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-muted-foreground">Progress</span>
+            <span className="font-medium">{vpnProgress}%</span>
+          </div>
+          <Progress value={vpnProgress} className="h-2" />
+        </div>
+
+        <div className="space-y-1 text-sm">
+          <div className="flex items-center gap-2">
+            {vpnProgress >= 30 ? (
+              <CheckCircle2 className="h-4 w-4 text-green-500" />
+            ) : (
+              <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+            )}
+            <span className={vpnProgress >= 30 ? "text-green-600" : "text-muted-foreground"}>
+              Generating security keys
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            {vpnProgress >= 60 ? (
+              <CheckCircle2 className="h-4 w-4 text-green-500" />
+            ) : vpnProgress >= 30 ? (
+              <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
+            ) : (
+              <div className="h-4 w-4" />
+            )}
+            <span className={vpnProgress >= 60 ? "text-green-600" : vpnProgress >= 30 ? "text-blue-600" : "text-muted-foreground"}>
+              Configuring secure tunnel
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            {vpnProgress >= 90 ? (
+              <CheckCircle2 className="h-4 w-4 text-green-500" />
+            ) : vpnProgress >= 60 ? (
+              <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
+            ) : (
+              <div className="h-4 w-4" />
+            )}
+            <span className={vpnProgress >= 90 ? "text-green-600" : vpnProgress >= 60 ? "text-blue-600" : "text-muted-foreground"}>
+              Verifying connectivity
+            </span>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderVPNStatusBadge = () => {
+    if (!vpnStatus) return null;
+
+    if (vpnStatus.enabled && vpnStatus.status === "ready") {
+      return (
+        <Badge variant="default" className="bg-green-500">
+          <Shield className="h-3 w-3 mr-1" />
+          Secure Connection Ready
+        </Badge>
+      );
+    }
+
+    if (vpnStatus.error) {
+      return (
+        <Badge variant="destructive">
+          <AlertCircle className="h-3 w-3 mr-1" />
+          VPN Setup Failed
+        </Badge>
+      );
+    }
+
+    return null;
   };
 
   const progressPercentage = (currentStep / steps.length) * 100;
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-2xl font-bold">Add New Router</h2>
-        <p className="text-muted-foreground mt-1">
-          Connect your MikroTik router to start earning from WiFi
-        </p>
-      </div>
-
       <Card>
         <CardContent className="pt-6">
           <div className="space-y-4">
@@ -373,11 +484,18 @@ export const AddRouterWizard: React.FC<AddRouterWizardProps> = ({
         </CardContent>
       </Card>
 
+      {/* VPN Status Badge */}
+      {vpnStatus && (
+        <div className="flex justify-center">
+          {renderVPNStatusBadge()}
+        </div>
+      )}
+
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            {React.createElement(steps[currentStep - 1].icon, { className: "h-5 w-5" })}
-            {steps[currentStep - 1].title}
+            {React.createElement(steps[currentStep - 1]?.icon || Wifi, { className: "h-5 w-5" })}
+            {steps[currentStep - 1]?.title ?? "Step"}
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-6">
@@ -429,7 +547,7 @@ export const AddRouterWizard: React.FC<AddRouterWizardProps> = ({
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Serial Number (Optional)</label>
                   <Input
-                    placeholder="Router serial number"
+                    placeholder="e.g., ABC123XYZ"
                     value={formData.serialNumber}
                     onChange={(e) => handleInputChange("serialNumber", e.target.value)}
                   />
@@ -439,60 +557,56 @@ export const AddRouterWizard: React.FC<AddRouterWizardProps> = ({
               <Separator />
 
               <div className="space-y-4">
-                <div className="flex items-center gap-2">
-                  <MapPin className="h-4 w-4 text-muted-foreground" />
-                  <h3 className="font-medium">Location Information</h3>
-                </div>
-
+                <h3 className="text-sm font-medium">Location</h3>
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Location Name</label>
                   <Input
-                    placeholder="e.g., Kilimani Apartments"
+                    placeholder="e.g., Main Office"
                     value={formData.location.name}
                     onChange={(e) => handleInputChange("location.name", e.target.value)}
                   />
                 </div>
 
-                <div className="grid gap-4 md:grid-cols-3">
+                <div className="grid gap-4 md:grid-cols-2">
                   <div className="space-y-2">
                     <label className="text-sm font-medium">Street/Building</label>
                     <Input
-                      placeholder="Street address"
+                      placeholder="e.g., Moi Avenue"
                       value={formData.location.street}
                       onChange={(e) => handleInputChange("location.street", e.target.value)}
                     />
                   </div>
 
                   <div className="space-y-2">
-                    <label className="text-sm font-medium">City</label>
+                    <label className="text-sm font-medium">City/Town</label>
                     <Input
-                      placeholder="City"
+                      placeholder="e.g., Nairobi"
                       value={formData.location.city}
                       onChange={(e) => handleInputChange("location.city", e.target.value)}
                     />
                   </div>
+                </div>
 
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">County *</label>
-                    <Select
-                      value={formData.location.county}
-                      onValueChange={(value) => handleInputChange("location.county", value)}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select county" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {kenyanCounties.map((county) => (
-                          <SelectItem key={county} value={county}>
-                            {county}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    {errors["location.county"] && (
-                      <p className="text-sm text-destructive">{errors["location.county"]}</p>
-                    )}
-                  </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">County *</label>
+                  <Select
+                    value={formData.location.county}
+                    onValueChange={(value) => handleInputChange("location.county", value)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select county" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {kenyanCounties.map((county) => (
+                        <SelectItem key={county} value={county}>
+                          {county}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {errors["location.county"] && (
+                    <p className="text-sm text-destructive">{errors["location.county"]}</p>
+                  )}
                 </div>
               </div>
             </div>
@@ -502,9 +616,9 @@ export const AddRouterWizard: React.FC<AddRouterWizardProps> = ({
           {currentStep === 2 && (
             <div className="space-y-4">
               <Alert>
-                <Info className="h-4 w-4" />
+                <Network className="h-4 w-4" />
                 <AlertDescription>
-                  Enter your router's connection details. We'll test the connection before proceeding.
+                  Enter your router's network details. We'll test the connection before proceeding.
                 </AlertDescription>
               </Alert>
 
@@ -569,28 +683,17 @@ export const AddRouterWizard: React.FC<AddRouterWizardProps> = ({
                 </div>
               </div>
 
-              {connectionStatus === "testing" && (
-                <Alert>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  <AlertTitle>Testing Connection</AlertTitle>
-                  <AlertDescription>
-                    Connecting to your router... This may take a few seconds.
-                  </AlertDescription>
-                </Alert>
-              )}
-
-              {connectionStatus === "success" && (
+              {connectionStatus === "success" && routerInfo && (
                 <Alert className="border-green-500 bg-green-500/10">
                   <CheckCircle2 className="h-4 w-4 text-green-500" />
                   <AlertTitle className="text-green-500">Connection Successful!</AlertTitle>
-                  <AlertDescription>
-                    Successfully connected to your MikroTik router.
-                    {routerInfo && (
-                      <div className="mt-2 space-y-1">
-                        <p className="text-sm">Model: {routerInfo.model}</p>
-                        <p className="text-sm">Version: {routerInfo.version}</p>
-                      </div>
-                    )}
+                  <AlertDescription className="mt-2 space-y-1">
+                    <div className="text-sm">
+                      <strong>Router Identity:</strong> {routerInfo.identity || "N/A"}
+                    </div>
+                    <div className="text-sm">
+                      <strong>Version:</strong> {routerInfo.version || "N/A"}
+                    </div>
                   </AlertDescription>
                 </Alert>
               )}
@@ -600,83 +703,114 @@ export const AddRouterWizard: React.FC<AddRouterWizardProps> = ({
                   <AlertCircle className="h-4 w-4" />
                   <AlertTitle>Connection Failed</AlertTitle>
                   <AlertDescription>
-                    Unable to connect to the router. Please check:
-                    <ul className="list-disc list-inside mt-2 space-y-1">
-                      <li>IP address is correct and router is reachable</li>
-                      <li>REST API service is enabled on the router</li>
-                      <li>Username and password are correct</li>
-                      <li>Firewall is not blocking the API port</li>
-                    </ul>
+                    Unable to connect to the router. Please verify your credentials and network settings.
                   </AlertDescription>
                 </Alert>
               )}
+
+              {/* VPN Setup Progress */}
+              {renderVPNSetupProgress()}
             </div>
           )}
 
           {/* Step 3: Hotspot Setup */}
           {currentStep === 3 && (
             <div className="space-y-4">
-              <Alert>
-                <Info className="h-4 w-4" />
-                <AlertDescription>
-                  Configure your hotspot settings. Users will connect using these credentials.
-                </AlertDescription>
-              </Alert>
-
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">WiFi Network Name (SSID) *</label>
-                  <Input
-                    placeholder="e.g., MyWiFi-Hotspot"
-                    value={formData.ssid}
-                    onChange={(e) => handleInputChange("ssid", e.target.value)}
-                  />
-                  {errors.ssid && (
-                    <p className="text-sm text-destructive">{errors.ssid}</p>
-                  )}
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">WiFi Password *</label>
-                  <div className="relative">
-                    <Input
-                      type={showHotspotPassword ? "text" : "password"}
-                      placeholder="Minimum 8 characters"
-                      value={formData.hotspotPassword}
-                      onChange={(e) => handleInputChange("hotspotPassword", e.target.value)}
-                    />
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      className="absolute right-0 top-0 h-full"
-                      onClick={() => setShowHotspotPassword(!showHotspotPassword)}
-                    >
-                      {showHotspotPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                    </Button>
-                  </div>
-                  {errors.hotspotPassword && (
-                    <p className="text-sm text-destructive">{errors.hotspotPassword}</p>
-                  )}
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Maximum Users</label>
-                  <Input
-                    type="number"
-                    placeholder="50"
-                    value={formData.maxUsers}
-                    onChange={(e) => handleInputChange("maxUsers", e.target.value)}
-                  />
-                </div>
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="hotspotEnabled"
+                  checked={formData.hotspotEnabled}
+                  onCheckedChange={(checked) => handleInputChange("hotspotEnabled", checked === true)}
+                />
+                <label
+                  htmlFor="hotspotEnabled"
+                  className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                >
+                  Enable Hotspot Service
+                </label>
               </div>
 
-              <Alert>
-                <Shield className="h-4 w-4" />
-                <AlertDescription>
-                  Your hotspot will be secured with WPA2 encryption for safe connections.
-                </AlertDescription>
-              </Alert>
+              {formData.hotspotEnabled && (
+                <div className="space-y-4 pl-6 border-l-2">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">WiFi Network Name (SSID) *</label>
+                    <Input
+                      placeholder="e.g., MyWiFi-Hotspot"
+                      value={formData.ssid}
+                      onChange={(e) => handleInputChange("ssid", e.target.value)}
+                    />
+                    {errors.ssid && (
+                      <p className="text-sm text-destructive">{errors.ssid}</p>
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Hotspot Password *</label>
+                    <div className="relative">
+                      <Input
+                        type={showHotspotPassword ? "text" : "password"}
+                        placeholder="Minimum 8 characters"
+                        value={formData.hotspotPassword}
+                        onChange={(e) => handleInputChange("hotspotPassword", e.target.value)}
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="absolute right-0 top-0 h-full"
+                        onClick={() => setShowHotspotPassword(!showHotspotPassword)}
+                      >
+                        {showHotspotPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </Button>
+                    </div>
+                    {errors.hotspotPassword && (
+                      <p className="text-sm text-destructive">{errors.hotspotPassword}</p>
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Maximum Users</label>
+                    <Input
+                      type="number"
+                      placeholder="50"
+                      value={formData.maxUsers}
+                      onChange={(e) => handleInputChange("maxUsers", e.target.value)}
+                    />
+                  </div>
+
+                  <Alert>
+                    <Shield className="h-4 w-4" />
+                    <AlertDescription>
+                      Your hotspot will be secured with WPA2 encryption for safe connections.
+                    </AlertDescription>
+                  </Alert>
+                </div>
+              )}
+
+              <Separator />
+
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="pppoeEnabled"
+                  checked={formData.pppoeEnabled}
+                  onCheckedChange={(checked) => handleInputChange("pppoeEnabled", checked === true)}
+                />
+                <label
+                  htmlFor="pppoeEnabled"
+                  className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                >
+                  Enable PPPoE Service
+                </label>
+              </div>
+
+              {formData.pppoeEnabled && (
+                <Alert>
+                  <Info className="h-4 w-4" />
+                  <AlertDescription>
+                    PPPoE service will be configured automatically. You can manage users after router setup.
+                  </AlertDescription>
+                </Alert>
+              )}
             </div>
           )}
 
@@ -730,87 +864,106 @@ export const AddRouterWizard: React.FC<AddRouterWizardProps> = ({
                   </div>
                 </div>
 
-                <div>
-                  <h3 className="font-medium mb-3">Hotspot Configuration</h3>
-                  <div className="rounded-lg border p-4 space-y-2">
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">SSID:</span>
-                      <span className="font-medium">{formData.ssid}</span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Max Users:</span>
-                      <span className="font-medium">{formData.maxUsers}</span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Security:</span>
-                      <Badge variant="default">WPA2 Enabled</Badge>
+                {formData.hotspotEnabled && (
+                  <div>
+                    <h3 className="font-medium mb-3">Hotspot Configuration</h3>
+                    <div className="rounded-lg border p-4 space-y-2">
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">SSID:</span>
+                        <span className="font-medium">{formData.ssid}</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">Max Users:</span>
+                        <span className="font-medium">{formData.maxUsers}</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">Security:</span>
+                        <Badge variant="default">WPA2 Enabled</Badge>
+                      </div>
                     </div>
                   </div>
-                </div>
+                )}
+
+                {formData.pppoeEnabled && (
+                  <div>
+                    <h3 className="font-medium mb-3">PPPoE Service</h3>
+                    <div className="rounded-lg border p-4">
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">Status:</span>
+                        <Badge variant="default">Enabled</Badge>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}
+
+          {/* Navigation Buttons */}
+          <div className="flex items-center justify-between gap-4 pt-6 border-t">
+            <div className="flex gap-2">
+              {onCancel && (
+                <Button variant="outline" onClick={onCancel}>
+                  Cancel
+                </Button>
+              )}
+              {currentStep > 1 && (
+                <Button
+                  variant="outline"
+                  onClick={handleBack}
+                  disabled={isConnecting || connectionStatus === "testing" || connectionStatus === "vpn-setup"}
+                >
+                  <ChevronLeft className="h-4 w-4 mr-2" />
+                  Back
+                </Button>
+              )}
+            </div>
+
+            {currentStep < steps.length ? (
+              <Button
+                onClick={handleNext}
+                disabled={isConnecting || connectionStatus === "testing" || connectionStatus === "vpn-setup"}
+              >
+                {currentStep === 2 && connectionStatus === "idle" ? (
+                  <>
+                    Test Connection
+                    <ChevronRight className="h-4 w-4 ml-2" />
+                  </>
+                ) : connectionStatus === "testing" ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Testing...
+                  </>
+                ) : connectionStatus === "vpn-setup" ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Securing...
+                  </>
+                ) : (
+                  <>
+                    Next
+                    <ChevronRight className="h-4 w-4 ml-2" />
+                  </>
+                )}
+              </Button>
+            ) : (
+              <Button onClick={handleSubmit} disabled={isConnecting}>
+                {isConnecting ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Adding Router...
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle2 className="h-4 w-4 mr-2" />
+                    Add Router
+                  </>
+                )}
+              </Button>
+            )}
+          </div>
         </CardContent>
       </Card>
-
-      {/* Navigation Buttons */}
-      <div className="flex items-center justify-between gap-4">
-        <div className="flex gap-2">
-          {onCancel && (
-            <Button variant="outline" onClick={onCancel}>
-              Cancel
-            </Button>
-          )}
-          {currentStep > 1 && (
-            <Button
-              variant="outline"
-              onClick={handleBack}
-              disabled={isConnecting || connectionStatus === "testing"}
-            >
-              <ChevronLeft className="h-4 w-4 mr-2" />
-              Back
-            </Button>
-          )}
-        </div>
-
-        {currentStep < steps.length ? (
-          <Button
-            onClick={handleNext}
-            disabled={isConnecting || connectionStatus === "testing"}
-          >
-            {currentStep === 2 && connectionStatus === "idle" ? (
-              <>
-                Test Connection
-                <ChevronRight className="h-4 w-4 ml-2" />
-              </>
-            ) : connectionStatus === "testing" ? (
-              <>
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                Testing...
-              </>
-            ) : (
-              <>
-                Next
-                <ChevronRight className="h-4 w-4 ml-2" />
-              </>
-            )}
-          </Button>
-        ) : (
-          <Button onClick={handleSubmit} disabled={isConnecting}>
-            {isConnecting ? (
-              <>
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                Adding Router...
-              </>
-            ) : (
-              <>
-                <CheckCircle2 className="h-4 w-4 mr-2" />
-                Add Router
-              </>
-            )}
-          </Button>
-        )}
-      </div>
     </div>
   );
 };

@@ -146,14 +146,18 @@ export const CommissionTracker: React.FC = () => {
 
   // Calculate growth
   const revenueGrowth =
-    ((currentPeriod.revenue.totalRevenue - lastPeriod.revenue.totalRevenue) /
-      lastPeriod.revenue.totalRevenue) *
-    100;
+    currentPeriod && lastPeriod
+      ? ((currentPeriod.revenue.totalRevenue - lastPeriod.revenue.totalRevenue) /
+          lastPeriod.revenue.totalRevenue) *
+        100
+      : 0;
 
   const commissionGrowth =
-    ((currentPeriod.commission.amount - lastPeriod.commission.amount) /
-      lastPeriod.commission.amount) *
-    100;
+    currentPeriod && lastPeriod
+      ? ((currentPeriod.commission.amount - lastPeriod.commission.amount) /
+          lastPeriod.commission.amount) *
+        100
+      : 0;
 
   // Daily breakdown for chart
   const dailyBreakdown: RevenueBreakdown[] = [
@@ -176,6 +180,11 @@ export const CommissionTracker: React.FC = () => {
   };
 
   const handleRequestPayout = async () => {
+    if (!currentPeriod) {
+      toast.error("No active commission period");
+      return;
+    }
+
     if (currentPeriod.commission.amount < 1000) {
       toast.error("Minimum payout amount is KES 1,000");
       return;
@@ -231,6 +240,20 @@ export const CommissionTracker: React.FC = () => {
     selectedPeriod === "current"
       ? currentPeriod
       : commissionPeriods.find((p) => p.id === selectedPeriod) || currentPeriod;
+
+  if (!currentPeriod) {
+    return (
+      <div className="space-y-6">
+        <Alert>
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>No Data Available</AlertTitle>
+          <AlertDescription>
+            No commission period data is currently available.
+          </AlertDescription>
+        </Alert>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

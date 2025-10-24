@@ -19,7 +19,7 @@ export async function getDatabase(): Promise<Db> {
 /**
  * Get a collection
  */
-export async function getCollection<T = any>(collectionName: string): Promise<Collection<T>> {
+export async function getCollection<T extends Document = any>(collectionName: string): Promise<Collection<T>> {
   const db = await getDatabase()
   return db.collection<T>(collectionName)
 }
