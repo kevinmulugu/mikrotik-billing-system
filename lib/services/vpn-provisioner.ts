@@ -452,7 +452,7 @@ EOF"
 
       // Reload WireGuard configuration
       const reloadCommand = "sudo bash -c 'wg syncconf wg0 <(wg-quick strip wg0)'";
-      await execAsync(`ssh -o StrictHostKeyChecking=no ${sshKeyOption} ${this.VPN_SSH_HOST} '${reloadCommand}'`);
+      await execAsync(`ssh -o StrictHostKeyChecking=no ${sshKeyOption} ${this.VPN_SSH_HOST} ${reloadCommand}`);
 
       console.log(`[VPN] Peer added to server: ${publicKey.substring(0, 10)}...`);
       return true;
@@ -606,7 +606,7 @@ EOF"
 
       // Reload WireGuard
       const reloadCommand = "sudo bash -c 'wg syncconf wg0 <(wg-quick strip wg0)'";
-      await execAsync(`ssh -o StrictHostKeyChecking=no ${sshKeyOption} ${this.VPN_SSH_HOST} '${reloadCommand}'`);
+      await execAsync(`ssh -o StrictHostKeyChecking=no ${sshKeyOption} ${this.VPN_SSH_HOST} ${reloadCommand}`);
 
       console.log('[VPN] ✓ VPN configuration rolled back');
 
