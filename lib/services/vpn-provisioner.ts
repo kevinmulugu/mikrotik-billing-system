@@ -448,11 +448,11 @@ EOF"
 
       const sshKeyOption = this.VPN_SSH_KEY ? `-i ${this.VPN_SSH_KEY}` : '';
 
-      await execAsync(`ssh ${sshKeyOption} ${this.VPN_SSH_HOST} '${sshCommand}'`);
+      await execAsync(`ssh -o StrictHostKeyChecking=no ${sshKeyOption} ${this.VPN_SSH_HOST} '${sshCommand}'`);
 
       // Reload WireGuard configuration
       const reloadCommand = 'sudo wg syncconf wg0 <(wg-quick strip wg0)';
-      await execAsync(`ssh ${sshKeyOption} ${this.VPN_SSH_HOST} '${reloadCommand}'`);
+      await execAsync(`ssh -o StrictHostKeyChecking=no ${sshKeyOption} ${this.VPN_SSH_HOST} '${reloadCommand}'`);
 
       console.log(`[VPN] Peer added to server: ${publicKey.substring(0, 10)}...`);
       return true;
@@ -577,7 +577,7 @@ EOF"
       const sshKeyOption = this.VPN_SSH_KEY ? `-i ${this.VPN_SSH_KEY}` : '';
       const pingCommand = `ping -c 3 -W 2 ${vpnIP}`;
 
-      await execAsync(`ssh ${sshKeyOption} ${this.VPN_SSH_HOST} '${pingCommand}'`);
+      await execAsync(`ssh -o StrictHostKeyChecking=no ${sshKeyOption} ${this.VPN_SSH_HOST} '${pingCommand}'`);
       
       console.log(`[VPN] ✓ Router responding at VPN IP: ${vpnIP}`);
       return true;
@@ -602,11 +602,11 @@ EOF"
         sudo sed -i '/PublicKey = ${publicKey}/,+2d' /etc/wireguard/wg0.conf
       `;
 
-      await execAsync(`ssh ${sshKeyOption} ${this.VPN_SSH_HOST} '${removeCommand}'`);
+      await execAsync(`ssh -o StrictHostKeyChecking=no ${sshKeyOption} ${this.VPN_SSH_HOST} '${removeCommand}'`);
 
       // Reload WireGuard
       const reloadCommand = 'sudo wg syncconf wg0 <(wg-quick strip wg0)';
-      await execAsync(`ssh ${sshKeyOption} ${this.VPN_SSH_HOST} '${reloadCommand}'`);
+      await execAsync(`ssh -o StrictHostKeyChecking=no ${sshKeyOption} ${this.VPN_SSH_HOST} '${reloadCommand}'`);
 
       console.log('[VPN] ✓ VPN configuration rolled back');
 
