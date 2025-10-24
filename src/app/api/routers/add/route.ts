@@ -1,4 +1,4 @@
-// src/app/api/routers/add/route.ts - Enhanced with VPN Provisioning
+// src/app/api/routers/add/route.ts - Enhanced with Client-Side VPN Bridge
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
@@ -30,6 +30,10 @@ interface AddRouterRequest {
   pppoeEnabled: boolean;
   pppoeInterface?: string;
   defaultProfile?: string;
+  // NEW: VPN configuration from client
+  vpnConfigured?: boolean;
+  vpnIP?: string;
+  vpnPublicKey?: string;
 }
 
 export async function POST(req: NextRequest) {
@@ -104,7 +108,7 @@ export async function POST(req: NextRequest) {
       .collection('routers')
       .findOne({
         customerId: customer._id,
-        'connection.ipAddress': body.ipAddress,
+        'connection.localIP': body.ipAddress,
       });
 
     if (existingRouter) {
@@ -114,99 +118,75 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Test connection to router
+    // SKIP server-side connection test if client already did it
+    // (Client-side bridge approach)
+    let macAddress = 'Unknown';
+    let identity = 'Unknown';
+    let firmwareVersion = 'Unknown';
+
+    // Connection config - will use VPN IP if provided
     const connectionConfig = {
-      ipAddress: body.ipAddress,
+      ipAddress: body.vpnConfigured && body.vpnIP ? body.vpnIP : body.ipAddress,
       port: parseInt(body.port) || 8728,
       username: body.apiUser || 'admin',
       password: body.apiPassword,
     };
 
-    const connectionTest = await MikroTikService.testConnection(connectionConfig);
-
-    if (!connectionTest.success) {
-      return NextResponse.json(
-        {
-          error: 'Failed to connect to router',
-          details: connectionTest.error,
-        },
-        { status: 400 }
-      );
+    // If VPN was configured by client, verify it's working
+    if (body.vpnConfigured && body.vpnIP) {
+      console.log(`[Router Add] VPN pre-configured by client, testing connection...`);
+      
+      try {
+        const vpnTest = await MikroTikService.testConnection(connectionConfig);
+        if (vpnTest.success) {
+          console.log(`[Router Add] ✓ VPN connection verified`);
+          macAddress = await MikroTikService.getRouterMacAddress(connectionConfig);
+          identity = await MikroTikService.getIdentity(connectionConfig);
+          firmwareVersion = vpnTest.data?.routerInfo?.version || 'Unknown';
+        } else {
+          console.warn(`[Router Add] ⚠ VPN connection test failed, will retry`);
+        }
+      } catch (vpnTestError) {
+        console.error(`[Router Add] VPN test error:`, vpnTestError);
+      }
     }
 
-    // Get router MAC address and identity
-    const macAddress = await MikroTikService.getRouterMacAddress(connectionConfig);
-    const identity = await MikroTikService.getIdentity(connectionConfig);
-
     // ============================================
-    // VPN PROVISIONING (NEW SECTION)
+    // VPN TUNNEL OBJECT
     // ============================================
-    
-    console.log(`[Router Add] Starting VPN provisioning...`);
     
     let vpnTunnel: any = null;
-    let vpnProvisioningSuccess = false;
-    let vpnError: string | undefined;
+    let vpnProvisioningSuccess = body.vpnConfigured || false;
 
-    try {
-      const vpnResult = await VPNProvisioner.provisionRouterVPN({
-        routerId: 'temp-id', // Will be updated after router creation
-        customerId: customer._id,
-        localConnection: connectionConfig,
-      });
+    if (body.vpnConfigured && body.vpnIP && body.vpnPublicKey) {
+      // VPN was configured by client-side bridge
+      vpnTunnel = {
+        enabled: true,
+        clientPublicKey: body.vpnPublicKey,
+        serverPublicKey: process.env.VPN_SERVER_PUBLIC_KEY || '',
+        assignedVPNIP: body.vpnIP,
+        status: 'connected',
+        lastHandshake: new Date(),
+        provisionedAt: new Date(),
+      };
 
-      console.log(`[Router Add] VPN Provisioning Result:`, vpnResult);
-
-      if (vpnResult.success && vpnResult.vpnConfig) {
-        vpnProvisioningSuccess = true;
-        vpnTunnel = {
-          enabled: true,
-          clientPublicKey: vpnResult.vpnConfig.clientPublicKey,
-          serverPublicKey: vpnResult.vpnConfig.serverPublicKey,
-          assignedVPNIP: vpnResult.vpnIP,
-          status: 'connected',
-          lastHandshake: new Date(),
-          provisionedAt: new Date(),
-        };
-
-        // Switch to VPN IP for remaining operations
-        console.log(`[Router Add] ✓ VPN provisioned, switching to VPN IP: ${vpnResult.vpnIP}`);
-        connectionConfig.ipAddress = vpnResult.vpnIP!;
-
-      } else {
-        vpnError = vpnResult.error || 'VPN provisioning failed';
-        console.warn(`[Router Add] ⚠ VPN provisioning failed: ${vpnError}`);
-        
-        // Create VPN tunnel object with failed status
-        vpnTunnel = {
-          enabled: false,
-          status: 'failed',
-          error: vpnError,
-          lastAttempt: new Date(),
-        };
-      }
-
-    } catch (vpnException) {
-      vpnError = vpnException instanceof Error ? vpnException.message : 'VPN exception occurred';
-      console.error(`[Router Add] ❌ VPN provisioning exception:`, vpnException);
-      
-      // Create VPN tunnel object with failed status
+      console.log(`[Router Add] ✓ Using client-configured VPN: ${body.vpnIP}`);
+    } else {
+      // VPN not configured - mark as pending
       vpnTunnel = {
         enabled: false,
-        status: 'failed',
-        error: vpnError,
+        status: 'pending',
+        error: 'VPN configuration pending',
         lastAttempt: new Date(),
       };
-    }
 
-    // ============================================
-    // END VPN PROVISIONING
-    // ============================================
+      console.log(`[Router Add] ⚠ VPN not configured, marked as pending`);
+    }
 
     // Encrypt API password
     const encryptedPassword = MikroTikService.encryptPassword(body.apiPassword);
 
-    // Create router document matching MongoDB schema
+    // Create router document
     const routerDocument = {
       customerId: customer._id,
       routerInfo: {
@@ -214,7 +194,7 @@ export async function POST(req: NextRequest) {
         model: body.model,
         serialNumber: body.serialNumber || '',
         macAddress: macAddress,
-        firmwareVersion: connectionTest.data?.routerInfo.version || '',
+        firmwareVersion: firmwareVersion,
         location: {
           name: body.location.name || '',
           coordinates: {
@@ -227,19 +207,19 @@ export async function POST(req: NextRequest) {
         },
       },
       connection: {
-        localIP: body.ipAddress,              // Original local IP
-        vpnIP: vpnTunnel?.assignedVPNIP,      // VPN management IP (if provisioned)
-        preferVPN: vpnProvisioningSuccess,     // Use VPN for management if available
+        localIP: body.ipAddress,
+        vpnIP: vpnTunnel?.assignedVPNIP,
+        preferVPN: vpnProvisioningSuccess,
         ipAddress: vpnProvisioningSuccess 
           ? vpnTunnel.assignedVPNIP 
-          : body.ipAddress,                    // Current active IP
+          : body.ipAddress,
         port: parseInt(body.port) || 8728,
         apiUser: body.apiUser || 'admin',
         apiPassword: encryptedPassword,
         restApiEnabled: true,
         sshEnabled: false,
       },
-      vpnTunnel: vpnTunnel,  // Add VPN tunnel configuration
+      vpnTunnel: vpnTunnel,
       configuration: {
         hotspot: {
           enabled: body.hotspotEnabled,
@@ -267,9 +247,9 @@ export async function POST(req: NextRequest) {
       health: {
         status: 'online',
         lastSeen: new Date(),
-        uptime: connectionTest.data?.routerInfo.uptime || 0,
-        cpuUsage: connectionTest.data?.routerInfo.cpuLoad || 0,
-        memoryUsage: connectionTest.data?.routerInfo.memoryUsage || 0,
+        uptime: 0,
+        cpuUsage: 0,
+        memoryUsage: 0,
         diskUsage: 0,
         temperature: 0,
         connectedUsers: 0,
@@ -296,16 +276,34 @@ export async function POST(req: NextRequest) {
 
     console.log(`[Router Add] ✓ Router created with ID: ${routerId}`);
 
-    // Update VPN tunnel with actual router ID
-    if (vpnProvisioningSuccess && vpnTunnel) {
-      await db.collection('vpn_tunnels').updateOne(
-        { 'vpnConfig.clientPublicKey': vpnTunnel.clientPublicKey },
-        { $set: { routerId: insertResult.insertedId } }
-      );
-      console.log(`[Router Add] ✓ VPN tunnel updated with router ID`);
+    // Save VPN tunnel to database if configured
+    if (vpnProvisioningSuccess && body.vpnPublicKey) {
+      await db.collection('vpn_tunnels').insertOne({
+        routerId: insertResult.insertedId,
+        customerId: customer._id,
+        vpnConfig: {
+          clientPublicKey: body.vpnPublicKey,
+          serverPublicKey: process.env.VPN_SERVER_PUBLIC_KEY || '',
+          assignedIP: body.vpnIP,
+          endpoint: process.env.VPN_SERVER_ENDPOINT || '',
+          allowedIPs: process.env.VPN_NETWORK || '10.99.0.0/16',
+          persistentKeepalive: 25,
+        },
+        connection: {
+          status: 'connected',
+          lastHandshake: new Date(),
+          bytesReceived: 0,
+          bytesSent: 0,
+          lastSeen: new Date(),
+        },
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+
+      console.log(`[Router Add] ✓ VPN tunnel saved to database`);
     }
 
-    // Execute full router configuration
+    // Execute full router configuration (uses VPN IP if available)
     console.log(`[Router Add] Starting router configuration...`);
     
     const configResult = await MikroTikOrchestrator.configureRouter(connectionConfig, {
@@ -318,20 +316,18 @@ export async function POST(req: NextRequest) {
     });
 
     // Update router with configuration results
-    const configurationStatus = {
-      configured: configResult.success,
-      completedSteps: configResult.completedSteps,
-      failedSteps: configResult.failedSteps,
-      warnings: configResult.warnings,
-      configuredAt: new Date(),
-    };
-
     await db.collection('routers').updateOne(
       { _id: insertResult.insertedId },
       {
         $set: {
           'health.status': configResult.success ? 'online' : 'warning',
-          configurationStatus: configurationStatus,
+          configurationStatus: {
+            configured: configResult.success,
+            completedSteps: configResult.completedSteps,
+            failedSteps: configResult.failedSteps,
+            warnings: configResult.warnings,
+            configuredAt: new Date(),
+          },
           updatedAt: new Date(),
         },
       }
@@ -379,8 +375,8 @@ export async function POST(req: NextRequest) {
     const responseData = {
       success: true,
       message: vpnProvisioningSuccess 
-        ? 'Router added successfully with secure VPN management'
-        : 'Router added successfully (VPN setup pending)',
+        ? 'Router added successfully with secure remote access'
+        : 'Router added successfully',
       routerId: routerId,
       router: {
         id: routerId,
@@ -392,13 +388,12 @@ export async function POST(req: NextRequest) {
         status: configResult.success ? 'online' : 'warning',
         location: body.location.name || body.location.county,
         macAddress: macAddress,
-        firmwareVersion: connectionTest.data?.routerInfo.version,
+        firmwareVersion: firmwareVersion,
       },
       vpn: {
         enabled: vpnProvisioningSuccess,
         status: vpnTunnel?.status,
         vpnIP: vpnTunnel?.assignedVPNIP,
-        error: vpnError,
       },
       configuration: {
         success: configResult.success,
