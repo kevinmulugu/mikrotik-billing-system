@@ -443,24 +443,27 @@ export class VPNProvisioner {
    */
   private static async addPeerToServer(publicKey: string, vpnIP: string): Promise<boolean> {
     try {
-      const sshCommand = `
-        sudo bash -c "cat >> /etc/wireguard/wg0.conf << 'EOF'
-
-# Router Peer - ${vpnIP}
-[Peer]
-PublicKey = ${publicKey}
-AllowedIPs = ${vpnIP}/32
-PersistentKeepalive = 25
-EOF"
-      `;
-
       const sshKeyOption = this.VPN_SSH_KEY ? `-i ${this.VPN_SSH_KEY}` : '';
 
-      await execAsync(`ssh -o StrictHostKeyChecking=no ${sshKeyOption} ${this.VPN_SSH_HOST} '${sshCommand}'`);
+      // Add peer
+      const addPeerCommand = `sudo bash -c "cat >> /etc/wireguard/wg0.conf << 'EOF'
 
-      // Reload WireGuard configuration
-      const reloadCommand = 'wg-quick strip wg0 | sudo wg syncconf wg0 /dev/stdin';
-      await execAsync(`ssh -o StrictHostKeyChecking=no ${sshKeyOption} ${this.VPN_SSH_HOST} ${reloadCommand}`);
+  # Router Peer - ${vpnIP}
+  [Peer]
+  PublicKey = ${publicKey}
+  AllowedIPs = ${vpnIP}/32
+  PersistentKeepalive = 25
+  EOF"`;
+
+      await execAsync(
+        `ssh -o StrictHostKeyChecking=no ${sshKeyOption} ${this.VPN_SSH_HOST} '${addPeerCommand}'`
+      );
+
+      // Reload - use simple approach without bash -c
+      await execAsync(
+        `ssh -o StrictHostKeyChecking=no ${sshKeyOption} ${this.VPN_SSH_HOST} ` +
+        `'wg-quick strip wg0 | sudo wg syncconf wg0 /dev/stdin'`
+      );
 
       console.log(`[VPN] Peer added to server: ${publicKey.substring(0, 10)}...`);
       return true;
@@ -605,16 +608,21 @@ EOF"
 
       const sshKeyOption = this.VPN_SSH_KEY ? `-i ${this.VPN_SSH_KEY}` : '';
 
-      // Remove peer from config file
-      const removeCommand = `
-        sudo sed -i '/PublicKey = ${publicKey}/,+2d' /etc/wireguard/wg0.conf
-      `;
+      // Remove peer from config file - FIXED: Single quotes around entire command
+      const removeCommand = `sudo sed -i '/PublicKey = ${publicKey}/,+2d' /etc/wireguard/wg0.conf`;
 
-      await execAsync(`ssh -o StrictHostKeyChecking=no ${sshKeyOption} ${this.VPN_SSH_HOST} '${removeCommand}'`);
+      await execAsync(
+        `ssh -o StrictHostKeyChecking=no ${sshKeyOption} ${this.VPN_SSH_HOST} '${removeCommand}'`
+      );
 
-      // Reload WireGuard
+      console.log('[VPN] Peer removed from config file');
+
+      // Reload WireGuard - FIXED: Single quotes around entire command
       const reloadCommand = 'wg-quick strip wg0 | sudo wg syncconf wg0 /dev/stdin';
-      await execAsync(`ssh -o StrictHostKeyChecking=no ${sshKeyOption} ${this.VPN_SSH_HOST} ${reloadCommand}`);
+      
+      await execAsync(
+        `ssh -o StrictHostKeyChecking=no ${sshKeyOption} ${this.VPN_SSH_HOST} '${reloadCommand}'`
+      );
 
       console.log('[VPN] ✓ VPN configuration rolled back');
 
