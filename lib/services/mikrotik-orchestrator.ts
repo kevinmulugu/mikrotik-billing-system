@@ -206,13 +206,11 @@ export class MikroTikOrchestrator {
             'service-name': `pppoe-${interface1}`,
             interface: interface1,
             'default-profile': 'default',
-            enabled: 'yes',
           },
           {
             'service-name': `pppoe-${interface2}`,
             interface: interface2,
             'default-profile': 'default',
-            enabled: 'yes',
           },
         ]);
 
