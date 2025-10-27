@@ -4,7 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import clientPromise from '@/lib/mongodb';
-import { ObjectId } from 'mongodb';
+import { ObjectId, Long, Int32 } from 'mongodb';
 import { MikroTikService } from '@/lib/services/mikrotik';
 import { MikroTikOrchestrator } from '@/lib/services/mikrotik-orchestrator';
 import VPNProvisioner from '@/lib/services/vpn-provisioner';
@@ -276,44 +276,125 @@ export async function POST(req: NextRequest) {
 
     console.log(`[Router Add] ✓ Router created with ID: ${routerId}`);
 
-    // Save VPN tunnel to database if configured
-    if (vpnProvisioningSuccess && body.vpnPublicKey) {
-      await db.collection('vpn_tunnels').insertOne({
-        routerId: insertResult.insertedId,
-        customerId: customer._id,
-        vpnConfig: {
-          clientPublicKey: body.vpnPublicKey,
-          serverPublicKey: process.env.VPN_SERVER_PUBLIC_KEY || '',
-          assignedIP: body.vpnIP,
-          endpoint: process.env.VPN_SERVER_ENDPOINT || '',
-          allowedIPs: process.env.VPN_NETWORK || '10.99.0.0/16',
-          persistentKeepalive: 25,
-        },
-        connection: {
-          status: 'connected',
-          lastHandshake: new Date(),
-          bytesReceived: 0,
-          bytesSent: 0,
-          lastSeen: new Date(),
-        },
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      });
+    // ============================================
+    // SAVE VPN TUNNEL TO DATABASE (FIXED)
+    // ============================================
+    
+    if (vpnProvisioningSuccess && body.vpnPublicKey && body.vpnIP) {
+      try {
+        console.log(`[Router Add] Saving VPN tunnel configuration...`);
 
-      console.log(`[Router Add] ✓ VPN tunnel saved to database`);
+        // Fetch the setup token to get the complete VPN config including private key
+        const setupToken = await db.collection('vpn_setup_tokens').findOne({
+          'vpnConfig.vpnIP': body.vpnIP,
+          status: 'verified',
+        });
+
+        if (!setupToken) {
+          console.warn(`[Router Add] ⚠ Setup token not found for VPN IP: ${body.vpnIP}`);
+        }
+
+        // Encrypt private key if available
+        let encryptedPrivateKey = '';
+        if (setupToken?.vpnConfig?.clientPrivateKey) {
+          console.log(`[Router Add] Encrypting VPN private key...`);
+          encryptedPrivateKey = VPNProvisioner.encryptPrivateKey(
+            setupToken.vpnConfig.clientPrivateKey
+          );
+        } else {
+          console.warn(`[Router Add] ⚠ Private key not found in setup token`);
+        }
+
+        // Insert VPN tunnel with proper BSON types
+        await db.collection('vpn_tunnels').insertOne({
+          routerId: insertResult.insertedId,
+          customerId: customer._id,
+          vpnConfig: {
+            clientPrivateKey: encryptedPrivateKey,
+            clientPublicKey: body.vpnPublicKey,
+            serverPublicKey: process.env.VPN_SERVER_PUBLIC_KEY || '',
+            assignedIP: body.vpnIP,
+            endpoint: process.env.VPN_SERVER_ENDPOINT || 'vpn.qebol.co.ke:51820',
+            allowedIPs: process.env.VPN_NETWORK || '10.99.0.0/16',
+            persistentKeepalive: new Int32(25),  // ✅ Explicit int32 for BSON validation
+          },
+          connection: {
+            status: 'connected',
+            lastHandshake: new Date(),
+            bytesReceived: new Long(0),  // ✅ Explicit long for BSON validation
+            bytesSent: new Long(0),      // ✅ Explicit long for BSON validation
+            lastSeen: new Date(),
+          },
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        });
+
+        console.log(`[Router Add] ✓ VPN tunnel saved to database`);
+
+        // Update setup token status to 'completed'
+        if (setupToken) {
+          await db.collection('vpn_setup_tokens').updateOne(
+            { _id: setupToken._id },
+            {
+              $set: {
+                status: 'completed',
+                completedAt: new Date(),
+                routerId: insertResult.insertedId,
+              },
+            }
+          );
+          console.log(`[Router Add] ✓ Setup token marked as completed`);
+        }
+
+      } catch (vpnError) {
+        console.error(`[Router Add] ❌ Failed to save VPN tunnel:`, vpnError);
+        
+        // Don't fail the entire router add, just log the error
+        // Update router status to indicate VPN issue
+        await db.collection('routers').updateOne(
+          { _id: insertResult.insertedId },
+          {
+            $set: {
+              'vpnTunnel.status': 'failed',
+              'vpnTunnel.error': vpnError instanceof Error ? vpnError.message : 'Failed to save VPN tunnel',
+              'vpnTunnel.lastAttempt': new Date(),
+            },
+          }
+        );
+      }
     }
 
-    // Execute full router configuration (uses VPN IP if available)
+    // ============================================
+    // EXECUTE ROUTER CONFIGURATION
+    // ============================================
+    
     console.log(`[Router Add] Starting router configuration...`);
     
-    const configResult = await MikroTikOrchestrator.configureRouter(connectionConfig, {
-      hotspotEnabled: body.hotspotEnabled,
-      ssid: body.ssid,
-      pppoeEnabled: body.pppoeEnabled,
-      pppoeInterfaces: ['ether2', 'ether3'],
-      wanInterface: 'ether1',
-      bridgeInterfaces: ['wlan1', 'ether4'],
-    });
+    let configResult;
+    try {
+      configResult = await MikroTikOrchestrator.configureRouter(connectionConfig, {
+        hotspotEnabled: body.hotspotEnabled,
+        ssid: body.ssid,
+        pppoeEnabled: body.pppoeEnabled,
+        pppoeInterfaces: ['ether2', 'ether3'],
+        wanInterface: 'ether1',
+        bridgeInterfaces: ['wlan1', 'ether4'],
+      });
+
+      console.log(`[Router Add] Configuration result:`, {
+        success: configResult.success,
+        completedSteps: configResult.completedSteps,
+        failedSteps: configResult.failedSteps,
+      });
+    } catch (configError) {
+      console.error(`[Router Add] Configuration error:`, configError);
+      configResult = {
+        success: false,
+        completedSteps: [],
+        failedSteps: ['all'],
+        warnings: [configError instanceof Error ? configError.message : 'Unknown configuration error'],
+      };
+    }
 
     // Update router with configuration results
     await db.collection('routers').updateOne(
@@ -323,9 +404,9 @@ export async function POST(req: NextRequest) {
           'health.status': configResult.success ? 'online' : 'warning',
           configurationStatus: {
             configured: configResult.success,
-            completedSteps: configResult.completedSteps,
-            failedSteps: configResult.failedSteps,
-            warnings: configResult.warnings,
+            completedSteps: configResult.completedSteps || [],
+            failedSteps: configResult.failedSteps || [],
+            warnings: configResult.warnings || [],
             configuredAt: new Date(),
           },
           updatedAt: new Date(),
@@ -397,9 +478,9 @@ export async function POST(req: NextRequest) {
       },
       configuration: {
         success: configResult.success,
-        completedSteps: configResult.completedSteps,
-        failedSteps: configResult.failedSteps,
-        warnings: configResult.warnings,
+        completedSteps: configResult.completedSteps || [],
+        failedSteps: configResult.failedSteps || [],
+        warnings: configResult.warnings || [],
       },
     };
 
@@ -408,11 +489,17 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(responseData, { status: 201 });
 
   } catch (error) {
-    console.error('Add Router API Error:', error);
+    console.error('[Router Add] ❌ API Error:', error);
+    
+    // Provide more detailed error information
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    const errorDetails = error instanceof Error && error.stack ? error.stack : undefined;
+
     return NextResponse.json(
       {
         error: 'Failed to add router',
-        details: error instanceof Error ? error.message : 'Unknown error',
+        details: errorMessage,
+        debug: process.env.NODE_ENV === 'development' ? errorDetails : undefined,
       },
       { status: 500 }
     );
