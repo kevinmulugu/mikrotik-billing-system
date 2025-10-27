@@ -216,6 +216,9 @@ export class VPNProvisioner {
 # Add route to VPN network
 /ip route add dst-address=${config.allowedIPs} gateway=wg-mgmt comment="VPN Network Route";
 
+# Allow incoming connections from VPN network
+/ip firewall filter add chain=input src-address=${config.allowedIPs} action=accept place-before=0 comment="Allow VPN Management";
+
 # Enable WireGuard interface (if disabled)
 /interface wireguard enable wg-mgmt;
 
