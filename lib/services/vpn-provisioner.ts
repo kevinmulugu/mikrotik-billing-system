@@ -445,34 +445,70 @@ export class VPNProvisioner {
     try {
       const sshKeyOption = this.VPN_SSH_KEY ? `-i ${this.VPN_SSH_KEY}` : '';
 
-      // Properly escaped heredoc
-      const addPeerCommand = `sudo bash -c 'cat >> /etc/wireguard/wg0.conf <<EOF
+      console.log(`[VPN] Adding peer to server config: ${vpnIP}`);
 
-  # Router Peer - ${vpnIP}
-  [Peer]
-  PublicKey = ${publicKey}
-  AllowedIPs = ${vpnIP}/32
-  PersistentKeepalive = 25
-  EOF'`;
+      // Build peer configuration block
+      const peerBlock = [
+        '',
+        `# Router Peer - ${vpnIP}`,
+        '[Peer]',
+        `PublicKey = ${publicKey}`,
+        `AllowedIPs = ${vpnIP}/32`,
+        'PersistentKeepalive = 25',
+        ''
+      ].join('\\n');
+
+      // Add peer to config file
+      const addPeerCommand = `sudo bash -c 'printf "${peerBlock}" >> /etc/wireguard/wg0.conf'`;
 
       await execAsync(
-        `ssh -o StrictHostKeyChecking=no ${sshKeyOption} ${this.VPN_SSH_HOST} "${addPeerCommand}"`
+        `ssh -o StrictHostKeyChecking=no ${sshKeyOption} ${this.VPN_SSH_HOST} '${addPeerCommand}'`
       );
 
-      console.log(`[VPN] Peer configuration added to server`);
+      console.log(`[VPN] ✓ Peer configuration added`);
 
-      // Reload WireGuard configuration
-      const reloadCommand = 'wg-quick strip wg0 | sudo wg syncconf wg0 /dev/stdin';
+      // Reload WireGuard with down/up (reliable method)
+      console.log(`[VPN] Reloading WireGuard...`);
       
       await execAsync(
-        `ssh -o StrictHostKeyChecking=no ${sshKeyOption} ${this.VPN_SSH_HOST} '${reloadCommand}'`
+        `ssh -o StrictHostKeyChecking=no ${sshKeyOption} ${this.VPN_SSH_HOST} 'sudo wg-quick down wg0 && sudo wg-quick up wg0'`
       );
 
-      console.log(`[VPN] Peer added to server: ${publicKey.substring(0, 10)}...`);
+      console.log(`[VPN] ✓ WireGuard reloaded successfully`);
+      console.log(`[VPN] ✅ Peer added: ${publicKey.substring(0, 10)}...`);
+      
       return true;
 
     } catch (error) {
-      console.error('[VPN] Failed to add peer to server:', error);
+      console.error('[VPN] ❌ Failed to add peer to server:', error);
+      
+      // Attempt cleanup - remove the potentially broken peer entry
+      console.log('[VPN] Attempting to cleanup failed peer addition...');
+      
+      try {
+        const sshKeyOption = this.VPN_SSH_KEY ? `-i ${this.VPN_SSH_KEY}` : '';
+        
+        // Remove the peer lines (including comment)
+        const cleanupCommand = `sudo sed -i '/# Router Peer - ${vpnIP}/,/PersistentKeepalive/d' /etc/wireguard/wg0.conf`;
+        
+        await execAsync(
+          `ssh -o StrictHostKeyChecking=no ${sshKeyOption} ${this.VPN_SSH_HOST} '${cleanupCommand}'`
+        );
+        
+        console.log('[VPN] ✓ Cleaned up failed peer configuration');
+        
+        // Try to restart WireGuard anyway
+        await execAsync(
+          `ssh -o StrictHostKeyChecking=no ${sshKeyOption} ${this.VPN_SSH_HOST} 'sudo wg-quick down wg0 && sudo wg-quick up wg0'`
+        );
+        
+        console.log('[VPN] ✓ WireGuard restarted after cleanup');
+        
+      } catch (cleanupError) {
+        console.error('[VPN] ⚠ Cleanup also failed:', cleanupError);
+        console.error('[VPN] ⚠ Manual intervention may be required on VPN server');
+      }
+      
       return false;
     }
   }
@@ -620,9 +656,9 @@ export class VPNProvisioner {
 
       console.log('[VPN] Peer removed from config file');
 
-      // Reload WireGuard - FIXED: Single quotes around entire command
-      const reloadCommand = 'wg-quick strip wg0 | sudo wg syncconf wg0 /dev/stdin';
-      
+      // Reload WireGuard - Using reliable down/up method
+      const reloadCommand = 'sudo wg-quick down wg0 && sudo wg-quick up wg0';
+
       await execAsync(
         `ssh -o StrictHostKeyChecking=no ${sshKeyOption} ${this.VPN_SSH_HOST} '${reloadCommand}'`
       );
