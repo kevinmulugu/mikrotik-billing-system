@@ -22,6 +22,7 @@ import {
   Copy,
   Terminal,
   CheckCheck,
+  RefreshCw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -107,6 +108,7 @@ export const AddRouterWizard: React.FC<AddRouterWizardProps> = ({
   const [scriptCopied, setScriptCopied] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showHotspotPassword, setShowHotspotPassword] = useState(false);
+  const [verificationAttempts, setVerificationAttempts] = useState(0);
 
   const [formData, setFormData] = useState<RouterFormData>({
     name: "",
@@ -123,7 +125,7 @@ export const AddRouterWizard: React.FC<AddRouterWizardProps> = ({
     apiUser: "admin",
     apiPassword: "",
     hotspotEnabled: true,
-    ssid: "",
+    ssid: "PAY N BROWSE",
     hotspotPassword: "",
     maxUsers: "50",
     pppoeEnabled: false,
@@ -232,15 +234,17 @@ export const AddRouterWizard: React.FC<AddRouterWizardProps> = ({
 
   const handleBack = () => {
     if (currentStep > 1) {
-      setCurrentStep(currentStep - 1);
-      
-      // Reset VPN setup if going back from step 2
+      // Allow going back from VPN setup step
       if (currentStep === 2) {
+        // Reset VPN setup state but keep form data
         setSetupStatus("idle");
         setVpnSetup(null);
         setVpnVerification(null);
         setScriptCopied(false);
+        setVerificationAttempts(0);
       }
+      
+      setCurrentStep(currentStep - 1);
     }
   };
 
@@ -249,6 +253,7 @@ export const AddRouterWizard: React.FC<AddRouterWizardProps> = ({
    */
   const handleGenerateVPNScript = async () => {
     setSetupStatus("generating-script");
+    setVerificationAttempts(0);
 
     try {
       console.log("[Wizard] Generating VPN setup script...");
@@ -322,9 +327,14 @@ export const AddRouterWizard: React.FC<AddRouterWizardProps> = ({
     }
 
     setSetupStatus("verifying");
+    setVerificationAttempts((prev) => prev + 1);
 
     try {
       console.log("[Wizard] Verifying VPN connection...");
+      
+      toast.info("Waiting for VPN tunnel to establish... This may take up to 90 seconds", {
+        duration: 5000,
+      });
 
       const response = await fetch("/api/vpn/verify", {
         method: "POST",
@@ -342,7 +352,7 @@ export const AddRouterWizard: React.FC<AddRouterWizardProps> = ({
       const data = await response.json();
 
       if (!response.ok || !data.success) {
-        throw new Error(data.error || "VPN verification failed");
+        throw new Error(data.error || data.troubleshooting?.checks?.[0] || "VPN verification failed");
       }
 
       setVpnVerification({
@@ -367,10 +377,18 @@ export const AddRouterWizard: React.FC<AddRouterWizardProps> = ({
       
       setSetupStatus("error");
       toast.error(
-        error instanceof Error ? error.message : "VPN verification failed",
-        { duration: 7000 }
+        error instanceof Error ? error.message : "VPN verification failed. You can retry or go back to edit router details.",
+        { duration: 10000 }
       );
     }
+  };
+
+  /**
+   * Skip verification and proceed (for troubleshooting)
+   */
+  const handleSkipVerification = () => {
+    toast.info("Skipping verification - you can verify connectivity later from router dashboard");
+    setCurrentStep(3);
   };
 
   /**
@@ -443,7 +461,7 @@ export const AddRouterWizard: React.FC<AddRouterWizardProps> = ({
           {steps.map((step, index) => {
             const StepIcon = step.icon;
             const isActive = currentStep === step.id;
-            const isCompleted = currentStep > step.id;
+            const isCompleted = currentStep > step.id || (step.id === 2 && setupStatus === "verified");
 
             return (
               <React.Fragment key={step.id}>
@@ -500,184 +518,170 @@ export const AddRouterWizard: React.FC<AddRouterWizardProps> = ({
           </CardTitle>
         </CardHeader>
 
-        <CardContent className="space-y-6">
+        <CardContent>
           {/* Step 1: Basic Information */}
           {currentStep === 1 && (
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Router Name *</label>
-                <Input
-                  placeholder="e.g., Home Router, Office WiFi"
-                  value={formData.name}
-                  onChange={(e) => handleInputChange("name", e.target.value)}
-                />
-                {errors.name && <p className="text-sm text-destructive">{errors.name}</p>}
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Router Model *</label>
-                <Select
-                  value={formData.model}
-                  onValueChange={(value) => handleInputChange("model", value)}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select router model" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {routerModels.map((model) => (
-                      <SelectItem key={model} value={model}>
-                        {model}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {errors.model && <p className="text-sm text-destructive">{errors.model}</p>}
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Serial Number (Optional)</label>
-                <Input
-                  placeholder="Router serial number"
-                  value={formData.serialNumber}
-                  onChange={(e) => handleInputChange("serialNumber", e.target.value)}
-                />
-              </div>
-
-              <Separator />
-
-              <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <MapPin className="h-4 w-4 text-muted-foreground" />
-                  <label className="text-sm font-medium">Location</label>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Location Name</label>
-                <Input
-                  placeholder="e.g., Home, Office, Shop"
-                  value={formData.location.name}
-                  onChange={(e) => handleInputChange("location.name", e.target.value)}
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-6">
+              <div className="space-y-4">
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">Street/Building</label>
+                  <label className="text-sm font-medium">Router Name *</label>
                   <Input
-                    placeholder="Street address"
+                    placeholder="e.g., Studio 103 Kitisuru"
+                    value={formData.name}
+                    onChange={(e) => handleInputChange("name", e.target.value)}
+                  />
+                  {errors.name && <p className="text-sm text-destructive">{errors.name}</p>}
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Router Model *</label>
+                  <Select
+                    value={formData.model}
+                    onValueChange={(value) => handleInputChange("model", value)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select router model" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {routerModels.map((model) => (
+                        <SelectItem key={model} value={model}>
+                          {model}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {errors.model && <p className="text-sm text-destructive">{errors.model}</p>}
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Serial Number (Optional)</label>
+                  <Input
+                    placeholder="Router serial number"
+                    value={formData.serialNumber}
+                    onChange={(e) => handleInputChange("serialNumber", e.target.value)}
+                  />
+                </div>
+
+                <Separator />
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">County *</label>
+                  <Select
+                    value={formData.location.county}
+                    onValueChange={(value) => handleInputChange("location.county", value)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select county" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {kenyanCounties.map((county) => (
+                        <SelectItem key={county} value={county}>
+                          {county}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {errors["location.county"] && (
+                    <p className="text-sm text-destructive">{errors["location.county"]}</p>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">City/Town</label>
+                    <Input
+                      placeholder="e.g., Nairobi"
+                      value={formData.location.city}
+                      onChange={(e) => handleInputChange("location.city", e.target.value)}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Location Name</label>
+                    <Input
+                      placeholder="e.g., Karen"
+                      value={formData.location.name}
+                      onChange={(e) => handleInputChange("location.name", e.target.value)}
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Street Address</label>
+                  <Input
+                    placeholder="e.g., 123 Ngong Road"
                     value={formData.location.street}
                     onChange={(e) => handleInputChange("location.street", e.target.value)}
                   />
                 </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">City/Town</label>
-                  <Input
-                    placeholder="City or town"
-                    value={formData.location.city}
-                    onChange={(e) => handleInputChange("location.city", e.target.value)}
-                  />
+
+                <Separator />
+
+                <Alert>
+                  <Info className="h-4 w-4" />
+                  <AlertTitle>Router Connection Details</AlertTitle>
+                  <AlertDescription>
+                    <p className="text-sm mb-2">
+                      After factory reset, MikroTik routers default to:
+                    </p>
+                    <ul className="text-xs space-y-1 list-disc list-inside">
+                      <li>IP Address: 192.168.88.1</li>
+                      <li>Username: admin</li>
+                      <li>Password: (blank)</li>
+                    </ul>
+                  </AlertDescription>
+                </Alert>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Router IP Address *</label>
+                    <Input
+                      placeholder="192.168.88.1"
+                      value={formData.ipAddress}
+                      onChange={(e) => handleInputChange("ipAddress", e.target.value)}
+                    />
+                    {errors.ipAddress && (
+                      <p className="text-sm text-destructive">{errors.ipAddress}</p>
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">API User</label>
+                    <Input
+                      placeholder="admin"
+                      value={formData.apiUser}
+                      onChange={(e) => handleInputChange("apiUser", e.target.value)}
+                    />
+                  </div>
                 </div>
-              </div>
 
-              <div className="space-y-2">
-                <label className="text-sm font-medium">County *</label>
-                <Select
-                  value={formData.location.county}
-                  onValueChange={(value) => handleInputChange("location.county", value)}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select county" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {kenyanCounties.map((county) => (
-                      <SelectItem key={county} value={county}>
-                        {county}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {errors["location.county"] && (
-                  <p className="text-sm text-destructive">{errors["location.county"]}</p>
-                )}
-              </div>
-
-              <Separator />
-
-              <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <Network className="h-4 w-4 text-muted-foreground" />
-                  <label className="text-sm font-medium">Router Connection</label>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">Router IP Address *</label>
-                  <Input
-                    placeholder="192.168.88.1"
-                    value={formData.ipAddress}
-                    onChange={(e) => handleInputChange("ipAddress", e.target.value)}
-                  />
-                  {errors.ipAddress && (
-                    <p className="text-sm text-destructive">{errors.ipAddress}</p>
+                  <label className="text-sm font-medium">Admin Password *</label>
+                  <div className="relative">
+                    <Input
+                      type={showPassword ? "text" : "password"}
+                      placeholder="Router admin password (blank if factory reset)"
+                      value={formData.apiPassword}
+                      onChange={(e) => handleInputChange("apiPassword", e.target.value)}
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="absolute right-0 top-0 h-full"
+                      onClick={() => setShowPassword(!showPassword)}
+                    >
+                      {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </Button>
+                  </div>
+                  {errors.apiPassword && (
+                    <p className="text-sm text-destructive">{errors.apiPassword}</p>
                   )}
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">API Port</label>
-                  <Input
-                    placeholder="8728"
-                    value={formData.port}
-                    onChange={(e) => handleInputChange("port", e.target.value)}
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-sm font-medium">API Username</label>
-                <Input
-                  placeholder="admin"
-                  value={formData.apiUser}
-                  onChange={(e) => handleInputChange("apiUser", e.target.value)}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-sm font-medium">API Password *</label>
-                <div className="relative">
-                  <Input
-                    type={showPassword ? "text" : "password"}
-                    placeholder="Router admin password"
-                    value={formData.apiPassword}
-                    onChange={(e) => handleInputChange("apiPassword", e.target.value)}
-                  />
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="absolute right-0 top-0 h-full"
-                    onClick={() => setShowPassword(!showPassword)}
-                  >
-                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </Button>
-                </div>
-                {errors.apiPassword && (
-                  <p className="text-sm text-destructive">{errors.apiPassword}</p>
-                )}
-              </div>
-
-              <Alert>
-                <Info className="h-4 w-4" />
-                <AlertDescription>
-                  <p className="text-sm mb-2">
-                    Make sure the MikroTik API is enabled on your router.
+                  <p className="text-xs text-muted-foreground">
+                    Leave blank if router was just factory reset
                   </p>
-                  <code className="text-xs bg-muted p-1 rounded">
-                    /ip/service/enable api
-                  </code>
-                </AlertDescription>
-              </Alert>
+                </div>
+              </div>
             </div>
           )}
 
@@ -696,7 +700,7 @@ export const AddRouterWizard: React.FC<AddRouterWizardProps> = ({
                 </div>
               )}
 
-              {(setupStatus === "waiting-for-user" || setupStatus === "verifying" || setupStatus === "verified") && vpnSetup && (
+              {(setupStatus === "waiting-for-user" || setupStatus === "verifying" || setupStatus === "verified" || setupStatus === "error") && vpnSetup && (
                 <div className="space-y-6">
                   <Alert className="border-blue-500 bg-blue-500/10">
                     <Terminal className="h-5 w-5 text-blue-500" />
@@ -706,7 +710,7 @@ export const AddRouterWizard: React.FC<AddRouterWizardProps> = ({
                     <AlertDescription className="mt-2">
                       <p className="text-sm text-muted-foreground mb-3">
                         Copy the script below and paste it into your router's terminal to enable secure remote management.
-                        This takes about 30 seconds.
+                        VPN handshake may take 30-60 seconds.
                       </p>
                       <div className="bg-background/50 rounded-lg p-3 border border-blue-200">
                         <p className="text-xs font-semibold mb-2 text-blue-600">
@@ -751,7 +755,7 @@ export const AddRouterWizard: React.FC<AddRouterWizardProps> = ({
                   </div>
 
                   {/* Instructions */}
-                  <Card className="border-2 border-amber-200 bg-amber-50/50">
+                  <Card className="border-2 border-amber-200 bg-amber-50/50 dark:bg-amber-950/20 dark:border-amber-800">
                     <CardContent className="pt-6">
                       <h3 className="font-semibold mb-3 flex items-center gap-2">
                         <AlertTriangle className="h-5 w-5 text-amber-600" />
@@ -776,10 +780,13 @@ export const AddRouterWizard: React.FC<AddRouterWizardProps> = ({
                       <CardContent className="pt-6">
                         <div className="flex items-center gap-3">
                           <Loader2 className="h-5 w-5 animate-spin text-blue-500" />
-                          <div>
+                          <div className="flex-1">
                             <p className="font-medium">Verifying VPN connection...</p>
                             <p className="text-sm text-muted-foreground mt-1">
-                              Testing connection to {vpnSetup.vpnIP}
+                              Testing connection to {vpnSetup.vpnIP} - This may take up to 90 seconds
+                            </p>
+                            <p className="text-xs text-muted-foreground mt-1">
+                              Attempt {verificationAttempts} • Waiting for VPN handshake to establish
                             </p>
                           </div>
                         </div>
@@ -824,29 +831,56 @@ export const AddRouterWizard: React.FC<AddRouterWizardProps> = ({
                   {setupStatus === "error" && (
                     <Alert variant="destructive">
                       <AlertCircle className="h-4 w-4" />
-                      <AlertTitle>VPN Setup Failed</AlertTitle>
+                      <AlertTitle>VPN Verification Failed</AlertTitle>
                       <AlertDescription>
                         <p className="text-sm mb-2">Could not verify VPN connection. Please check:</p>
-                        <ul className="list-disc list-inside text-xs space-y-1">
+                        <ul className="list-disc list-inside text-xs space-y-1 mb-3">
                           <li>You pasted the complete script in router terminal</li>
                           <li>Script executed without errors</li>
-                          <li>Wait 15 seconds and try verifying again</li>
-                          <li>Router has internet connection</li>
+                          <li>Router has active internet connection</li>
+                          <li>Wait 1-2 minutes for VPN handshake</li>
+                          <li>Admin password is correct</li>
                         </ul>
+                        <p className="text-xs font-semibold">
+                          Attempts: {verificationAttempts} • You can retry or go back to edit details
+                        </p>
                       </AlertDescription>
                     </Alert>
                   )}
 
-                  {/* Verify Button */}
+                  {/* Action Buttons */}
                   {setupStatus === "waiting-for-user" && (
-                    <Button
-                      onClick={handleVerifyVPN}
-                      size="lg"
-                      className="w-full"
-                    >
-                      <CheckCircle2 className="h-5 w-5 mr-2" />
-                      I've Pasted the Script - Verify VPN
-                    </Button>
+                    <div className="flex gap-3">
+                      <Button
+                        onClick={handleVerifyVPN}
+                        size="lg"
+                        className="flex-1"
+                      >
+                        <CheckCircle2 className="h-5 w-5 mr-2" />
+                        I've Pasted the Script - Verify VPN
+                      </Button>
+                    </div>
+                  )}
+
+                  {setupStatus === "error" && (
+                    <div className="flex gap-3">
+                      <Button
+                        onClick={handleVerifyVPN}
+                        size="lg"
+                        variant="default"
+                        className="flex-1"
+                      >
+                        <RefreshCw className="h-5 w-5 mr-2" />
+                        Retry Verification
+                      </Button>
+                      <Button
+                        onClick={handleSkipVerification}
+                        size="lg"
+                        variant="outline"
+                      >
+                        Skip for Now
+                      </Button>
+                    </div>
                   )}
                 </div>
               )}
@@ -876,18 +910,21 @@ export const AddRouterWizard: React.FC<AddRouterWizardProps> = ({
                     <Wifi className="h-4 w-4" />
                     <AlertDescription>
                       Hotspot will allow customers to connect and purchase internet packages
-                      through a captive portal.
+                      through a captive portal. Your WiFi will be named "PAY N BROWSE".
                     </AlertDescription>
                   </Alert>
 
                   <div className="space-y-2">
                     <label className="text-sm font-medium">WiFi Network Name (SSID) *</label>
                     <Input
-                      placeholder="e.g., MyWiFi-Hotspot"
+                      placeholder="PAY N BROWSE"
                       value={formData.ssid}
                       onChange={(e) => handleInputChange("ssid", e.target.value)}
                     />
                     {errors.ssid && <p className="text-sm text-destructive">{errors.ssid}</p>}
+                    <p className="text-xs text-muted-foreground">
+                      Default: PAY N BROWSE (recommended for brand consistency)
+                    </p>
                   </div>
 
                   <div className="space-y-2">
@@ -1074,15 +1111,15 @@ export const AddRouterWizard: React.FC<AddRouterWizardProps> = ({
           <div className="flex items-center justify-between gap-4 pt-6 border-t">
             <div className="flex gap-2">
               {onCancel && (
-                <Button variant="outline" onClick={onCancel}>
+                <Button variant="outline" onClick={onCancel} disabled={isSubmitting}>
                   Cancel
                 </Button>
               )}
-              {currentStep > 1 && currentStep !== 2 && (
+              {currentStep > 1 && (
                 <Button
                   variant="outline"
                   onClick={handleBack}
-                  disabled={isSubmitting}
+                  disabled={isSubmitting || setupStatus === "verifying" || setupStatus === "generating-script"}
                 >
                   <ChevronLeft className="h-4 w-4 mr-2" />
                   Back

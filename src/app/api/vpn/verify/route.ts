@@ -56,6 +56,11 @@ export async function POST(req: NextRequest) {
     const vpnIP = setupToken.vpnConfig.vpnIP;
 
     console.log(`[VPN Verify] Testing connection to router via VPN IP: ${vpnIP}`);
+    console.log(`[VPN Verify] Waiting for VPN handshake to establish...`);
+
+    // Initial wait for tunnel establishment (30 seconds)
+    // WireGuard needs time for initial handshake, especially with NAT traversal
+    await new Promise(resolve => setTimeout(resolve, 30000));
 
     // Test connection to router via VPN IP
     const connectionConfig = {
@@ -69,11 +74,15 @@ export async function POST(req: NextRequest) {
     let connected = false;
     let routerInfo: any = null;
 
-    // Try up to 3 times with 5 second delays (VPN might take a moment)
-    while (connectionAttempts < 3 && !connected) {
+    // Try up to 6 times with 10 second delays (60 seconds total)
+    // Extended from 3x5s to 6x10s to allow proper VPN handshake time
+    const MAX_ATTEMPTS = 6;
+    const RETRY_DELAY = 10000; // 10 seconds
+
+    while (connectionAttempts < MAX_ATTEMPTS && !connected) {
       connectionAttempts++;
       
-      console.log(`[VPN Verify] Connection attempt ${connectionAttempts}/3...`);
+      console.log(`[VPN Verify] Connection attempt ${connectionAttempts}/${MAX_ATTEMPTS}...`);
 
       try {
         const testResult = await MikroTikService.testConnection(connectionConfig);
@@ -81,28 +90,39 @@ export async function POST(req: NextRequest) {
         if (testResult.success) {
           connected = true;
           routerInfo = testResult.data?.routerInfo;
-          console.log(`[VPN Verify] ✓ Connection successful via VPN`);
+          console.log(`[VPN Verify] ✓ Connection successful via VPN on attempt ${connectionAttempts}`);
           break;
         }
       } catch (error) {
-        console.log(`[VPN Verify] Attempt ${connectionAttempts} failed:`, error);
+        console.log(`[VPN Verify] Attempt ${connectionAttempts} failed:`, error instanceof Error ? error.message : 'Unknown error');
       }
 
       // Wait before retry (except on last attempt)
-      if (connectionAttempts < 3 && !connected) {
-        await new Promise(resolve => setTimeout(resolve, 5000));
+      if (connectionAttempts < MAX_ATTEMPTS && !connected) {
+        console.log(`[VPN Verify] Waiting ${RETRY_DELAY / 1000}s before retry...`);
+        await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
       }
     }
 
     if (!connected) {
+      console.error(`[VPN Verify] ❌ Failed to connect after ${MAX_ATTEMPTS} attempts`);
+      
       return NextResponse.json(
         {
           success: false,
-          error: 'Could not connect to router via VPN. Please check:\n' +
-                 '1. You pasted the complete script\n' +
-                 '2. Script executed without errors\n' +
-                 '3. Wait 10-15 seconds and try again',
-          vpnIP,
+          error: 'Could not connect to router via VPN',
+          troubleshooting: {
+            checks: [
+              'Ensure you pasted the complete script into the router terminal',
+              'Verify the script executed without errors',
+              'Check that router has internet connectivity',
+              'Wait 1-2 minutes for VPN handshake to establish',
+              'Verify router admin password is correct',
+            ],
+            vpnIP,
+            attempts: connectionAttempts,
+            canRetry: true,
+          },
         },
         { status: 503 }
       );
@@ -115,6 +135,7 @@ export async function POST(req: NextRequest) {
     try {
       macAddress = await MikroTikService.getRouterMacAddress(connectionConfig);
       identity = await MikroTikService.getIdentity(connectionConfig);
+      console.log(`[VPN Verify] Router details - MAC: ${macAddress}, Identity: ${identity}`);
     } catch (error) {
       console.warn('[VPN Verify] Could not get router details:', error);
     }
@@ -135,7 +156,7 @@ export async function POST(req: NextRequest) {
       }
     );
 
-    console.log(`[VPN Verify] ✅ VPN verified successfully for token: ${body.setupToken}`);
+    console.log(`[VPN Verify] ✅ VPN verified successfully - Token: ${body.setupToken.substring(0, 16)}...`);
 
     return NextResponse.json({
       success: true,
@@ -157,7 +178,7 @@ export async function POST(req: NextRequest) {
     });
 
   } catch (error) {
-    console.error('VPN Verify Error:', error);
+    console.error('[VPN Verify] ❌ Error:', error);
     return NextResponse.json(
       {
         error: 'Failed to verify VPN connection',
