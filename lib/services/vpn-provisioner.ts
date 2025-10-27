@@ -445,24 +445,27 @@ export class VPNProvisioner {
     try {
       const sshKeyOption = this.VPN_SSH_KEY ? `-i ${this.VPN_SSH_KEY}` : '';
 
-      // Add peer
-      const addPeerCommand = `sudo bash -c "cat >> /etc/wireguard/wg0.conf << 'EOF'
+      // Properly escaped heredoc
+      const addPeerCommand = `sudo bash -c 'cat >> /etc/wireguard/wg0.conf <<EOF
 
   # Router Peer - ${vpnIP}
   [Peer]
   PublicKey = ${publicKey}
   AllowedIPs = ${vpnIP}/32
   PersistentKeepalive = 25
-  EOF"`;
+  EOF'`;
 
       await execAsync(
-        `ssh -o StrictHostKeyChecking=no ${sshKeyOption} ${this.VPN_SSH_HOST} '${addPeerCommand}'`
+        `ssh -o StrictHostKeyChecking=no ${sshKeyOption} ${this.VPN_SSH_HOST} "${addPeerCommand}"`
       );
 
-      // Reload - use simple approach without bash -c
+      console.log(`[VPN] Peer configuration added to server`);
+
+      // Reload WireGuard configuration
+      const reloadCommand = 'wg-quick strip wg0 | sudo wg syncconf wg0 /dev/stdin';
+      
       await execAsync(
-        `ssh -o StrictHostKeyChecking=no ${sshKeyOption} ${this.VPN_SSH_HOST} ` +
-        `'wg-quick strip wg0 | sudo wg syncconf wg0 /dev/stdin'`
+        `ssh -o StrictHostKeyChecking=no ${sshKeyOption} ${this.VPN_SSH_HOST} '${reloadCommand}'`
       );
 
       console.log(`[VPN] Peer added to server: ${publicKey.substring(0, 10)}...`);
