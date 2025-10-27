@@ -445,15 +445,23 @@ export class VPNProvisioner {
     try {
       const sshKeyOption = this.VPN_SSH_KEY ? `-i ${this.VPN_SSH_KEY}` : '';
 
-      const sshCommand = `
-        sudo bash -c 'cat >> /etc/wireguard/wg0.conf <<'EOC'
+      // Build peer config as a single escaped string
+      const peerConfig = `
   # Router Peer - ${vpnIP}
   [Peer]
   PublicKey = ${publicKey}
   AllowedIPs = ${vpnIP}/32
   PersistentKeepalive = 25
+  `;
 
-  EOC'
+      // Escape single quotes and newlines for safe remote echo
+      const escapedConfig = peerConfig
+        .replace(/'/g, `'\\''`)      // escape single quotes
+        .replace(/\n/g, '\\n');      // turn newlines into \n
+
+      // Append the config remotely using echo + tee
+      const sshCommand = `
+        echo -e '${escapedConfig}' | sudo tee -a /etc/wireguard/wg0.conf > /dev/null
       `;
 
       await execAsync(
@@ -462,7 +470,7 @@ export class VPNProvisioner {
 
       console.log(`[VPN] Peer configuration added to server`);
 
-      // Reload WireGuard
+      // Reload WireGuard cleanly
       await execAsync(
         `ssh -o StrictHostKeyChecking=no ${sshKeyOption} ${this.VPN_SSH_HOST} 'sudo wg-quick down wg0 || true && sudo wg-quick up wg0'`
       );
