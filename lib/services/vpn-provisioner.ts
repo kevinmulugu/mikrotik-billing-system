@@ -445,16 +445,15 @@ export class VPNProvisioner {
     try {
       const sshKeyOption = this.VPN_SSH_KEY ? `-i ${this.VPN_SSH_KEY}` : '';
 
-      // Add peer to config file using heredoc (original approach)
       const sshCommand = `
-        sudo bash -c "cat >> /etc/wireguard/wg0.conf << 'EOF'
-
+        sudo bash -c "cat >> /etc/wireguard/wg0.conf <<'EOC'
   # Router Peer - ${vpnIP}
   [Peer]
   PublicKey = ${publicKey}
   AllowedIPs = ${vpnIP}/32
   PersistentKeepalive = 25
-  EOF"
+
+  EOC"
       `;
 
       await execAsync(
@@ -463,9 +462,9 @@ export class VPNProvisioner {
 
       console.log(`[VPN] Peer configuration added to server`);
 
-      // Reload WireGuard - FIXED: Use down/up instead of syncconf
+      // Reload WireGuard
       await execAsync(
-        `ssh -o StrictHostKeyChecking=no ${sshKeyOption} ${this.VPN_SSH_HOST} 'sudo wg-quick down wg0 && sudo wg-quick up wg0'`
+        `ssh -o StrictHostKeyChecking=no ${sshKeyOption} ${this.VPN_SSH_HOST} 'sudo wg-quick down wg0 || true && sudo wg-quick up wg0'`
       );
 
       console.log(`[VPN] Peer added to server: ${publicKey.substring(0, 10)}...`);
