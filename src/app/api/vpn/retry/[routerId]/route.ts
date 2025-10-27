@@ -5,6 +5,7 @@ import { ObjectId } from 'mongodb';
 import clientPromise from '@/lib/mongodb';
 import VPNProvisioner from '@/lib/services/vpn-provisioner';
 import { MikroTikService } from '@/lib/services/mikrotik';
+import { getRouterConnectionConfig } from '@/lib/services/router-connection';
 
 interface RouteContext {
   params: Promise<{
@@ -90,12 +91,17 @@ export async function POST(req: NextRequest, context: RouteContext) {
     );
 
     // Prepare connection config
-    const connectionConfig = {
-      ipAddress: router.connection?.localIP || router.connection?.ipAddress,
-      port: router.connection?.port || 8728,
-      username: router.connection?.apiUser || 'admin',
-      password: router.connection?.apiPassword, // Already encrypted
-    };
+    // const connectionConfig = {
+    //   ipAddress: router.connection?.localIP || router.connection?.ipAddress,
+    //   port: router.connection?.port || 8728,
+    //   username: router.connection?.apiUser || 'admin',
+    //   password: router.connection?.apiPassword, // Already encrypted
+    // };
+
+    const connectionConfig = getRouterConnectionConfig(router, {
+      forceLocal: true,  // Force local IP for retry
+      forceVPN: false,   // Do not use VPN IP for retry
+    });
 
     // Decrypt password
     connectionConfig.password = MikroTikService.decryptPassword(connectionConfig.password);

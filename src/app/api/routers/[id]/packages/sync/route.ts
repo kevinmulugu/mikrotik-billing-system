@@ -5,6 +5,7 @@ import { authOptions } from '@/lib/auth';
 import clientPromise from '@/lib/mongodb';
 import { ObjectId } from 'mongodb';
 import { MikroTikService } from '@/lib/services/mikrotik';
+import { getRouterConnectionConfig } from '@/lib/services/router-connection';
 
 interface RouteParams {
   params: Promise<{
@@ -62,12 +63,16 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     }
 
     // Get connection config
-    const connectionConfig = {
-      ipAddress: router.connection?.ipAddress || '',
-      port: router.connection?.port || 8728,
-      username: router.connection?.apiUser || 'admin',
-      password: MikroTikService.decryptPassword(router.connection?.apiPassword || ''),
-    };
+    // const connectionConfig = {
+    //   ipAddress: router.connection?.ipAddress || '',
+    //   port: router.connection?.port || 8728,
+    //   username: router.connection?.apiUser || 'admin',
+    //   password: MikroTikService.decryptPassword(router.connection?.apiPassword || ''),
+    // };
+    const connectionConfig = getRouterConnectionConfig(router, {
+      forceLocal: false,
+      forceVPN: true,
+    });
 
     // Fetch hotspot user profiles from router with error handling
     let routerProfiles: any[] = [];

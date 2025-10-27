@@ -5,6 +5,7 @@ import { authOptions } from '@/lib/auth';
 import clientPromise from '@/lib/mongodb';
 import { ObjectId } from 'mongodb';
 import { MikroTikService } from '@/lib/services/mikrotik';
+import { getRouterConnectionConfig } from '@/lib/services/router-connection';
 
 interface RouteContext {
   params: Promise<{
@@ -124,12 +125,17 @@ export async function POST(
     }
 
     // Prepare router config
-    const routerConfig = {
-      ipAddress: router.connection.ipAddress,
-      port: router.connection.port || 8728,
-      username: router.connection.apiUser || 'admin',
-      password: MikroTikService.decryptPassword(router.connection.apiPassword),
-    };
+    // const routerConfig = {
+    //   ipAddress: router.connection.ipAddress,
+    //   port: router.connection.port || 8728,
+    //   username: router.connection.apiUser || 'admin',
+    //   password: MikroTikService.decryptPassword(router.connection.apiPassword),
+    // };
+
+    const routerConfig = getRouterConnectionConfig(router, {
+      forceLocal: false, // Use local IP for hotspot provisioning
+      forceVPN: true, // Use VPN IP if available
+    });
 
     // Get all existing users from MikroTik
     let existingUsers: string[] = [];

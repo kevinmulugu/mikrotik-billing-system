@@ -5,6 +5,7 @@ import { authOptions } from '@/lib/auth';
 import clientPromise from '@/lib/mongodb';
 import { ObjectId } from 'mongodb';
 
+
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
