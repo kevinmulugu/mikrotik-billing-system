@@ -446,18 +446,18 @@ export class VPNProvisioner {
       const sshKeyOption = this.VPN_SSH_KEY ? `-i ${this.VPN_SSH_KEY}` : '';
 
       const sshCommand = `
-        sudo bash -c "cat >> /etc/wireguard/wg0.conf <<'EOC'
+        sudo bash -c 'cat >> /etc/wireguard/wg0.conf <<'EOC'
   # Router Peer - ${vpnIP}
   [Peer]
   PublicKey = ${publicKey}
   AllowedIPs = ${vpnIP}/32
   PersistentKeepalive = 25
 
-  EOC"
+  EOC'
       `;
 
       await execAsync(
-        `ssh -o StrictHostKeyChecking=no ${sshKeyOption} ${this.VPN_SSH_HOST} '${sshCommand}'`
+        `ssh -o StrictHostKeyChecking=no ${sshKeyOption} ${this.VPN_SSH_HOST} "${sshCommand}"`
       );
 
       console.log(`[VPN] Peer configuration added to server`);
