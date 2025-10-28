@@ -161,6 +161,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         rxBytes: parseInt(iface['rx-byte'] || '0'),
         txBytes: parseInt(iface['tx-byte'] || '0'),
         disabled: iface.disabled === 'true',
+        mikrotikId: iface['.id'] || '',
       }));
 
       updateFields['networkInterfaces'] = networkInterfaces;
@@ -179,6 +180,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         interface: port.interface,
         bridge: port.bridge,
         status: port.disabled === 'true' ? 'inactive' : 'active',
+        mikrotikId: port['.id'] || '',
         lastSynced: new Date(),
       }));
 
@@ -271,6 +273,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           isActive: hotspotServer.disabled !== 'true',
           totalLeases: dhcpLeases.length,
           activeLeases: hotspotLeases.length,
+          mikrotikId: hotspotServer['.id'] || '',
           lastSynced: new Date(),
         };
       }
@@ -286,6 +289,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           isActive: lanServer.disabled !== 'true',
           totalLeases: dhcpLeases.length,
           activeLeases: lanLeases.length,
+          mikrotikId: lanServer['.id'] || '',
           lastSynced: new Date(),
         };
       }
@@ -312,6 +316,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
             disabled: hotspotServer.disabled === 'true',
             keepaliveTimeout: hotspotServer['keepalive-timeout'] || '2m',
             idleTimeout: hotspotServer['idle-timeout'] || '5m',
+            mikrotikId: hotspotServer['.id'] || '',
             lastSynced: new Date(),
           };
           syncResults.hotspotServer = true;
@@ -342,6 +347,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           externalIP: wanClient.address || '',
           gateway: wanClient.gateway || '',
           dnsServers: wanClient['dhcp-server']?.split(',') || [],
+          mikrotikId: wanClient['.id'] || '',
           lastConnected: new Date(),
         };
         syncResults.wanStatus = true;
@@ -768,7 +774,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     // ============================================
     return NextResponse.json({
       success: true,
-      message: drifts.length > 0 
+      message: drifts.length > 0
         ? `Router synced with ${drifts.length} configuration drift(s) detected`
         : 'Router synced successfully',
       syncResults,
