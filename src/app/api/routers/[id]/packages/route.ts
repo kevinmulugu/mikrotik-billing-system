@@ -119,6 +119,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
       dataLimit = 0, // 0 = unlimited
       bandwidth,
       validity = 30, // days
+      disabled = false, // Control if users can purchase this package
       syncToRouter = true,
       // Optional MikroTik-specific overrides
       idleTimeout,
@@ -252,6 +253,8 @@ export async function POST(request: NextRequest, context: RouteContext) {
       transparentProxy: transparentProxy.toString(),
       keepaliveTimeout: keepaliveTimeout,
       statusAutorefresh: statusAutorefresh,
+      // Purchase control
+      disabled: disabled === true, // Control if users can purchase this package
       // Sync status
       syncStatus: 'not_synced' as 'synced' | 'not_synced' | 'pending' | 'failed',
       lastSynced: null as Date | null,
@@ -429,6 +432,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
       dataLimit,
       bandwidth,
       validity,
+      disabled, // Control if users can purchase this package
       syncToRouter = true,
       // Optional MikroTik-specific overrides
       idleTimeout,
@@ -497,6 +501,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
     if (dataLimit !== undefined)
       updatedFields.dataLimit = parseInt(dataLimit.toString());
     if (validity !== undefined) updatedFields.validity = parseInt(validity.toString());
+    if (disabled !== undefined) updatedFields.disabled = disabled === true;
 
     // Handle duration update
     if (duration !== undefined) {
