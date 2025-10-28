@@ -121,6 +121,11 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       const dbPackage = dbPackages.find((pkg: any) => pkg.name === profileName);
 
       if (dbPackage) {
+        // Ensure disabled field exists (migration for old packages)
+        if (dbPackage.disabled === undefined) {
+          dbPackage.disabled = false;
+        }
+
         // Package exists in database - check for discrepancies
         const hasDiscrepancy =
           dbPackage.sessionTimeout !== profile['session-timeout'] ||
@@ -192,6 +197,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           addressPool: profile['address-pool'] || 'hotspot-pool',
           sharedUsers: profile['shared-users'] || '1',
           transparentProxy: profile['transparent-proxy'] || 'yes',
+          disabled: false, // Allow purchases by default
           syncStatus: 'synced',
           lastSynced: new Date(),
         };
