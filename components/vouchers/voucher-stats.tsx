@@ -126,12 +126,12 @@ export function VoucherStats({ routerId }: VoucherStatsProps) {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600">Total Vouchers</p>
-                <p className="text-2xl font-semibold text-gray-900">
+                <p className="text-sm text-muted-foreground">Total Vouchers</p>
+                <p className="text-2xl font-semibold">
                   {stats.vouchers.total}
                 </p>
               </div>
-              <Ticket className="h-5 w-5 text-gray-600" />
+              <Ticket className="h-5 w-5 text-muted-foreground" />
             </div>
           </CardContent>
         </Card>
@@ -140,7 +140,7 @@ export function VoucherStats({ routerId }: VoucherStatsProps) {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600">Active</p>
+                <p className="text-sm text-muted-foreground">Active</p>
                 <p className="text-2xl font-semibold text-green-600">
                   {stats.vouchers.active}
                 </p>
@@ -154,11 +154,11 @@ export function VoucherStats({ routerId }: VoucherStatsProps) {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600">Used</p>
+                <p className="text-sm text-muted-foreground">Used</p>
                 <p className="text-2xl font-semibold text-blue-600">
                   {stats.vouchers.used}
                 </p>
-                <p className="text-xs text-gray-500">
+                <p className="text-xs text-muted-foreground">
                   {stats.usage.percentage}% usage rate
                 </p>
               </div>
@@ -171,7 +171,7 @@ export function VoucherStats({ routerId }: VoucherStatsProps) {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600">Today Revenue</p>
+                <p className="text-sm text-muted-foreground">Today Revenue</p>
                 <p className="text-2xl font-semibold text-purple-600">
                   {formatCurrency(stats.revenue.today)}
                 </p>
@@ -189,24 +189,24 @@ export function VoucherStats({ routerId }: VoucherStatsProps) {
             <TrendingUp className="h-5 w-5 text-purple-600" />
             <h3 className="font-semibold text-lg">Revenue Summary</h3>
           </div>
-          
+
           <div className="grid md:grid-cols-3 gap-6">
             <div>
-              <p className="text-sm text-gray-600 mb-1">This Week</p>
+              <p className="text-sm text-muted-foreground mb-1">This Week</p>
               <p className="text-xl font-semibold">
                 {formatCurrency(stats.revenue.week)}
               </p>
             </div>
-            
+
             <div>
-              <p className="text-sm text-gray-600 mb-1">This Month</p>
+              <p className="text-sm text-muted-foreground mb-1">This Month</p>
               <p className="text-xl font-semibold">
                 {formatCurrency(stats.revenue.month)}
               </p>
             </div>
-            
+
             <div>
-              <p className="text-sm text-gray-600 mb-1">Total Revenue</p>
+              <p className="text-sm text-muted-foreground mb-1">Total Revenue</p>
               <p className="text-xl font-semibold">
                 {formatCurrency(stats.revenue.total)}
               </p>

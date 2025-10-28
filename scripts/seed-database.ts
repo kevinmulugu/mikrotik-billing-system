@@ -1,3 +1,4 @@
+// scripts/seed-database.ts
 import { MongoClient, ObjectId } from 'mongodb';
 import * as dotenv from 'dotenv';
 import * as path from 'path';
@@ -196,15 +197,32 @@ async function seedDatabase() {
         configuration: {
           hotspot: {
             enabled: true,
+            configured: true,
             ssid: 'HomeWiFi-Guest',
             password: 'guestpass123',
             interface: 'wlan1',
             ipPool: '10.5.50.0/24',
             dnsServers: ['8.8.8.8', '8.8.4.4'],
             maxUsers: 50,
+            ipPoolUsage: {
+              total: 254,
+              used: 5,
+              available: 249,
+              percentage: 2,
+              lastSynced: new Date(),
+            },
+            serverStatus: {
+              isRunning: true,
+              disabled: false,
+              keepaliveTimeout: '5m',
+              idleTimeout: '5m',
+              lastSynced: new Date(),
+              mikrotikId: '*DEMO1',
+            },
           },
           pppoe: {
             enabled: false,
+            configured: false,
             interface: 'ether1',
             ipPool: '10.10.10.0/24',
             dnsServers: ['8.8.8.8'],
@@ -215,7 +233,33 @@ async function seedDatabase() {
             wanInterface: 'ether1',
             lanSubnet: '192.168.88.0/24',
             dhcpRange: '192.168.88.10-192.168.88.254',
+            bridgePorts: [
+              {
+                interface: 'ether2',
+                bridge: 'bridge',
+                mikrotikId: '*DEMO2',
+              },
+              {
+                interface: 'ether3',
+                bridge: 'bridge',
+                mikrotikId: '*DEMO3',
+              },
+              {
+                interface: 'ether4',
+                bridge: 'bridge',
+                mikrotikId: '*DEMO4',
+              },
+            ],
+            wanStatus: {
+              isConnected: true,
+              externalIP: '197.232.10.50',
+              gateway: '197.232.10.1',
+              dnsServers: ['8.8.8.8', '8.8.4.4'],
+              lastConnected: new Date(),
+              mikrotikId: '*DEMO5',
+            },
           },
+          deployedConfigs: [],
         },
         health: {
           status: 'online',
@@ -226,6 +270,10 @@ async function seedDatabase() {
           diskUsage: 30,
           temperature: 45,
           connectedUsers: 5,
+          internetConnectivity: {
+            isConnected: true,
+            lastChecked: new Date(),
+          },
         },
         statistics: {
           totalDataUsage: 50000000000, // 50GB
@@ -238,6 +286,154 @@ async function seedDatabase() {
             daily: 50,
           },
         },
+        // Packages with disabled field
+        packages: {
+          hotspot: [
+            {
+              name: '1hour',
+              displayName: '1 Hour Package',
+              description: 'Perfect for quick browsing',
+              price: 10,
+              duration: 60,
+              dataLimit: 0,
+              bandwidth: {
+                upload: 512,
+                download: 1024,
+              },
+              validity: 1,
+              enabled: true,
+              disabled: false,
+              syncStatus: 'synced',
+              activeUsers: 2,
+              stats: {
+                count: 15,
+                revenue: 150,
+                lastPurchased: new Date(Date.now() - 2 * 60 * 60 * 1000),
+              },
+              createdAt: new Date(),
+              updatedAt: new Date(),
+              lastSyncedAt: new Date(),
+            },
+            {
+              name: '3hours',
+              displayName: '3 Hours Package',
+              description: 'Great for work or streaming',
+              price: 25,
+              duration: 180,
+              dataLimit: 0,
+              bandwidth: {
+                upload: 512,
+                download: 2048,
+              },
+              validity: 1,
+              enabled: true,
+              disabled: false,
+              syncStatus: 'synced',
+              activeUsers: 2,
+              stats: {
+                count: 8,
+                revenue: 200,
+                lastPurchased: new Date(Date.now() - 5 * 60 * 60 * 1000),
+              },
+              createdAt: new Date(),
+              updatedAt: new Date(),
+              lastSyncedAt: new Date(),
+            },
+            {
+              name: '1day',
+              displayName: '1 Day Package',
+              description: 'All-day unlimited browsing',
+              price: 100,
+              duration: 1440,
+              dataLimit: 0,
+              bandwidth: {
+                upload: 1024,
+                download: 5120,
+              },
+              validity: 7,
+              enabled: true,
+              disabled: false,
+              syncStatus: 'synced',
+              activeUsers: 1,
+              stats: {
+                count: 5,
+                revenue: 500,
+                lastPurchased: new Date(Date.now() - 12 * 60 * 60 * 1000),
+              },
+              createdAt: new Date(),
+              updatedAt: new Date(),
+              lastSyncedAt: new Date(),
+            },
+          ],
+          pppoe: [],
+        },
+        // Network interfaces
+        networkInterfaces: [
+          {
+            name: 'ether1',
+            type: 'ethernet',
+            running: true,
+            disabled: false,
+            macAddress: '00:11:22:33:44:55',
+            mikrotikId: '*DEMO_ETH1',
+          },
+          {
+            name: 'ether2',
+            type: 'ethernet',
+            running: true,
+            disabled: false,
+            macAddress: '00:11:22:33:44:56',
+            mikrotikId: '*DEMO_ETH2',
+          },
+          {
+            name: 'wlan1',
+            type: 'wireless',
+            running: true,
+            disabled: false,
+            macAddress: '00:11:22:33:44:57',
+            mikrotikId: '*DEMO_WLAN1',
+          },
+          {
+            name: 'bridge',
+            type: 'bridge',
+            running: true,
+            disabled: false,
+            macAddress: '00:11:22:33:44:58',
+            mikrotikId: '*DEMO_BRIDGE',
+          },
+        ],
+        // DHCP Status
+        dhcpStatus: {
+          hotspot: {
+            serverName: 'dhcp-hotspot',
+            isActive: true,
+            totalLeases: 50,
+            activeLeases: 5,
+            lastSynced: new Date(),
+            mikrotikId: '*DEMO_DHCP_HS',
+          },
+          lan: {
+            serverName: 'dhcp-lan',
+            isActive: true,
+            totalLeases: 254,
+            activeLeases: 12,
+            lastSynced: new Date(),
+            mikrotikId: '*DEMO_DHCP_LAN',
+          },
+        },
+        configurationStatus: {
+          configured: true,
+          configuredAt: new Date(),
+          completedSteps: [
+            'Basic network configuration',
+            'Hotspot server setup',
+            'DHCP configuration',
+            'Package profiles created',
+            'DNS servers configured',
+          ],
+          failedSteps: [],
+          lastChecked: new Date(),
+        },
         status: 'active',
         createdAt: new Date(),
         updatedAt: new Date(),
@@ -246,6 +442,8 @@ async function seedDatabase() {
       console.log('  ✓ Demo router created');
       console.log('    Name: Main House WiFi');
       console.log('    Serial: DEMO-ROUTER-001');
+      console.log('    Packages: 3 hotspot packages');
+      console.log('    Network: 4 interfaces configured');
     } else {
       console.log('  ⊙ Demo router already exists');
     }

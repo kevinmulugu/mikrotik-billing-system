@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { 
+import {
   ArrowLeft, Settings, Users, Ticket, BarChart3, Wifi, Activity,
   DollarSign, Clock, AlertTriangle, MapPin, Cpu, HardDrive, Thermometer,
   Server, Radio, Network, Package, RefreshCw, CheckCircle2, XCircle,
@@ -27,7 +27,7 @@ interface RouterPageProps {
 export default function RouterPage({ params }: RouterPageProps) {
   // Unwrap params using React.use() for Next.js 15
   const { id: routerId } = use(params);
-  
+
   const { data: session, status } = useSession();
   const router = useRouter();
   const routerActions = useRouterActions();
@@ -132,8 +132,8 @@ export default function RouterPage({ params }: RouterPageProps) {
       warning: { className: 'bg-yellow-500 hover:bg-yellow-600', label: 'Warning' },
       error: { className: 'bg-red-600 hover:bg-red-700', label: 'Error' },
     };
-    const variant = variants[status as keyof typeof variants] || { 
-      className: 'bg-gray-500', label: 'Unknown' 
+    const variant = variants[status as keyof typeof variants] || {
+      className: 'bg-gray-500', label: 'Unknown'
     };
     return <Badge className={variant.className}>{variant.label}</Badge>;
   };
@@ -209,10 +209,10 @@ export default function RouterPage({ params }: RouterPageProps) {
             </div>
           </div>
         </div>
-        
+
         <div className="flex flex-wrap justify-end gap-2">
-          <Button 
-            size="sm" 
+          <Button
+            size="sm"
             variant="outline"
             onClick={handleSyncRouter}
             disabled={refreshing || routerActions.isLoading}
@@ -337,16 +337,15 @@ export default function RouterPage({ params }: RouterPageProps) {
                         <span className="font-semibold">{routerData.health.cpuUsage}%</span>
                       </div>
                       <div className="h-2 w-full overflow-hidden rounded-full bg-secondary">
-                        <div 
-                          className={`h-full rounded-full transition-all ${
-                            routerData.health.cpuUsage > 80 ? 'bg-red-500' :
-                            routerData.health.cpuUsage > 60 ? 'bg-yellow-500' : 'bg-green-500'
-                          }`}
+                        <div
+                          className={`h-full rounded-full transition-all ${routerData.health.cpuUsage > 80 ? 'bg-red-500' :
+                              routerData.health.cpuUsage > 60 ? 'bg-yellow-500' : 'bg-green-500'
+                            }`}
                           style={{ width: `${routerData.health.cpuUsage}%` }}
                         />
                       </div>
                     </div>
-                    
+
                     <div className="space-y-2">
                       <div className="flex items-center justify-between text-sm">
                         <span className="flex items-center gap-2 text-muted-foreground">
@@ -356,16 +355,15 @@ export default function RouterPage({ params }: RouterPageProps) {
                         <span className="font-semibold">{routerData.health.memoryUsage}%</span>
                       </div>
                       <div className="h-2 w-full overflow-hidden rounded-full bg-secondary">
-                        <div 
-                          className={`h-full rounded-full transition-all ${
-                            routerData.health.memoryUsage > 80 ? 'bg-red-500' :
-                            routerData.health.memoryUsage > 60 ? 'bg-yellow-500' : 'bg-green-500'
-                          }`}
+                        <div
+                          className={`h-full rounded-full transition-all ${routerData.health.memoryUsage > 80 ? 'bg-red-500' :
+                              routerData.health.memoryUsage > 60 ? 'bg-yellow-500' : 'bg-green-500'
+                            }`}
                           style={{ width: `${routerData.health.memoryUsage}%` }}
                         />
                       </div>
                     </div>
-                    
+
                     {routerData.health.temperature > 0 && (
                       <div className="flex items-center justify-between rounded-lg border p-3">
                         <span className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -404,8 +402,8 @@ export default function RouterPage({ params }: RouterPageProps) {
                     Manage Vouchers
                   </Link>
                 </Button>
-                <Button 
-                  className="w-full justify-start" 
+                <Button
+                  className="w-full justify-start"
                   variant="outline"
                   onClick={() => {
                     fetchActiveUsers();
@@ -415,9 +413,9 @@ export default function RouterPage({ params }: RouterPageProps) {
                   <Users className="mr-2 h-4 w-4" />
                   View Active Users
                 </Button>
-                
-                <Button 
-                  className="w-full justify-start" 
+
+                <Button
+                  className="w-full justify-start"
                   variant="outline"
                   onClick={handleSyncPackages}
                   disabled={routerActions.isLoading}
@@ -429,7 +427,7 @@ export default function RouterPage({ params }: RouterPageProps) {
                   )}
                   Sync Packages
                 </Button>
-                
+
                 <Button className="w-full justify-start" variant="outline" asChild>
                   <Link href={`/routers/${routerId}/settings`}>
                     <Settings className="mr-2 h-4 w-4" />
@@ -523,9 +521,9 @@ export default function RouterPage({ params }: RouterPageProps) {
                       </div>
                     </div>
                     <div className="flex gap-2 pt-2">
-                      <Button 
-                        size="sm" 
-                        variant="outline" 
+                      <Button
+                        size="sm"
+                        variant="outline"
                         className="flex-1"
                         onClick={handleRestartHotspot}
                         disabled={routerActions.isLoading || routerData.status !== 'online'}
@@ -604,9 +602,9 @@ export default function RouterPage({ params }: RouterPageProps) {
                       </div>
                     </div>
                     <div className="flex gap-2 pt-2">
-                      <Button 
-                        size="sm" 
-                        variant="outline" 
+                      <Button
+                        size="sm"
+                        variant="outline"
                         className="flex-1"
                         onClick={handleRestartPPPoE}
                         disabled={routerActions.isLoading || routerData.status !== 'online'}
@@ -644,12 +642,12 @@ export default function RouterPage({ params }: RouterPageProps) {
           </div>
 
           {/* Configuration Status */}
-          {routerData.configurationStatus.configured && (
+          {routerData.configurationStatus?.configured && (
             <Card>
               <CardHeader>
                 <CardTitle>Configuration Status</CardTitle>
                 <CardDescription>
-                  Setup completed {routerData.configurationStatus.configuredAt 
+                  Setup completed {routerData.configurationStatus.configuredAt
                     ? new Date(routerData.configurationStatus.configuredAt).toLocaleString()
                     : ''}
                 </CardDescription>
@@ -697,8 +695,8 @@ export default function RouterPage({ params }: RouterPageProps) {
               </p>
             </div>
             <div className="flex gap-2">
-              <Button 
-                size="sm" 
+              <Button
+                size="sm"
                 variant="outline"
                 onClick={handleSyncPackages}
                 disabled={routerActions.isLoading || routerData.status !== 'online'}
@@ -808,8 +806,8 @@ export default function RouterPage({ params }: RouterPageProps) {
                 Real-time view of connected users
               </p>
             </div>
-            <Button 
-              size="sm" 
+            <Button
+              size="sm"
               variant="outline"
               onClick={fetchActiveUsers}
               disabled={routerActions.isLoading || routerData.status !== 'online'}
@@ -949,14 +947,14 @@ export default function RouterPage({ params }: RouterPageProps) {
 
                   {/* No Users */}
                   {(!activeUsers.hotspotUsers || activeUsers.hotspotUsers.length === 0) &&
-                   (!activeUsers.pppoeUsers || activeUsers.pppoeUsers.length === 0) && (
-                    <div className="text-center py-12">
-                      <Users className="mx-auto h-12 w-12 text-muted-foreground mb-3" />
-                      <p className="text-sm text-muted-foreground">
-                        No users currently connected
-                      </p>
-                    </div>
-                  )}
+                    (!activeUsers.pppoeUsers || activeUsers.pppoeUsers.length === 0) && (
+                      <div className="text-center py-12">
+                        <Users className="mx-auto h-12 w-12 text-muted-foreground mb-3" />
+                        <p className="text-sm text-muted-foreground">
+                          No users currently connected
+                        </p>
+                      </div>
+                    )}
                 </>
               ) : (
                 <div className="text-center py-12">
@@ -987,8 +985,8 @@ export default function RouterPage({ params }: RouterPageProps) {
                 Detailed network infrastructure and connectivity status
               </p>
             </div>
-            <Button 
-              size="sm" 
+            <Button
+              size="sm"
               variant="outline"
               onClick={handleSyncRouter}
               disabled={refreshing || routerActions.isLoading}
@@ -1116,7 +1114,7 @@ export default function RouterPage({ params }: RouterPageProps) {
                       </span>
                     </div>
                   </div>
-                  
+
                   {/* Visual Progress Bar */}
                   <div className="space-y-2 pt-2">
                     <div className="flex items-center justify-between text-xs">
@@ -1126,11 +1124,10 @@ export default function RouterPage({ params }: RouterPageProps) {
                       </span>
                     </div>
                     <div className="h-3 w-full overflow-hidden rounded-full bg-secondary">
-                      <div 
-                        className={`h-full rounded-full transition-all ${
-                          (routerData.configuration.hotspot.ipPoolUsage?.percentage || 0) > 90 ? 'bg-red-500' :
-                          (routerData.configuration.hotspot.ipPoolUsage?.percentage || 0) > 75 ? 'bg-yellow-500' : 'bg-green-500'
-                        }`}
+                      <div
+                        className={`h-full rounded-full transition-all ${(routerData.configuration.hotspot.ipPoolUsage?.percentage || 0) > 90 ? 'bg-red-500' :
+                            (routerData.configuration.hotspot.ipPoolUsage?.percentage || 0) > 75 ? 'bg-yellow-500' : 'bg-green-500'
+                          }`}
                         style={{ width: `${routerData.configuration.hotspot.ipPoolUsage?.percentage || 0}%` }}
                       />
                     </div>

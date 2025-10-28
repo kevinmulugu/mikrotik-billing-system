@@ -21,10 +21,10 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { 
-  ArrowLeft, 
-  Ticket, 
-  Plus, 
+import {
+  ArrowLeft,
+  Ticket,
+  Plus,
   Download,
   RefreshCw,
   Loader2
@@ -48,7 +48,7 @@ export default function VouchersPage({ params }: VouchersPageProps) {
   const handleBulkSync = async () => {
     try {
       setSyncing(true)
-      
+
       const response = await fetch(`/api/routers/${id}/vouchers/bulk-sync`, {
         method: 'POST',
         headers: {
@@ -63,7 +63,7 @@ export default function VouchersPage({ params }: VouchersPageProps) {
 
       const data = await response.json()
       setSyncResults(data.results)
-      
+
       if (data.results.failed === 0) {
         toast.success(`Successfully synced ${data.results.synced} vouchers to router`)
       } else if (data.results.synced > 0) {
@@ -97,15 +97,15 @@ export default function VouchersPage({ params }: VouchersPageProps) {
           </a>
         </Button>
         <div className="flex-1">
-          <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+          <h1 className="text-2xl font-bold flex items-center gap-2">
             <Ticket className="h-6 w-6 text-blue-600" />
             Voucher Management
           </h1>
-          <p className="text-gray-600 mt-1">
+          <p className="text-muted-foreground mt-1">
             Generate, manage, and track your hotspot vouchers
           </p>
         </div>
-        
+
         <div className="flex gap-2">
           <Button variant="outline" size="sm" asChild>
             <a href={`/api/routers/${id}/vouchers/export`}>
@@ -138,16 +138,16 @@ export default function VouchersPage({ params }: VouchersPageProps) {
                 Generate New Vouchers
               </a>
             </Button>
-            
+
             <Button className="w-full justify-start" variant="outline" asChild>
               <a href={`/routers/${id}/vouchers/history`}>
                 <Ticket className="h-4 w-4 mr-2" />
                 View Sales History
               </a>
             </Button>
-            
-            <Button 
-              className="w-full justify-start" 
+
+            <Button
+              className="w-full justify-start"
               variant="outline"
               onClick={() => setShowSyncDialog(true)}
               disabled={syncing}
