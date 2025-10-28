@@ -1,26 +1,30 @@
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
+
 export default function SignInLoading() {
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50">
-      <div className="max-w-md w-full space-y-8">
-        <div className="text-center">
-          <div className="animate-pulse">
-            <div className="h-8 bg-gray-200 rounded w-3/4 mx-auto mb-4"></div>
-            <div className="h-4 bg-gray-200 rounded w-1/2 mx-auto"></div>
-          </div>
-        </div>
+    <div className="min-h-screen flex items-center justify-center bg-background p-4">
+      <Card className="max-w-md w-full">
+        <CardHeader className="text-center space-y-2">
+          <Skeleton className="h-8 w-3/4 mx-auto" />
+          <Skeleton className="h-4 w-1/2 mx-auto" />
+        </CardHeader>
 
-        <div className="mt-8 space-y-6">
-          <div className="space-y-3">
-            <div className="h-12 bg-gray-200 rounded animate-pulse"></div>
-            <div className="h-12 bg-gray-200 rounded animate-pulse"></div>
-            <div className="h-12 bg-gray-200 rounded animate-pulse"></div>
+        <CardContent className="space-y-6">
+          <Skeleton className="h-10 w-full" />
+
+          <div className="relative">
+            <Skeleton className="h-px w-full" />
           </div>
-          
-          <div className="h-px bg-gray-200"></div>
-          
-          <div className="h-12 bg-gray-200 rounded animate-pulse"></div>
-        </div>
-      </div>
+
+          <div className="space-y-4">
+            <Skeleton className="h-9 w-full" />
+            <Skeleton className="h-10 w-full" />
+          </div>
+
+          <Skeleton className="h-4 w-2/3 mx-auto" />
+        </CardContent>
+      </Card>
     </div>
   );
 }

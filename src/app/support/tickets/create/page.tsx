@@ -28,8 +28,8 @@ export default async function CreateTicketPage() {
           </a>
         </Button>
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Create Support Ticket</h1>
-          <p className="text-gray-600 mt-1">
+          <h1 className="text-2xl font-bold text-foreground">Create Support Ticket</h1>
+          <p className="text-muted-foreground mt-1">
             Describe your issue and we'll help you resolve it
           </p>
         </div>

@@ -28,8 +28,8 @@ export default async function KnowledgeBasePage() {
           </a>
         </Button>
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Knowledge Base</h1>
-          <p className="text-gray-600 mt-1">
+          <h1 className="text-2xl font-bold text-foreground">Knowledge Base</h1>
+          <p className="text-muted-foreground mt-1">
             Find answers to common questions and step-by-step guides
           </p>
         </div>

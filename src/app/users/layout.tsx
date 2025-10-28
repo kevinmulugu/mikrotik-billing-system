@@ -5,7 +5,7 @@ import { DashboardLayout } from '@/components/layout/dashboard-layout';
 import { Metadata } from 'next';
 
 export const metadata: Metadata = {
-  title: 'Users - MikroTik Customer Portal',
+  title: 'Users - PAY N BROWSE',
   description: 'Manage your router users and connections',
 };
 
@@ -23,8 +23,8 @@ export default async function UsersLayout({
   return (
     <DashboardLayout>
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900">Users</h1>
-        <p className="text-gray-600 mt-2">
+        <h1 className="text-3xl font-bold text-foreground">Users</h1>
+        <p className="text-muted-foreground mt-2">
           Manage your router users and connections
         </p>
       </div>

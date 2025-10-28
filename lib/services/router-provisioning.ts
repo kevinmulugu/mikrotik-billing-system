@@ -1,4 +1,4 @@
-// lib/services/router-provisioning.ts - Router Provisioning Service with Deployed Config Tracking
+// lib/services/router-provisioning.ts - Router Provisioning Service with MikroTik .id Tracking
 
 import { ObjectId } from 'mongodb';
 import MikroTikService, {
@@ -14,11 +14,18 @@ import MikroTikService, {
 
 interface DeployedConfig {
   name: string;
+  mikrotikId?: string; // MikroTik's internal .id (*1, *2, etc.)
   type: string;
   parameters?: Record<string, any>;
   createdAt: Date;
   lastChecked: Date;
-  status: 'active' | 'inactive' | 'error';
+  lastModified?: Date;
+  status: 'active' | 'inactive' | 'error' | 'drift';
+  syncStatus?: {
+    inSync: boolean;
+    lastSyncedAt: Date;
+    driftDetails?: string;
+  };
 }
 
 interface DeployedConfigs {
@@ -103,7 +110,7 @@ interface ProvisioningResult {
 }
 
 // ============================================
-// DEPLOYED CONFIG TRACKER
+// DEPLOYED CONFIG TRACKER WITH .ID SUPPORT
 // ============================================
 
 class DeployedConfigTracker {
@@ -138,16 +145,18 @@ class DeployedConfigTracker {
   }
 
   /**
-   * Track IP Pool deployment
+   * Track IP Pool deployment with MikroTik .id
    */
   static async trackIPPool(
     db: any,
     routerId: string,
     name: string,
-    ranges: string
+    ranges: string,
+    mikrotikId?: string
   ): Promise<void> {
     const config: DeployedConfig = {
       name,
+      mikrotikId,
       type: 'ip-pool',
       parameters: { ranges },
       createdAt: new Date(),
@@ -155,6 +164,7 @@ class DeployedConfigTracker {
       status: 'active',
     };
 
+    // Remove existing entry by name to prevent duplicates
     await db.collection('routers').updateOne(
       { _id: new ObjectId(routerId) },
       {
@@ -162,6 +172,7 @@ class DeployedConfigTracker {
       }
     );
 
+    // Add new entry
     await db.collection('routers').updateOne(
       { _id: new ObjectId(routerId) },
       {
@@ -172,17 +183,19 @@ class DeployedConfigTracker {
   }
 
   /**
-   * Track DHCP Server deployment
+   * Track DHCP Server deployment with MikroTik .id
    */
   static async trackDHCPServer(
     db: any,
     routerId: string,
     name: string,
     interfaceName: string,
-    addressPool: string
+    addressPool: string,
+    mikrotikId?: string
   ): Promise<void> {
     const config: DeployedConfig = {
       name,
+      mikrotikId,
       type: 'dhcp-server',
       parameters: { interface: interfaceName, addressPool },
       createdAt: new Date(),
@@ -205,17 +218,19 @@ class DeployedConfigTracker {
   }
 
   /**
-   * Track DHCP Network deployment
+   * Track DHCP Network deployment with MikroTik .id
    */
   static async trackDHCPNetwork(
     db: any,
     routerId: string,
     address: string,
     gateway: string,
-    dnsServer: string
+    dnsServer: string,
+    mikrotikId?: string
   ): Promise<void> {
     const config: DeployedConfig = {
       name: address,
+      mikrotikId,
       type: 'dhcp-network',
       parameters: { address, gateway, dnsServer },
       createdAt: new Date(),
@@ -238,16 +253,18 @@ class DeployedConfigTracker {
   }
 
   /**
-   * Track Bridge deployment
+   * Track Bridge deployment with MikroTik .id
    */
   static async trackBridge(
     db: any,
     routerId: string,
     bridgeName: string,
-    bridgeAddress: string
+    bridgeAddress: string,
+    mikrotikId?: string
   ): Promise<void> {
     const config: DeployedConfig = {
       name: bridgeName,
+      mikrotikId,
       type: 'bridge',
       parameters: { address: bridgeAddress },
       createdAt: new Date(),
@@ -270,16 +287,18 @@ class DeployedConfigTracker {
   }
 
   /**
-   * Track Bridge Port deployment
+   * Track Bridge Port deployment with MikroTik .id
    */
   static async trackBridgePort(
     db: any,
     routerId: string,
     bridgeName: string,
-    interfaceName: string
+    interfaceName: string,
+    mikrotikId?: string
   ): Promise<void> {
     const config: DeployedConfig = {
       name: `${bridgeName}-${interfaceName}`,
+      mikrotikId,
       type: 'bridge-port',
       parameters: { bridge: bridgeName, interface: interfaceName },
       createdAt: new Date(),
@@ -308,17 +327,19 @@ class DeployedConfigTracker {
   }
 
   /**
-   * Track Hotspot Profile deployment
+   * Track Hotspot Profile deployment with MikroTik .id
    */
   static async trackHotspotProfile(
     db: any,
     routerId: string,
     name: string,
     hotspotAddress: string,
-    dnsName: string
+    dnsName: string,
+    mikrotikId?: string
   ): Promise<void> {
     const config: DeployedConfig = {
       name,
+      mikrotikId,
       type: 'hotspot-profile',
       parameters: { hotspotAddress, dnsName, loginBy: 'http-chap,trial,cookie' },
       createdAt: new Date(),
@@ -341,7 +362,7 @@ class DeployedConfigTracker {
   }
 
   /**
-   * Track Hotspot Server deployment
+   * Track Hotspot Server deployment with MikroTik .id
    */
   static async trackHotspotServer(
     db: any,
@@ -349,10 +370,12 @@ class DeployedConfigTracker {
     name: string,
     interfaceName: string,
     addressPool: string,
-    profile: string
+    profile: string,
+    mikrotikId?: string
   ): Promise<void> {
     const config: DeployedConfig = {
       name,
+      mikrotikId,
       type: 'hotspot-server',
       parameters: { interface: interfaceName, addressPool, profile },
       createdAt: new Date(),
@@ -375,17 +398,19 @@ class DeployedConfigTracker {
   }
 
   /**
-   * Track Hotspot User Profile deployment
+   * Track Hotspot User Profile deployment with MikroTik .id
    */
   static async trackHotspotUserProfile(
     db: any,
     routerId: string,
     name: string,
     sessionTimeout: string,
-    rateLimit: string
+    rateLimit: string,
+    mikrotikId?: string
   ): Promise<void> {
     const config: DeployedConfig = {
       name,
+      mikrotikId,
       type: 'hotspot-user-profile',
       parameters: { sessionTimeout, rateLimit },
       createdAt: new Date(),
@@ -408,7 +433,7 @@ class DeployedConfigTracker {
   }
 
   /**
-   * Track NAT Rule deployment
+   * Track NAT Rule deployment with MikroTik .id
    */
   static async trackNATRule(
     db: any,
@@ -416,10 +441,12 @@ class DeployedConfigTracker {
     chain: string,
     srcAddress: string,
     outInterface: string,
-    action: string
+    action: string,
+    mikrotikId?: string
   ): Promise<void> {
     const config: DeployedConfig = {
       name: `${chain}-${srcAddress}-${outInterface}`,
+      mikrotikId,
       type: 'nat-rule',
       parameters: { chain, srcAddress, outInterface, action },
       createdAt: new Date(),
@@ -448,15 +475,17 @@ class DeployedConfigTracker {
   }
 
   /**
-   * Track WAN Interface deployment
+   * Track WAN Interface deployment with MikroTik .id
    */
   static async trackWANInterface(
     db: any,
     routerId: string,
-    interfaceName: string
+    interfaceName: string,
+    mikrotikId?: string
   ): Promise<void> {
     const config: DeployedConfig = {
       name: interfaceName,
+      mikrotikId,
       type: 'wan-interface',
       parameters: { interface: interfaceName, dhcpClient: true },
       createdAt: new Date(),
@@ -479,16 +508,18 @@ class DeployedConfigTracker {
   }
 
   /**
-   * Track WiFi Configuration deployment
+   * Track WiFi Configuration deployment with MikroTik .id
    */
   static async trackWiFiConfig(
     db: any,
     routerId: string,
     interfaceName: string,
-    ssid: string
+    ssid: string,
+    mikrotikId?: string
   ): Promise<void> {
     const config: DeployedConfig = {
       name: interfaceName,
+      mikrotikId,
       type: 'wifi-config',
       parameters: { interface: interfaceName, ssid, mode: 'ap-bridge' },
       createdAt: new Date(),
@@ -511,17 +542,19 @@ class DeployedConfigTracker {
   }
 
   /**
-   * Track PPPoE Server deployment
+   * Track PPPoE Server deployment with MikroTik .id
    */
   static async trackPPPoEServer(
     db: any,
     routerId: string,
     serviceName: string,
     interfaceName: string,
-    defaultProfile: string
+    defaultProfile: string,
+    mikrotikId?: string
   ): Promise<void> {
     const config: DeployedConfig = {
       name: serviceName,
+      mikrotikId,
       type: 'pppoe-server',
       parameters: { serviceName, interface: interfaceName, defaultProfile },
       createdAt: new Date(),
@@ -544,7 +577,7 @@ class DeployedConfigTracker {
   }
 
   /**
-   * Track PPP Profile deployment
+   * Track PPP Profile deployment with MikroTik .id
    */
   static async trackPPPProfile(
     db: any,
@@ -552,10 +585,12 @@ class DeployedConfigTracker {
     name: string,
     localAddress: string,
     remoteAddress: string,
-    rateLimit: string
+    rateLimit: string,
+    mikrotikId?: string
   ): Promise<void> {
     const config: DeployedConfig = {
       name,
+      mikrotikId,
       type: 'ppp-profile',
       parameters: { localAddress, remoteAddress, rateLimit },
       createdAt: new Date(),
@@ -591,6 +626,24 @@ class DeployedConfigTracker {
       }
     );
   }
+
+  /**
+   * Helper: Extract MikroTik .id from response
+   */
+  static extractMikrotikId(response: any): string | undefined {
+    if (!response) return undefined;
+    
+    // Response can be object with .id or array with objects containing .id
+    if (typeof response === 'object' && response['.id']) {
+      return response['.id'];
+    }
+    
+    if (Array.isArray(response) && response.length > 0 && response[0]['.id']) {
+      return response[0]['.id'];
+    }
+    
+    return undefined;
+  }
 }
 
 // ============================================
@@ -599,7 +652,7 @@ class DeployedConfigTracker {
 
 export class RouterProvisioningService {
   /**
-   * Complete router provisioning with database updates and config tracking
+   * Complete router provisioning with database updates and .id tracking
    */
   static async provisionRouter(
     routerId: string,
@@ -633,7 +686,7 @@ export class RouterProvisioningService {
         port: router.connection.port || 80,
         username: router.connection.apiUser,
         password: MikroTikService.decryptPassword(router.connection.apiPassword),
-      };      
+      };
 
       // Step 3: Test connection
       const connectionTest = await MikroTikService.testConnection(config);
@@ -650,13 +703,13 @@ export class RouterProvisioningService {
       // Skip cleanup on first provision to avoid losing connection
       if (router.configurationStatus?.configured === true) {
         console.log(`[${routerId}] Re-provisioning detected - performing selective cleanup...`);
-        
+
         // Only cleanup LAN and WiFi interfaces, preserve WAN (management interface)
         const interfacesToClean = router.configuration.lanInterfaces || [];
-        
+
         if (interfacesToClean.length > 0) {
           const cleanup = await MikroTikCleanup.performFullCleanup(config, interfacesToClean);
-          
+
           if (!cleanup.success) {
             warnings.push(`Cleanup warning: ${cleanup.error}`);
           } else {
@@ -669,6 +722,7 @@ export class RouterProvisioningService {
         console.log(`[${routerId}] First provision detected - skipping cleanup to preserve connection`);
         warnings.push('Cleanup skipped: First provision - router may have default configurations');
       }
+
       // Step 5: Configure WAN Interface
       console.log(`[${routerId}] Configuring WAN interface...`);
       const wanResult = await MikroTikNetworkConfig.configureWANInterface(
@@ -679,7 +733,15 @@ export class RouterProvisioningService {
       if (wanResult.success) {
         completedSteps.push('WAN Interface Configuration');
         await this.addCompletedStep(db, routerId, 'WAN Interface Configuration');
-        await DeployedConfigTracker.trackWANInterface(db, routerId, router.configuration.wanInterface);
+        
+        // Extract .id from WAN DHCP client response
+        const wanMikrotikId = DeployedConfigTracker.extractMikrotikId(wanResult.data);
+        await DeployedConfigTracker.trackWANInterface(
+          db,
+          routerId,
+          router.configuration.wanInterface,
+          wanMikrotikId
+        );
       } else {
         const error = {
           step: 'WAN Interface Configuration',
@@ -702,7 +764,16 @@ export class RouterProvisioningService {
         if (wifiResult.success) {
           completedSteps.push('WiFi Configuration');
           await this.addCompletedStep(db, routerId, 'WiFi Configuration');
-          await DeployedConfigTracker.trackWiFiConfig(db, routerId, 'wlan1', router.configuration.wifiSSID);
+          
+          // Extract .id from WiFi interface response
+          const wifiMikrotikId = DeployedConfigTracker.extractMikrotikId(wifiResult.data);
+          await DeployedConfigTracker.trackWiFiConfig(
+            db,
+            routerId,
+            'wlan1',
+            router.configuration.wifiSSID,
+            wifiMikrotikId
+          );
         } else {
           const error = {
             step: 'WiFi Configuration',
@@ -787,7 +858,7 @@ export class RouterProvisioningService {
   }
 
   /**
-   * Configure Hotspot service with deployed config tracking
+   * Configure Hotspot service with .id tracking
    */
   private static async configureHotspot(
     db: any,
@@ -809,7 +880,16 @@ export class RouterProvisioningService {
     if (poolResult.success) {
       completedSteps.push('Hotspot IP Pool');
       await this.addCompletedStep(db, routerId, 'Hotspot IP Pool');
-      await DeployedConfigTracker.trackIPPool(db, routerId, 'hotspot-pool', '192.168.10.10-192.168.10.254');
+      
+      // Extract .id from pool creation response
+      const poolMikrotikId = DeployedConfigTracker.extractMikrotikId(poolResult.data);
+      await DeployedConfigTracker.trackIPPool(
+        db,
+        routerId,
+        'hotspot-pool',
+        '192.168.10.10-192.168.10.254',
+        poolMikrotikId
+      );
     } else {
       const error = {
         step: 'Hotspot IP Pool',
@@ -837,11 +917,36 @@ export class RouterProvisioningService {
     if (bridgeResult.success) {
       completedSteps.push('Hotspot Bridge');
       await this.addCompletedStep(db, routerId, 'Hotspot Bridge');
-      await DeployedConfigTracker.trackBridge(db, routerId, bridgeName, bridgeAddress);
       
+      // Extract .id from bridge creation response
+      const bridgeMikrotikId = DeployedConfigTracker.extractMikrotikId(bridgeResult.data);
+      await DeployedConfigTracker.trackBridge(
+        db,
+        routerId,
+        bridgeName,
+        bridgeAddress,
+        bridgeMikrotikId
+      );
+
       // Track each bridge port
-      for (const iface of bridgeInterfaces) {
-        await DeployedConfigTracker.trackBridgePort(db, routerId, bridgeName, iface);
+      // Note: Bridge ports are returned as array in bridgeResult.data
+      if (Array.isArray(bridgeResult.data) && bridgeResult.data.length > 1) {
+        // First element is bridge, rest are bridge ports
+        for (let i = 1; i < bridgeResult.data.length && i - 1 < bridgeInterfaces.length; i++) {
+          const portMikrotikId = bridgeResult.data[i]['.id'];
+          await DeployedConfigTracker.trackBridgePort(
+            db,
+            routerId,
+            bridgeName,
+            bridgeInterfaces[i - 1],
+            portMikrotikId
+          );
+        }
+      } else {
+        // Fallback: Track without .id
+        for (const iface of bridgeInterfaces) {
+          await DeployedConfigTracker.trackBridgePort(db, routerId, bridgeName, iface);
+        }
       }
     } else {
       const error = {
@@ -873,8 +978,46 @@ export class RouterProvisioningService {
     if (dhcpResult.success) {
       completedSteps.push('Hotspot DHCP Server');
       await this.addCompletedStep(db, routerId, 'Hotspot DHCP Server');
-      await DeployedConfigTracker.trackDHCPServer(db, routerId, 'hotspot-dhcp', bridgeName, 'hotspot-pool');
-      await DeployedConfigTracker.trackDHCPNetwork(db, routerId, '192.168.10.0/24', '192.168.10.1', '8.8.8.8,8.8.4.4');
+      
+      // Extract .id from DHCP server and network
+      // Response typically contains [server, network]
+      if (Array.isArray(dhcpResult.data) && dhcpResult.data.length >= 2) {
+        const serverMikrotikId = dhcpResult.data[0]['.id'];
+        const networkMikrotikId = dhcpResult.data[1]['.id'];
+        
+        await DeployedConfigTracker.trackDHCPServer(
+          db,
+          routerId,
+          'hotspot-dhcp',
+          bridgeName,
+          'hotspot-pool',
+          serverMikrotikId
+        );
+        await DeployedConfigTracker.trackDHCPNetwork(
+          db,
+          routerId,
+          '192.168.10.0/24',
+          '192.168.10.1',
+          '8.8.8.8,8.8.4.4',
+          networkMikrotikId
+        );
+      } else {
+        // Fallback: Track without .id
+        await DeployedConfigTracker.trackDHCPServer(
+          db,
+          routerId,
+          'hotspot-dhcp',
+          bridgeName,
+          'hotspot-pool'
+        );
+        await DeployedConfigTracker.trackDHCPNetwork(
+          db,
+          routerId,
+          '192.168.10.0/24',
+          '192.168.10.1',
+          '8.8.8.8,8.8.4.4'
+        );
+      }
     } else {
       const error = {
         step: 'Hotspot DHCP Server',
@@ -893,8 +1036,8 @@ export class RouterProvisioningService {
     if (profilesResult.success) {
       completedSteps.push('Hotspot User Profiles');
       await this.addCompletedStep(db, routerId, 'Hotspot User Profiles');
-      
-      // Track each user profile
+
+      // Track each user profile with .id
       const profiles = [
         { name: '1hour-10ksh', sessionTimeout: '1h', rateLimit: '2M/5M' },
         { name: '3hours-25ksh', sessionTimeout: '3h', rateLimit: '3M/6M' },
@@ -906,14 +1049,30 @@ export class RouterProvisioningService {
         { name: '1month-1200ksh', sessionTimeout: '30d', rateLimit: '15M/25M' },
       ];
 
-      for (const profile of profiles) {
-        await DeployedConfigTracker.trackHotspotUserProfile(
-          db,
-          routerId,
-          profile.name,
-          profile.sessionTimeout,
-          profile.rateLimit
-        );
+      // If response is array of created profiles with .id
+      if (Array.isArray(profilesResult.data) && profilesResult.data.length === profiles.length) {
+        for (let i = 0; i < profiles.length; i++) {
+          const profileMikrotikId = profilesResult.data[i]['.id'];
+          await DeployedConfigTracker.trackHotspotUserProfile(
+            db,
+            routerId,
+            profiles[i].name,
+            profiles[i].sessionTimeout,
+            profiles[i].rateLimit,
+            profileMikrotikId
+          );
+        }
+      } else {
+        // Fallback: Track without .id
+        for (const profile of profiles) {
+          await DeployedConfigTracker.trackHotspotUserProfile(
+            db,
+            routerId,
+            profile.name,
+            profile.sessionTimeout,
+            profile.rateLimit
+          );
+        }
       }
     } else {
       const error = {
@@ -946,8 +1105,48 @@ export class RouterProvisioningService {
     if (hotspotResult.success) {
       completedSteps.push('Hotspot Server');
       await this.addCompletedStep(db, routerId, 'Hotspot Server');
-      await DeployedConfigTracker.trackHotspotProfile(db, routerId, 'hotspot-profile', '192.168.10.1', 'hotspot.local');
-      await DeployedConfigTracker.trackHotspotServer(db, routerId, 'hotspot1', bridgeName, 'hotspot-pool', 'hotspot-profile');
+      
+      // Extract .id from hotspot profile and server
+      // Response typically contains [profile, server]
+      if (Array.isArray(hotspotResult.data) && hotspotResult.data.length >= 2) {
+        const profileMikrotikId = hotspotResult.data[0]['.id'];
+        const serverMikrotikId = hotspotResult.data[1]['.id'];
+        
+        await DeployedConfigTracker.trackHotspotProfile(
+          db,
+          routerId,
+          'hotspot-profile',
+          '192.168.10.1',
+          'hotspot.local',
+          profileMikrotikId
+        );
+        await DeployedConfigTracker.trackHotspotServer(
+          db,
+          routerId,
+          'hotspot1',
+          bridgeName,
+          'hotspot-pool',
+          'hotspot-profile',
+          serverMikrotikId
+        );
+      } else {
+        // Fallback: Track without .id
+        await DeployedConfigTracker.trackHotspotProfile(
+          db,
+          routerId,
+          'hotspot-profile',
+          '192.168.10.1',
+          'hotspot.local'
+        );
+        await DeployedConfigTracker.trackHotspotServer(
+          db,
+          routerId,
+          'hotspot1',
+          bridgeName,
+          'hotspot-pool',
+          'hotspot-profile'
+        );
+      }
     } else {
       const error = {
         step: 'Hotspot Server',
@@ -973,13 +1172,17 @@ export class RouterProvisioningService {
     if (natResult.success) {
       completedSteps.push('Hotspot NAT Rules');
       await this.addCompletedStep(db, routerId, 'Hotspot NAT Rules');
+      
+      // Extract .id from NAT rule response
+      const natMikrotikId = DeployedConfigTracker.extractMikrotikId(natResult.data);
       await DeployedConfigTracker.trackNATRule(
         db,
         routerId,
         'srcnat',
         '192.168.10.0/24',
         router.configuration.wanInterface,
-        'masquerade'
+        'masquerade',
+        natMikrotikId
       );
     } else {
       const error = {
@@ -993,7 +1196,7 @@ export class RouterProvisioningService {
   }
 
   /**
-   * Configure PPPoE service with deployed config tracking
+   * Configure PPPoE service with .id tracking
    */
   private static async configurePPPoE(
     db: any,
@@ -1015,7 +1218,16 @@ export class RouterProvisioningService {
     if (poolResult.success) {
       completedSteps.push('PPPoE IP Pool');
       await this.addCompletedStep(db, routerId, 'PPPoE IP Pool');
-      await DeployedConfigTracker.trackIPPool(db, routerId, 'pppoe-pool', '192.168.100.10-192.168.100.254');
+      
+      // Extract .id from pool creation response
+      const poolMikrotikId = DeployedConfigTracker.extractMikrotikId(poolResult.data);
+      await DeployedConfigTracker.trackIPPool(
+        db,
+        routerId,
+        'pppoe-pool',
+        '192.168.100.10-192.168.100.254',
+        poolMikrotikId
+      );
     } else {
       const error = {
         step: 'PPPoE IP Pool',
@@ -1038,24 +1250,61 @@ export class RouterProvisioningService {
     if (profilesResult.success) {
       completedSteps.push('PPPoE User Profiles');
       await this.addCompletedStep(db, routerId, 'PPPoE User Profiles');
-      
-      // Track each PPP profile
+
+      // Track each PPP profile with .id
       const profiles = [
-        { name: 'home-basic-5mbps', localAddress: '192.168.100.1', remoteAddress: 'pppoe-pool', rateLimit: '5M/5M' },
-        { name: 'home-standard-10mbps', localAddress: '192.168.100.1', remoteAddress: 'pppoe-pool', rateLimit: '10M/10M' },
-        { name: 'home-premium-20mbps', localAddress: '192.168.100.1', remoteAddress: 'pppoe-pool', rateLimit: '20M/20M' },
-        { name: 'business-50mbps', localAddress: '192.168.100.1', remoteAddress: 'pppoe-pool', rateLimit: '50M/50M' },
+        {
+          name: 'home-basic-5mbps',
+          localAddress: '192.168.100.1',
+          remoteAddress: 'pppoe-pool',
+          rateLimit: '5M/5M',
+        },
+        {
+          name: 'home-standard-10mbps',
+          localAddress: '192.168.100.1',
+          remoteAddress: 'pppoe-pool',
+          rateLimit: '10M/10M',
+        },
+        {
+          name: 'home-premium-20mbps',
+          localAddress: '192.168.100.1',
+          remoteAddress: 'pppoe-pool',
+          rateLimit: '20M/20M',
+        },
+        {
+          name: 'business-50mbps',
+          localAddress: '192.168.100.1',
+          remoteAddress: 'pppoe-pool',
+          rateLimit: '50M/50M',
+        },
       ];
 
-      for (const profile of profiles) {
-        await DeployedConfigTracker.trackPPPProfile(
-          db,
-          routerId,
-          profile.name,
-          profile.localAddress,
-          profile.remoteAddress,
-          profile.rateLimit
-        );
+      // If response is array of created profiles with .id
+      if (Array.isArray(profilesResult.data) && profilesResult.data.length === profiles.length) {
+        for (let i = 0; i < profiles.length; i++) {
+          const profileMikrotikId = profilesResult.data[i]['.id'];
+          await DeployedConfigTracker.trackPPPProfile(
+            db,
+            routerId,
+            profiles[i].name,
+            profiles[i].localAddress,
+            profiles[i].remoteAddress,
+            profiles[i].rateLimit,
+            profileMikrotikId
+          );
+        }
+      } else {
+        // Fallback: Track without .id
+        for (const profile of profiles) {
+          await DeployedConfigTracker.trackPPPProfile(
+            db,
+            routerId,
+            profile.name,
+            profile.localAddress,
+            profile.remoteAddress,
+            profile.rateLimit
+          );
+        }
       }
     } else {
       const error = {
@@ -1080,12 +1329,16 @@ export class RouterProvisioningService {
     if (serverResult.success) {
       completedSteps.push('PPPoE Server');
       await this.addCompletedStep(db, routerId, 'PPPoE Server');
+      
+      // Extract .id from PPPoE server response
+      const serverMikrotikId = DeployedConfigTracker.extractMikrotikId(serverResult.data);
       await DeployedConfigTracker.trackPPPoEServer(
         db,
         routerId,
         'pppoe-service',
         router.configuration.bridgeName || 'bridge',
-        'home-standard-10mbps'
+        'home-standard-10mbps',
+        serverMikrotikId
       );
     } else {
       const error = {
@@ -1208,6 +1461,7 @@ export class RouterProvisioningService {
 
   /**
    * Sync router configuration - compare deployed configs with actual router state
+   * This method is called by the sync route to validate .id mappings
    */
   static async syncRouterConfiguration(
     routerId: string,
@@ -1241,24 +1495,41 @@ export class RouterProvisioningService {
     // Check IP Pools
     if (router.configuration.deployedConfigs?.ipPools) {
       const actualPools = await MikroTikService.makeRequest(config, '/rest/ip/pool', 'GET');
-      
+
       for (const deployedPool of router.configuration.deployedConfigs.ipPools) {
-        const actualPool = Array.isArray(actualPools)
-          ? actualPools.find((p: any) => p.name === deployedPool.name)
-          : null;
+        // Try to find by .id first (most reliable)
+        let actualPool = null;
+        
+        if (deployedPool.mikrotikId && Array.isArray(actualPools)) {
+          actualPool = actualPools.find((p: any) => p['.id'] === deployedPool.mikrotikId);
+        }
+        
+        // Fallback to name matching
+        if (!actualPool && Array.isArray(actualPools)) {
+          actualPool = actualPools.find((p: any) => p.name === deployedPool.name);
+        }
 
         if (!actualPool) {
           drifts.push({
             configType: 'ip-pool',
             configName: deployedPool.name,
-            issue: 'Configuration missing on router',
+            issue: deployedPool.mikrotikId
+              ? 'Configuration missing on router (was deleted)'
+              : 'Configuration missing on router',
+          });
+        } else if (actualPool['.id'] !== deployedPool.mikrotikId) {
+          // Resource exists but .id changed (deleted and recreated)
+          drifts.push({
+            configType: 'ip-pool',
+            configName: deployedPool.name,
+            issue: 'Resource was deleted and recreated (different .id)',
           });
         } else {
           // Update lastChecked timestamp
           await db.collection('routers').updateOne(
-            { 
+            {
               _id: new ObjectId(routerId),
-              'configuration.deployedConfigs.ipPools.name': deployedPool.name
+              'configuration.deployedConfigs.ipPools.name': deployedPool.name,
             },
             {
               $set: {
@@ -1272,25 +1543,45 @@ export class RouterProvisioningService {
 
     // Check Hotspot Servers
     if (router.configuration.deployedConfigs?.hotspotServers) {
-      const actualHotspots = await MikroTikService.makeRequest(config, '/rest/ip/hotspot', 'GET');
-      
+      const actualHotspots = await MikroTikService.makeRequest(
+        config,
+        '/rest/ip/hotspot',
+        'GET'
+      );
+
       for (const deployedHotspot of router.configuration.deployedConfigs.hotspotServers) {
-        const actualHotspot = Array.isArray(actualHotspots)
-          ? actualHotspots.find((h: any) => h.name === deployedHotspot.name)
-          : null;
+        // Try to find by .id first
+        let actualHotspot = null;
+        
+        if (deployedHotspot.mikrotikId && Array.isArray(actualHotspots)) {
+          actualHotspot = actualHotspots.find((h: any) => h['.id'] === deployedHotspot.mikrotikId);
+        }
+        
+        // Fallback to name matching
+        if (!actualHotspot && Array.isArray(actualHotspots)) {
+          actualHotspot = actualHotspots.find((h: any) => h.name === deployedHotspot.name);
+        }
 
         if (!actualHotspot) {
           drifts.push({
             configType: 'hotspot-server',
             configName: deployedHotspot.name,
-            issue: 'Configuration missing on router',
+            issue: deployedHotspot.mikrotikId
+              ? 'Configuration missing on router (was deleted)'
+              : 'Configuration missing on router',
+          });
+        } else if (actualHotspot['.id'] !== deployedHotspot.mikrotikId) {
+          drifts.push({
+            configType: 'hotspot-server',
+            configName: deployedHotspot.name,
+            issue: 'Resource was deleted and recreated (different .id)',
           });
         } else {
           // Update lastChecked timestamp
           await db.collection('routers').updateOne(
-            { 
+            {
               _id: new ObjectId(routerId),
-              'configuration.deployedConfigs.hotspotServers.name': deployedHotspot.name
+              'configuration.deployedConfigs.hotspotServers.name': deployedHotspot.name,
             },
             {
               $set: {
@@ -1352,11 +1643,11 @@ export class RouterProvisioningService {
 
         for (const config of configs) {
           const lastChecked = new Date(config.lastChecked);
-          
+
           if (!oldestCheck || lastChecked < oldestCheck) {
             oldestCheck = lastChecked;
           }
-          
+
           if (!newestCheck || lastChecked > newestCheck) {
             newestCheck = lastChecked;
           }

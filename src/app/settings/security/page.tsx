@@ -28,8 +28,8 @@ export default async function SecuritySettingsPage() {
           </a>
         </Button>
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Security Settings</h1>
-          <p className="text-gray-600 mt-1">
+          <h1 className="text-2xl font-bold text-foreground">Security Settings</h1>
+          <p className="text-muted-foreground mt-1">
             Manage your password, two-factor authentication, and login activity
           </p>
         </div>

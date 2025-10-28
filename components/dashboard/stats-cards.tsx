@@ -2,10 +2,10 @@
 'use client';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { 
-  DollarSign, 
-  Users, 
-  Wifi, 
+import {
+  DollarSign,
+  Users,
+  Wifi,
   TrendingUp,
   Activity
 } from 'lucide-react';
@@ -21,12 +21,12 @@ export function StatsCards() {
         {[...Array(4)].map((_, i) => (
           <Card key={i} className="animate-pulse">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <div className="h-4 bg-gray-200 rounded w-20"></div>
-              <div className="h-4 w-4 bg-gray-200 rounded"></div>
+              <div className="h-4 bg-muted rounded w-20"></div>
+              <div className="h-4 w-4 bg-muted rounded"></div>
             </CardHeader>
             <CardContent>
-              <div className="h-8 bg-gray-200 rounded w-16 mb-2"></div>
-              <div className="h-3 bg-gray-200 rounded w-24"></div>
+              <div className="h-8 bg-muted rounded w-16 mb-2"></div>
+              <div className="h-3 bg-muted rounded w-24"></div>
             </CardContent>
           </Card>
         ))}
@@ -37,10 +37,10 @@ export function StatsCards() {
   if (error) {
     return (
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <Card className="col-span-2 md:col-span-4 border-red-200">
+        <Card className="col-span-2 md:col-span-4 border-destructive">
           <CardContent className="p-6 text-center">
-            <p className="text-sm text-red-600">Failed to load dashboard stats</p>
-            <p className="text-xs text-gray-500 mt-1">{error}</p>
+            <p className="text-sm text-destructive">Failed to load dashboard stats</p>
+            <p className="text-xs text-muted-foreground mt-1">{error}</p>
           </CardContent>
         </Card>
       </div>
@@ -100,7 +100,7 @@ export function StatsCards() {
       {statCards.map((stat, index) => (
         <Card key={index}>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-gray-600">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
               {stat.title}
             </CardTitle>
             <div className={`p-2 rounded-lg ${stat.bgColor}`}>
@@ -108,7 +108,7 @@ export function StatsCards() {
             </div>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-gray-900 mb-1">
+            <div className="text-2xl font-bold text-foreground mb-1">
               {stat.value}
             </div>
             <div className="flex items-center text-xs">
@@ -117,15 +117,14 @@ export function StatsCards() {
               ) : stat.change < 0 ? (
                 <TrendingUp className="h-3 w-3 text-red-500 mr-1 rotate-180" />
               ) : (
-                <Activity className="h-3 w-3 text-gray-400 mr-1" />
+                <Activity className="h-3 w-3 text-muted-foreground mr-1" />
               )}
-              <span className={`${
-                stat.change > 0 ? 'text-green-600' : 
-                stat.change < 0 ? 'text-red-600' : 'text-gray-500'
-              }`}>
+              <span className={`${stat.change > 0 ? 'text-green-600' :
+                stat.change < 0 ? 'text-red-600' : 'text-muted-foreground'
+                }`}>
                 {stat.change > 0 ? '+' : ''}{stat.change}%
               </span>
-              <span className="text-gray-500 ml-1">from last month</span>
+              <span className="text-muted-foreground ml-1">from last month</span>
             </div>
           </CardContent>
         </Card>

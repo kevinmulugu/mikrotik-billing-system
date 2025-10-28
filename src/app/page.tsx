@@ -2,10 +2,25 @@ import { Metadata } from 'next';
 import { getServerSession } from 'next-auth/next';
 import { redirect } from 'next/navigation';
 import { authOptions } from '@/lib/auth';
+import Link from 'next/link';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import {
+  Wifi,
+  Smartphone,
+  TrendingUp,
+  Shield,
+  Zap,
+  Users,
+  Building2,
+  CheckCircle2,
+  ArrowRight
+} from 'lucide-react';
 
 export const metadata: Metadata = {
-  title: 'MikroTik Billing - Customer Portal',
-  description: 'Manage your routers, vouchers, and internet monetization',
+  title: 'PAY N BROWSE - WiFi Hotspot & PPPoE Management',
+  description: 'Monetize your internet with WiFi hotspots and PPPoE management. Perfect for apartments and ISPs. Accept M-Pesa payments and earn revenue.',
 };
 
 export default async function HomePage() {
@@ -17,67 +32,287 @@ export default async function HomePage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-white">
-      <div className="container mx-auto px-4 py-16">
-        <div className="text-center max-w-4xl mx-auto">
-          <h1 className="text-4xl md:text-6xl font-bold text-gray-900 mb-6">
-            Turn Your WiFi Into
-            <span className="text-blue-600 block">Passive Income</span>
-          </h1>
-          <p className="text-xl text-gray-600 mb-8 leading-relaxed">
-            Monetize your internet connection with MikroTik routers. 
-            Generate vouchers, manage PPPoE users, and earn commission 
-            from every transaction - all from your smartphone.
-          </p>
-          
-          <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <a
-              href="/signin"
-              className="bg-blue-600 text-white px-8 py-4 rounded-lg text-lg font-semibold hover:bg-blue-700 transition-colors"
-            >
-              Get Started Today
-            </a>
-            <a
-              href="/support/knowledge-base"
-              className="border border-gray-300 text-gray-700 px-8 py-4 rounded-lg text-lg font-semibold hover:bg-gray-50 transition-colors"
-            >
-              Learn More
-            </a>
+    <div className="min-h-screen bg-background">
+      {/* Hero Section */}
+      <section className="border-b">
+        <div className="container mx-auto px-4 py-16 md:py-24">
+          <div className="text-center max-w-4xl mx-auto space-y-6">
+            <Badge variant="secondary" className="mb-4">
+              15 Days Free Trial
+            </Badge>
+            <h1 className="text-4xl md:text-6xl font-bold text-foreground">
+              Share Your WiFi.
+              <span className="text-primary block mt-2">Earn Monthly Income.</span>
+            </h1>
+            <p className="text-xl text-muted-foreground leading-relaxed">
+              Turn your WiFi into a business with our automated hotspot and PPPoE management system.
+              Perfect for apartments, businesses, and ISPs. Accept M-Pesa payments,
+              manage vouchers and PPPoE users, withdraw earnings monthly.
+            </p>            <div className="flex flex-col sm:flex-row gap-4 justify-center pt-4">
+              <Button asChild size="lg">
+                <Link href="/signin">
+                  Get Started Free
+                  <ArrowRight className="w-4 h-4 ml-2" />
+                </Link>
+              </Button>
+              <Button asChild variant="outline" size="lg">
+                <Link href="/pricing">
+                  View Pricing
+                </Link>
+              </Button>
+            </div>
+
+            <p className="text-sm text-muted-foreground pt-2">
+              No technical knowledge required • Automated onboarding • 15-day trial
+            </p>
+          </div>
+        </div>
+      </section>
+
+      {/* Features Section */}
+      <section className="py-16 md:py-24">
+        <div className="container mx-auto px-4">
+          <div className="text-center mb-12">
+            <h2 className="text-3xl md:text-4xl font-bold mb-4">
+              Everything You Need for WiFi & PPPoE Management
+            </h2>
+            <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
+              Built for non-technical users with seamless automation
+            </p>
           </div>
 
-          <div className="grid md:grid-cols-3 gap-8 mt-16">
-            <div className="text-center">
-              <div className="bg-blue-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
-                <svg className="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
-                </svg>
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <Card>
+              <CardHeader>
+                <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center mb-4">
+                  <Wifi className="w-6 h-6 text-primary" />
+                </div>
+                <CardTitle>WiFi Hotspot Management</CardTitle>
+                <CardDescription>
+                  Create and manage WiFi hotspots for your customers. Support for vouchers, trials, and package management.
+                </CardDescription>
+              </CardHeader>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center mb-4">
+                  <Smartphone className="w-6 h-6 text-primary" />
+                </div>
+                <CardTitle>M-Pesa Integration</CardTitle>
+                <CardDescription>
+                  Customers buy packages directly via M-Pesa. Automatic payment processing and voucher generation.
+                </CardDescription>
+              </CardHeader>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center mb-4">
+                  <Zap className="w-6 h-6 text-primary" />
+                </div>
+                <CardTitle>Automated Setup</CardTitle>
+                <CardDescription>
+                  No technical knowledge needed. Our system guides you through router setup and configuration automatically.
+                </CardDescription>
+              </CardHeader>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center mb-4">
+                  <Users className="w-6 h-6 text-primary" />
+                </div>
+                <CardTitle>Hotspot & PPPoE Management</CardTitle>
+                <CardDescription>
+                  Manage both WiFi hotspots and PPPoE users. Generate vouchers for hotspots and manage PPPoE connections seamlessly.
+                </CardDescription>
+              </CardHeader>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center mb-4">
+                  <TrendingUp className="w-6 h-6 text-primary" />
+                </div>
+                <CardTitle>Monthly Withdrawals</CardTitle>
+                <CardDescription>
+                  Earn revenue from your WiFi. Withdraw your earnings at the end of every month with ease.
+                </CardDescription>
+              </CardHeader>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center mb-4">
+                  <Shield className="w-6 h-6 text-primary" />
+                </div>
+                <CardTitle>Real-time Monitoring</CardTitle>
+                <CardDescription>
+                  Track users, revenue, and router performance. Get insights on your business from anywhere.
+                </CardDescription>
+              </CardHeader>
+            </Card>
+          </div>
+        </div>
+      </section>
+
+      {/* Target Markets Section */}
+      <section className="py-16 md:py-24 bg-muted/50">
+        <div className="container mx-auto px-4">
+          <div className="text-center mb-12">
+            <h2 className="text-3xl md:text-4xl font-bold mb-4">
+              Perfect For
+            </h2>
+          </div>
+
+          <div className="grid md:grid-cols-2 gap-8 max-w-5xl mx-auto">
+            {/* Apartment/Home Owners */}
+            <Card className="relative overflow-hidden">
+              <CardHeader>
+                <div className="flex items-center justify-between mb-4">
+                  <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center">
+                    <Building2 className="w-6 h-6 text-primary" />
+                  </div>
+                  <Badge>Most Popular</Badge>
+                </div>
+                <CardTitle className="text-2xl">Personal Plan</CardTitle>
+                <CardDescription className="text-base">
+                  For individuals sharing WiFi in apartments & homes
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-3">
+                  <div className="flex items-start gap-2">
+                    <CheckCircle2 className="w-5 h-5 text-primary mt-0.5 flex-shrink-0" />
+                    <p className="text-sm">Only 20% platform fee on earnings</p>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <CheckCircle2 className="w-5 h-5 text-primary mt-0.5 flex-shrink-0" />
+                    <p className="text-sm">No monthly subscription</p>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <CheckCircle2 className="w-5 h-5 text-primary mt-0.5 flex-shrink-0" />
+                    <p className="text-sm">WiFi hotspot management</p>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <CheckCircle2 className="w-5 h-5 text-primary mt-0.5 flex-shrink-0" />
+                    <p className="text-sm">Automated setup & onboarding</p>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <CheckCircle2 className="w-5 h-5 text-primary mt-0.5 flex-shrink-0" />
+                    <p className="text-sm">M-Pesa payment integration</p>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <CheckCircle2 className="w-5 h-5 text-primary mt-0.5 flex-shrink-0" />
+                    <p className="text-sm">Monthly withdrawals</p>
+                  </div>
+                </div>
+                <Button asChild className="w-full" size="lg">
+                  <Link href="/signin">
+                    Start Free Trial
+                  </Link>
+                </Button>
+              </CardContent>
+            </Card>
+
+            {/* ISPs */}
+            <Card className="relative overflow-hidden">
+              <CardHeader>
+                <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center mb-4">
+                  <Wifi className="w-6 h-6 text-primary" />
+                </div>
+                <CardTitle className="text-2xl">ISP Plans</CardTitle>
+                <CardDescription className="text-base">
+                  Manage multiple routers, hotspots & PPPoE users
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-3">
+                  <div className="flex items-start gap-2">
+                    <CheckCircle2 className="w-5 h-5 text-primary mt-0.5 flex-shrink-0" />
+                    <p className="text-sm">KSh 2,500/month for up to 5 routers</p>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <CheckCircle2 className="w-5 h-5 text-primary mt-0.5 flex-shrink-0" />
+                    <p className="text-sm">KSh 3,900/month for unlimited routers</p>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <CheckCircle2 className="w-5 h-5 text-primary mt-0.5 flex-shrink-0" />
+                    <p className="text-sm">Hotspot & PPPoE management</p>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <CheckCircle2 className="w-5 h-5 text-primary mt-0.5 flex-shrink-0" />
+                    <p className="text-sm">Advanced user management</p>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <CheckCircle2 className="w-5 h-5 text-primary mt-0.5 flex-shrink-0" />
+                    <p className="text-sm">Bulk voucher generation</p>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <CheckCircle2 className="w-5 h-5 text-primary mt-0.5 flex-shrink-0" />
+                    <p className="text-sm">15-day free trial</p>
+                  </div>
+                </div>
+                <Button asChild className="w-full" size="lg" variant="outline">
+                  <Link href="/pricing">
+                    View ISP Plans
+                  </Link>
+                </Button>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      </section>
+
+      {/* CTA Section */}
+      <section className="py-16 md:py-24">
+        <div className="container mx-auto px-4">
+          <Card className="bg-primary text-primary-foreground">
+            <CardContent className="py-12 text-center">
+              <h2 className="text-3xl md:text-4xl font-bold mb-4">
+                Ready to Start Earning?
+              </h2>
+              <p className="text-lg mb-8 opacity-90 max-w-2xl mx-auto">
+                Join hundreds of WiFi providers making passive income.
+                Start your 15-day free trial today - no credit card required.
+              </p>
+              <div className="flex flex-col sm:flex-row gap-4 justify-center">
+                <Button asChild size="lg" variant="secondary">
+                  <Link href="/signin">
+                    Start Free Trial
+                    <ArrowRight className="w-4 h-4 ml-2" />
+                  </Link>
+                </Button>
+                <Button asChild size="lg" variant="outline" className="bg-primary-foreground text-primary border-primary-foreground hover:bg-primary-foreground/90">
+                  <Link href="/pricing">
+                    See Pricing
+                  </Link>
+                </Button>
               </div>
-              <h3 className="text-xl font-semibold mb-2">Easy Setup</h3>
-              <p className="text-gray-600">Connect your MikroTik router in minutes with our step-by-step wizard</p>
-            </div>
-            
-            <div className="text-center">
-              <div className="bg-green-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
-                <svg className="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
-                </svg>
-              </div>
-              <h3 className="text-xl font-semibold mb-2">Start Earning</h3>
-              <p className="text-gray-600">Generate vouchers and manage users. Earn up to 15% commission on every payment</p>
-            </div>
-            
-            <div className="text-center">
-              <div className="bg-purple-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
-                <svg className="w-8 h-8 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                </svg>
-              </div>
-              <h3 className="text-xl font-semibold mb-2">Track Growth</h3>
-              <p className="text-gray-600">Monitor your revenue, users, and router performance in real-time</p>
+            </CardContent>
+          </Card>
+        </div>
+      </section>
+
+      {/* Footer */}
+      <footer className="border-t py-8">
+        <div className="container mx-auto px-4">
+          <div className="flex flex-col md:flex-row justify-between items-center gap-4">
+            <p className="text-sm text-muted-foreground">
+              © {new Date().getFullYear()} PAY N BROWSE. All rights reserved.
+            </p>
+            <div className="flex gap-6">
+              <Link href="/pricing" className="text-sm text-muted-foreground hover:text-foreground">
+                Pricing
+              </Link>
+              <Link href="/support/knowledge-base" className="text-sm text-muted-foreground hover:text-foreground">
+                Support
+              </Link>
             </div>
           </div>
         </div>
-      </div>
+      </footer>
     </div>
   );
 }

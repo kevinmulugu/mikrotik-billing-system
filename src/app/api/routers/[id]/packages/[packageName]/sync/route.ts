@@ -1,4 +1,5 @@
 // src/app/api/routers/[id]/packages/[packageName]/sync/route.ts
+// TODO: Implement package sync to router functionality
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';

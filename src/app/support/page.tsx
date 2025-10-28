@@ -5,10 +5,10 @@ import { authOptions } from '@/lib/auth';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { 
-  HelpCircle, 
-  MessageSquare, 
-  BookOpen, 
+import {
+  HelpCircle,
+  MessageSquare,
+  BookOpen,
   Phone,
   Mail,
   Clock,
@@ -42,15 +42,15 @@ export default async function SupportPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+          <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
             <HelpCircle className="h-6 w-6 text-blue-600" />
             Support Center
           </h1>
-          <p className="text-gray-600 mt-1">
+          <p className="text-muted-foreground mt-1">
             Get help with your routers, payments, and technical questions
           </p>
         </div>
-        
+
         <Button asChild>
           <a href="/support/tickets/create">
             <Plus className="h-4 w-4 mr-2" />
@@ -65,7 +65,7 @@ export default async function SupportPage() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600">Open Tickets</p>
+                <p className="text-sm text-muted-foreground">Open Tickets</p>
                 <p className="text-2xl font-semibold text-orange-600">{supportStats.openTickets}</p>
               </div>
               <Clock className="h-5 w-5 text-orange-600" />
@@ -77,7 +77,7 @@ export default async function SupportPage() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600">Resolved</p>
+                <p className="text-sm text-muted-foreground">Resolved</p>
                 <p className="text-2xl font-semibold text-green-600">{supportStats.resolvedTickets}</p>
               </div>
               <CheckCircle className="h-5 w-5 text-green-600" />
@@ -89,7 +89,7 @@ export default async function SupportPage() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600">Avg Response</p>
+                <p className="text-sm text-muted-foreground">Avg Response</p>
                 <p className="text-2xl font-semibold text-blue-600">{supportStats.avgResponseTime}</p>
               </div>
               <MessageSquare className="h-5 w-5 text-blue-600" />
@@ -101,7 +101,7 @@ export default async function SupportPage() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600">Satisfaction</p>
+                <p className="text-sm text-muted-foreground">Satisfaction</p>
                 <p className="text-2xl font-semibold text-purple-600">{supportStats.satisfaction}/5</p>
               </div>
               <div className="flex">
@@ -130,7 +130,7 @@ export default async function SupportPage() {
               <CardTitle>Support Tickets</CardTitle>
             </CardHeader>
             <CardContent className="text-center">
-              <p className="text-gray-600 mb-4">
+              <p className="text-muted-foreground mb-4">
                 Get personalized help from our support team for technical issues
               </p>
               <Badge variant="secondary">
@@ -147,7 +147,7 @@ export default async function SupportPage() {
               <CardTitle>Knowledge Base</CardTitle>
             </CardHeader>
             <CardContent className="text-center">
-              <p className="text-gray-600 mb-4">
+              <p className="text-muted-foreground mb-4">
                 Find answers to common questions and step-by-step guides
               </p>
               <Badge variant="secondary">
@@ -164,11 +164,11 @@ export default async function SupportPage() {
           </CardHeader>
           <CardContent className="text-center space-y-3">
             <div>
-              <p className="text-sm text-gray-600">Phone Support</p>
+              <p className="text-sm text-muted-foreground">Phone Support</p>
               <p className="font-medium">+254 700 000 000</p>
             </div>
             <div>
-              <p className="text-sm text-gray-600">Email Support</p>
+              <p className="text-sm text-muted-foreground">Email Support</p>
               <p className="font-medium">support@mikrotikbilling.com</p>
             </div>
           </CardContent>
@@ -217,26 +217,26 @@ export default async function SupportPage() {
                 <div className="flex-1">
                   <div className="flex items-center gap-3 mb-2">
                     <h3 className="font-medium">{ticket.title}</h3>
-                    <Badge 
+                    <Badge
                       variant={
                         ticket.status === 'open' ? 'destructive' :
-                        ticket.status === 'in_progress' ? 'default' : 'secondary'
+                          ticket.status === 'in_progress' ? 'default' : 'secondary'
                       }
                     >
                       {ticket.status.replace('_', ' ')}
                     </Badge>
-                    <Badge 
+                    <Badge
                       variant="outline"
                       className={
                         ticket.priority === 'high' ? 'border-red-500 text-red-600' :
-                        ticket.priority === 'medium' ? 'border-yellow-500 text-yellow-600' :
-                        'border-green-500 text-green-600'
+                          ticket.priority === 'medium' ? 'border-yellow-500 text-yellow-600' :
+                            'border-green-500 text-green-600'
                       }
                     >
                       {ticket.priority}
                     </Badge>
                   </div>
-                  <div className="flex items-center gap-4 text-sm text-gray-600">
+                  <div className="flex items-center gap-4 text-sm text-muted-foreground">
                     <span>#{ticket.id}</span>
                     <span>{ticket.category}</span>
                     <span>{ticket.created}</span>
@@ -288,7 +288,7 @@ export default async function SupportPage() {
                 <issue.icon className={`h-6 w-6 ${issue.color} mt-1`} />
                 <div>
                   <h4 className="font-medium mb-1">{issue.title}</h4>
-                  <p className="text-sm text-gray-600">{issue.description}</p>
+                  <p className="text-sm text-muted-foreground">{issue.description}</p>
                 </div>
               </div>
             ))}

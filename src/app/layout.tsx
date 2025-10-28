@@ -6,33 +6,33 @@ import { Providers } from '@/lib/providers';
 import { Toaster } from 'sonner';
 import './globals.css';
 
-const inter = Inter({ 
+const inter = Inter({
   subsets: ['latin'],
   variable: '--font-inter',
 });
 
 export const metadata: Metadata = {
   title: {
-    template: '%s | MikroTik Billing',
-    default: 'MikroTik Billing - Monetize Your Internet Connection',
+    template: '%s | PAY N BROWSE',
+    default: 'PAY N BROWSE - WiFi Hotspot & PPPoE Management',
   },
-  description: 'Turn your WiFi router into a revenue stream with MikroTik Billing. Generate vouchers, manage users, and earn commissions.',
-  keywords: ['MikroTik', 'WiFi monetization', 'hotspot billing', 'internet business', 'Kenya', 'router management', 'voucher system'],
-  authors: [{ name: 'MikroTik Billing Team' }],
-  creator: 'MikroTik Billing',
+  description: 'Monetize your internet with WiFi hotspots and PPPoE management. Generate vouchers, accept M-Pesa payments, and earn revenue.',
+  keywords: ['WiFi hotspot', 'PPPoE management', 'MikroTik', 'internet monetization', 'voucher system', 'M-Pesa', 'Kenya', 'ISP billing'],
+  authors: [{ name: 'PAY N BROWSE' }],
+  creator: 'PAY N BROWSE',
   openGraph: {
     type: 'website',
     locale: 'en_KE',
-    url: 'https://mikrotikbilling.com',
-    title: 'MikroTik Billing - Monetize Your Internet',
-    description: 'Turn your WiFi router into a revenue stream with hotspot vouchers and user management',
-    siteName: 'MikroTik Billing',
+    url: 'https://paynbrowse.com',
+    title: 'PAY N BROWSE - WiFi Hotspot & PPPoE Management',
+    description: 'Monetize your internet with WiFi hotspots and PPPoE management. Accept M-Pesa payments and earn revenue.',
+    siteName: 'PAY N BROWSE',
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'MikroTik Billing - Monetize Your Internet',
-    description: 'Turn your WiFi router into a revenue stream',
-    creator: '@mikrotikbilling',
+    title: 'PAY N BROWSE - WiFi Hotspot & PPPoE Management',
+    description: 'Monetize your internet with WiFi hotspots and PPPoE management',
+    creator: '@paynbrowse',
   },
   robots: {
     index: true,
@@ -73,7 +73,7 @@ export default async function RootLayout({
       <body className={`${inter.variable} font-sans antialiased`}>
         <Providers session={session}>
           {children}
-          <Toaster 
+          <Toaster
             position="top-right"
             richColors
             closeButton

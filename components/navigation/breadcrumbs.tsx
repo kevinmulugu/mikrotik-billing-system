@@ -23,12 +23,12 @@ export function Breadcrumbs() {
     let currentPath = '';
     segments.forEach((segment, index) => {
       currentPath += `/${segment}`;
-      
+
       // Skip the dashboard segment as it's already included
       if (segment === 'dashboard') return;
 
       let label = segment.charAt(0).toUpperCase() + segment.slice(1);
-      
+
       // Custom labels for better UX
       switch (segment) {
         case 'routers':
@@ -91,7 +91,7 @@ export function Breadcrumbs() {
       <ol className="flex items-center space-x-4">
         <li>
           <div>
-            <Link href="/dashboard" className="text-gray-400 hover:text-gray-500">
+            <Link href="/dashboard" className="text-muted-foreground hover:text-foreground">
               <Home className="h-5 w-5 flex-shrink-0" />
               <span className="sr-only">Dashboard</span>
             </Link>
@@ -100,16 +100,16 @@ export function Breadcrumbs() {
         {breadcrumbs.map((breadcrumb, index) => (
           <li key={breadcrumb.label}>
             <div className="flex items-center">
-              <ChevronRight className="h-5 w-5 flex-shrink-0 text-gray-400" />
+              <ChevronRight className="h-5 w-5 flex-shrink-0 text-muted-foreground" />
               {breadcrumb.href ? (
                 <Link
                   href={breadcrumb.href}
-                  className="ml-4 text-sm font-medium text-gray-500 hover:text-gray-700"
+                  className="ml-4 text-sm font-medium text-muted-foreground hover:text-foreground"
                 >
                   {breadcrumb.label}
                 </Link>
               ) : (
-                <span className="ml-4 text-sm font-medium text-gray-900">
+                <span className="ml-4 text-sm font-medium text-foreground">
                   {breadcrumb.label}
                 </span>
               )}

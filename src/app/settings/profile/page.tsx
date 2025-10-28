@@ -28,8 +28,8 @@ export default async function ProfileSettingsPage() {
           </a>
         </Button>
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Profile Settings</h1>
-          <p className="text-gray-600 mt-1">
+          <h1 className="text-2xl font-bold text-foreground">Profile Settings</h1>
+          <p className="text-muted-foreground mt-1">
             Update your personal and business information
           </p>
         </div>

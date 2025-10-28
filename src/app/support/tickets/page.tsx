@@ -28,8 +28,8 @@ export default async function TicketsPage() {
           </a>
         </Button>
         <div className="flex-1">
-          <h1 className="text-2xl font-bold text-gray-900">Support Tickets</h1>
-          <p className="text-gray-600 mt-1">
+          <h1 className="text-2xl font-bold text-foreground">Support Tickets</h1>
+          <p className="text-muted-foreground mt-1">
             Track and manage your support requests
           </p>
         </div>

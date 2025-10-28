@@ -5,6 +5,7 @@ import { authOptions } from '@/lib/auth';
 import clientPromise from '@/lib/mongodb';
 import { ObjectId } from 'mongodb';
 import { MikroTikService } from '@/lib/services/mikrotik';
+import { getRouterConnectionConfig } from '@/lib/services/router-connection';
 
 interface RouteParams {
   params: Promise<{
@@ -41,11 +42,6 @@ function convertMinutesToMikroTikFormat(minutes: number): string {
   }
 }
 
-// Convert days to minutes for internal storage
-function convertDaysToMinutes(days: number): number {
-  return days * 24 * 60;
-}
-
 // Human-readable duration from minutes
 function formatDuration(minutes: number): string {
   if (minutes < 60) return `${minutes} minutes`;
@@ -75,8 +71,8 @@ export async function POST(
       );
     }
 
-  const userId = session.user.id;
-  const { id: routerId } = await params;
+    const userId = session.user.id;
+    const { id: routerId } = await params;
 
     // Validate router ID
     if (!ObjectId.isValid(routerId)) {
@@ -173,6 +169,15 @@ export async function POST(
       ? new Date(Date.now() + expiryDays * 24 * 60 * 60 * 1000)
       : new Date(Date.now() + 365 * 24 * 60 * 60 * 1000); // 1 year default
 
+    // Prepare router config if sync is enabled
+    let routerConfig = null;
+    if (syncToRouter && router.health?.status === 'online') {
+      routerConfig = getRouterConnectionConfig(router, {
+        forceLocal: false,
+        forceVPN: true,
+      });
+    }
+
     // Generate vouchers
     const vouchers = [];
     const voucherCodes = new Set<string>();
@@ -186,7 +191,49 @@ export async function POST(
       }
       voucherCodes.add(code);
 
-      // Create voucher document
+      // Initialize mikrotikUserId (will be populated if sync succeeds)
+      let mikrotikUserId: string | null = null;
+
+      // Create user on MikroTik router if syncToRouter is enabled and router is online
+      if (routerConfig) {
+        try {
+          console.log(`[Voucher ${code}] Creating MikroTik user...`);
+
+          const userResult = await MikroTikService.createHotspotUser(
+            routerConfig,
+            {
+              name: code,
+              password: code,
+              profile: packageName,
+              limitUptime: limitUptime, // Critical: Session duration
+              server: 'hotspot1',
+              comment: `${displayName} - Generated automatically`,
+            }
+          );
+
+          // CRITICAL FIX: Correct path to .id field
+          mikrotikUserId = userResult?.['.id'] || null;
+
+          console.log(`[Voucher ${code}] MikroTik user created successfully. ID: ${mikrotikUserId}`);
+
+          mikrotikCreationResults.push({
+            code: code,
+            success: true,
+            mikrotikUserId: mikrotikUserId,
+          });
+        } catch (mikrotikError) {
+          console.error(`[Voucher ${code}] Failed to create MikroTik user:`, mikrotikError);
+          
+          mikrotikCreationResults.push({
+            code: code,
+            success: false,
+            mikrotikUserId: null,
+            error: mikrotikError instanceof Error ? mikrotikError.message : 'Unknown error',
+          });
+        }
+      }
+
+      // Create voucher document with mikrotikUserId
       const voucher = {
         _id: new ObjectId(),
         routerId: new ObjectId(routerId),
@@ -228,59 +275,20 @@ export async function POST(
           expiresAt: expiresAt,
           autoDelete: autoExpire,
         },
+        // CRITICAL: Store MikroTik user ID for future operations
+        mikrotikUserId: mikrotikUserId,
         status: 'active',
         createdAt: new Date(),
         updatedAt: new Date(),
       };
 
       vouchers.push(voucher);
-
-      console.log(`Generated voucher code: ${code}`);
-      console.log('checking if we need to sync to router...', syncToRouter);
-      // Create user on MikroTik router if syncToRouter is enabled and router is online
-      if (syncToRouter && router.health?.status === 'online') {
-        console.log('Sync to router enabled, creating MikroTik user...');
-        console.log(`Creating MikroTik user for voucher ${code}...`);
-        try {
-          const routerConfig = {
-            ipAddress: router.connection.ipAddress,
-            port: router.connection.port || 8728,
-            username: router.connection.apiUser || 'admin',
-            password: MikroTikService.decryptPassword(router.connection?.apiPassword || '')
-            // useSSL: false,
-          };
-
-          const userResult = await MikroTikService.createHotspotUser(
-            routerConfig,
-            {
-              name: code,
-              password: code,
-              profile: packageName,
-              limitUptime: limitUptime, // Critical: Session duration
-              server: 'hotspot1',
-              comment: `${displayName} - Generated automatically`,
-            }
-          );
-
-          console.log(`MikroTik user created for voucher ${code}:`, userResult);
-          mikrotikCreationResults.push({
-            code: code,
-            success: true,
-            mikrotikUserId: userResult?.data?.['.id'] || null,
-          });
-        } catch (mikrotikError) {
-          console.error(`Failed to create MikroTik user for ${code}:`, mikrotikError);
-          mikrotikCreationResults.push({
-            code: code,
-            success: false,
-            error: mikrotikError instanceof Error ? mikrotikError.message : 'Unknown error',
-          });
-        }
-      }
+      console.log(`[Voucher ${code}] Generated. MikroTik ID: ${mikrotikUserId || 'not synced'}`);
     }
 
-    // Insert vouchers into database
+    // Insert vouchers into database (with mikrotikUserId)
     await db.collection('vouchers').insertMany(vouchers);
+    console.log(`[Batch ${batchId}] Inserted ${vouchers.length} vouchers into database`);
 
     // Update router statistics
     await db.collection('routers').updateOne(
@@ -334,7 +342,7 @@ export async function POST(
     const syncedCount = mikrotikCreationResults.filter((r) => r.success).length;
     const failedCount = mikrotikCreationResults.filter((r) => !r.success).length;
 
-    // Return generated vouchers
+    // Return generated vouchers (including mikrotikUserId in response)
     const response = vouchers.map((v) => ({
       id: v._id.toString(),
       code: v.voucherInfo.code,
@@ -345,6 +353,8 @@ export async function POST(
       durationMinutes: v.voucherInfo.duration,
       price: v.voucherInfo.price,
       expiresAt: v.expiry.expiresAt.toISOString(),
+      mikrotikUserId: v.mikrotikUserId, // Include in response for transparency
+      syncedToRouter: v.mikrotikUserId !== null,
     }));
 
     return NextResponse.json({
@@ -364,6 +374,7 @@ export async function POST(
             enabled: true,
             synced: syncedCount,
             failed: failedCount,
+            successRate: quantity > 0 ? `${Math.round((syncedCount / quantity) * 100)}%` : '0%',
             details: mikrotikCreationResults,
           }
         : {
@@ -372,7 +383,7 @@ export async function POST(
           },
     });
   } catch (error) {
-    console.error('Error generating vouchers:', error);
+    console.error('[Voucher Generation] Error:', error);
     return NextResponse.json(
       {
         error: 'Failed to generate vouchers',

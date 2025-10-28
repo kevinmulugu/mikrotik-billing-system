@@ -28,8 +28,8 @@ export default async function CommissionPage() {
           </a>
         </Button>
         <div className="flex-1">
-          <h1 className="text-2xl font-bold text-gray-900">Commission Tracking</h1>
-          <p className="text-gray-600 mt-1">
+          <h1 className="text-2xl font-bold text-foreground">Commission Tracking</h1>
+          <p className="text-muted-foreground mt-1">
             Monitor your commission earnings and payout schedule
           </p>
         </div>

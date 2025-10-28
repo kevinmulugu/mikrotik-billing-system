@@ -26,8 +26,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-  const userId = session.user.id;
-  const { id: routerId } = await params;
+    const userId = session.user.id;
+    const { id: routerId } = await params;
 
     // Validate ObjectId
     if (!ObjectId.isValid(routerId)) {
@@ -91,16 +91,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     }
 
     // Get connection config
-    // const connectionConfig = {
-    //   ipAddress: router.connection?.ipAddress || '',
-    //   port: router.connection?.port || 8728,
-    //   username: router.connection?.apiUser || 'admin',
-    //   password: MikroTikService.decryptPassword(router.connection?.apiPassword || ''),
-    // };
-
     const connectionConfig = getRouterConnectionConfig(router, {
-      forceLocal: false, // Use local IP for PPPoE management
-      forceVPN: true, // Use VPN IP if available
+      forceLocal: false,
+      forceVPN: true,
     });
 
     let result: any = {};
@@ -109,195 +102,356 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     // Determine server name or use default service name
     const serverName = body.serverName || 'pppoe-server1';
 
+    // CRITICAL: Check if we have mikrotikId cached in database for this server
+    let cachedMikrotikId = router.configuration?.pppoe?.servers?.find(
+      (s: any) => s.serviceName === serverName
+    )?.mikrotikId;
+
     switch (body.action) {
       case 'restart':
-        // Get PPPoE servers
-        const servers = await MikroTikService.makeRequest(
-          connectionConfig,
-          '/rest/interface/pppoe-server/server',
-          'GET'
-        );
+        try {
+          console.log(`[PPPoE] Restarting service: ${serverName}`);
 
-        if (!Array.isArray(servers) || servers.length === 0) {
-          return NextResponse.json(
-            { error: 'No PPPoE servers found on router' },
-            { status: 404 }
+          // Get PPPoE server with .id
+          let serverId = cachedMikrotikId;
+          let serverData: any = null;
+
+          if (!serverId) {
+            // Fetch from router if not cached
+            const servers = await MikroTikService.makeRequest(
+              connectionConfig,
+              '/rest/interface/pppoe-server/server',
+              'GET'
+            );
+
+            if (!Array.isArray(servers) || servers.length === 0) {
+              return NextResponse.json(
+                { error: 'No PPPoE servers found on router' },
+                { status: 404 }
+              );
+            }
+
+            serverData = servers.find((s: any) => s['service-name'] === serverName);
+
+            if (!serverData) {
+              return NextResponse.json(
+                { error: `PPPoE server '${serverName}' not found` },
+                { status: 404 }
+              );
+            }
+
+            serverId = serverData['.id'];
+
+            // CRITICAL: Cache mikrotikId in database for future use
+            await db.collection('routers').updateOne(
+              { _id: new ObjectId(routerId) },
+              {
+                $set: {
+                  'configuration.pppoe.servers': [
+                    {
+                      serviceName: serverName,
+                      mikrotikId: serverId,
+                      interface: serverData.interface,
+                      lastUpdated: new Date(),
+                    },
+                  ],
+                  updatedAt: new Date(),
+                },
+              }
+            );
+            console.log(`[PPPoE] Cached server mikrotikId: ${serverId}`);
+          }
+
+          // Disable server
+          await MikroTikService.makeRequest(
+            connectionConfig,
+            `/rest/interface/pppoe-server/server/${serverId}`,
+            'PATCH',
+            { disabled: 'true' }
           );
-        }
 
-        const server = servers.find((s: any) => s['service-name'] === serverName);
+          console.log(`[PPPoE] Server disabled, waiting 2 seconds...`);
 
-        if (!server) {
-          return NextResponse.json(
-            { error: `PPPoE server '${serverName}' not found` },
-            { status: 404 }
+          // Wait 2 seconds
+          await new Promise(resolve => setTimeout(resolve, 2000));
+
+          // Enable server
+          await MikroTikService.makeRequest(
+            connectionConfig,
+            `/rest/interface/pppoe-server/server/${serverId}`,
+            'PATCH',
+            { disabled: 'false' }
           );
+
+          console.log(`[PPPoE] Server re-enabled successfully`);
+
+          result = {
+            success: true,
+            message: 'PPPoE service restarted successfully',
+            serverName: serverName,
+            mikrotikId: serverId,
+          };
+          actionDescription = `Restarted PPPoE service: ${serverName}`;
+        } catch (restartError) {
+          console.error('[PPPoE] Restart failed:', restartError);
+          throw restartError;
         }
-
-        // Disable server
-        await MikroTikService.makeRequest(
-          connectionConfig,
-          `/rest/interface/pppoe-server/server/${server['.id']}`,
-          'PATCH',
-          { disabled: 'true' }
-        );
-
-        // Wait 2 seconds
-        await new Promise(resolve => setTimeout(resolve, 2000));
-
-        // Enable server
-        await MikroTikService.makeRequest(
-          connectionConfig,
-          `/rest/interface/pppoe-server/server/${server['.id']}`,
-          'PATCH',
-          { disabled: 'false' }
-        );
-
-        result = {
-          success: true,
-          message: 'PPPoE service restarted successfully',
-          serverName: serverName,
-        };
-        actionDescription = `Restarted PPPoE service: ${serverName}`;
         break;
 
       case 'enable':
-        // Enable PPPoE service
-        const enableServers = await MikroTikService.makeRequest(
-          connectionConfig,
-          '/rest/interface/pppoe-server/server',
-          'GET'
-        );
+        try {
+          console.log(`[PPPoE] Enabling service: ${serverName}`);
 
-        if (!Array.isArray(enableServers) || enableServers.length === 0) {
-          return NextResponse.json(
-            { error: 'No PPPoE servers found on router' },
-            { status: 404 }
+          // Get PPPoE server with .id
+          let enableServerId = cachedMikrotikId;
+          let enableServerData: any = null;
+
+          if (!enableServerId) {
+            // Fetch from router if not cached
+            const enableServers = await MikroTikService.makeRequest(
+              connectionConfig,
+              '/rest/interface/pppoe-server/server',
+              'GET'
+            );
+
+            if (!Array.isArray(enableServers) || enableServers.length === 0) {
+              return NextResponse.json(
+                { error: 'No PPPoE servers found on router' },
+                { status: 404 }
+              );
+            }
+
+            enableServerData = enableServers.find((s: any) => s['service-name'] === serverName);
+
+            if (!enableServerData) {
+              return NextResponse.json(
+                { error: `PPPoE server '${serverName}' not found` },
+                { status: 404 }
+              );
+            }
+
+            enableServerId = enableServerData['.id'];
+
+            // CRITICAL: Cache mikrotikId in database
+            await db.collection('routers').updateOne(
+              { _id: new ObjectId(routerId) },
+              {
+                $set: {
+                  'configuration.pppoe.servers': [
+                    {
+                      serviceName: serverName,
+                      mikrotikId: enableServerId,
+                      interface: enableServerData.interface,
+                      lastUpdated: new Date(),
+                    },
+                  ],
+                  updatedAt: new Date(),
+                },
+              }
+            );
+            console.log(`[PPPoE] Cached server mikrotikId: ${enableServerId}`);
+          }
+
+          // Enable by setting disabled=false
+          await MikroTikService.makeRequest(
+            connectionConfig,
+            `/rest/interface/pppoe-server/server/${enableServerId}`,
+            'PATCH',
+            { disabled: 'false' }
           );
+
+          console.log(`[PPPoE] Server enabled successfully`);
+
+          result = {
+            success: true,
+            message: 'PPPoE service enabled successfully',
+            serverName: serverName,
+            mikrotikId: enableServerId,
+          };
+          actionDescription = `Enabled PPPoE service: ${serverName}`;
+        } catch (enableError) {
+          console.error('[PPPoE] Enable failed:', enableError);
+          throw enableError;
         }
-
-        const enableServer = enableServers.find((s: any) => s['service-name'] === serverName);
-
-        if (!enableServer) {
-          return NextResponse.json(
-            { error: `PPPoE server '${serverName}' not found` },
-            { status: 404 }
-          );
-        }
-
-        // Enable by setting disabled=false
-        await MikroTikService.makeRequest(
-          connectionConfig,
-          `/rest/interface/pppoe-server/server/${enableServer['.id']}`,
-          'PATCH',
-          { disabled: 'false' }
-        );
-
-        result = {
-          success: true,
-          message: 'PPPoE service enabled successfully',
-          serverName: serverName,
-        };
-        actionDescription = `Enabled PPPoE service: ${serverName}`;
         break;
 
       case 'disable':
-        // Disable PPPoE service
-        const disableServers = await MikroTikService.makeRequest(
-          connectionConfig,
-          '/rest/interface/pppoe-server/server',
-          'GET'
-        );
+        try {
+          console.log(`[PPPoE] Disabling service: ${serverName}`);
 
-        if (!Array.isArray(disableServers) || disableServers.length === 0) {
-          return NextResponse.json(
-            { error: 'No PPPoE servers found on router' },
-            { status: 404 }
+          // Get PPPoE server with .id
+          let disableServerId = cachedMikrotikId;
+          let disableServerData: any = null;
+
+          if (!disableServerId) {
+            // Fetch from router if not cached
+            const disableServers = await MikroTikService.makeRequest(
+              connectionConfig,
+              '/rest/interface/pppoe-server/server',
+              'GET'
+            );
+
+            if (!Array.isArray(disableServers) || disableServers.length === 0) {
+              return NextResponse.json(
+                { error: 'No PPPoE servers found on router' },
+                { status: 404 }
+              );
+            }
+
+            disableServerData = disableServers.find((s: any) => s['service-name'] === serverName);
+
+            if (!disableServerData) {
+              return NextResponse.json(
+                { error: `PPPoE server '${serverName}' not found` },
+                { status: 404 }
+              );
+            }
+
+            disableServerId = disableServerData['.id'];
+
+            // CRITICAL: Cache mikrotikId in database
+            await db.collection('routers').updateOne(
+              { _id: new ObjectId(routerId) },
+              {
+                $set: {
+                  'configuration.pppoe.servers': [
+                    {
+                      serviceName: serverName,
+                      mikrotikId: disableServerId,
+                      interface: disableServerData.interface,
+                      lastUpdated: new Date(),
+                    },
+                  ],
+                  updatedAt: new Date(),
+                },
+              }
+            );
+            console.log(`[PPPoE] Cached server mikrotikId: ${disableServerId}`);
+          }
+
+          // Disable by setting disabled=true
+          await MikroTikService.makeRequest(
+            connectionConfig,
+            `/rest/interface/pppoe-server/server/${disableServerId}`,
+            'PATCH',
+            { disabled: 'true' }
           );
+
+          console.log(`[PPPoE] Server disabled successfully`);
+
+          result = {
+            success: true,
+            message: 'PPPoE service disabled successfully',
+            serverName: serverName,
+            mikrotikId: disableServerId,
+          };
+          actionDescription = `Disabled PPPoE service: ${serverName}`;
+        } catch (disableError) {
+          console.error('[PPPoE] Disable failed:', disableError);
+          throw disableError;
         }
-
-        const disableServer = disableServers.find((s: any) => s['service-name'] === serverName);
-
-        if (!disableServer) {
-          return NextResponse.json(
-            { error: `PPPoE server '${serverName}' not found` },
-            { status: 404 }
-          );
-        }
-
-        // Disable by setting disabled=true
-        await MikroTikService.makeRequest(
-          connectionConfig,
-          `/rest/interface/pppoe-server/server/${disableServer['.id']}`,
-          'PATCH',
-          { disabled: 'true' }
-        );
-
-        result = {
-          success: true,
-          message: 'PPPoE service disabled successfully',
-          serverName: serverName,
-        };
-        actionDescription = `Disabled PPPoE service: ${serverName}`;
         break;
 
       case 'status':
-        // Get PPPoE server status
-        const statusServers = await MikroTikService.makeRequest(
-          connectionConfig,
-          '/rest/interface/pppoe-server/server',
-          'GET'
-        );
+        try {
+          console.log(`[PPPoE] Getting status for service: ${serverName}`);
 
-        if (!Array.isArray(statusServers) || statusServers.length === 0) {
-          return NextResponse.json(
-            { error: 'No PPPoE servers found on router' },
-            { status: 404 }
+          // Get PPPoE server status
+          const statusServers = await MikroTikService.makeRequest(
+            connectionConfig,
+            '/rest/interface/pppoe-server/server',
+            'GET'
           );
-        }
 
-        const statusServer = statusServers.find((s: any) => s['service-name'] === serverName);
+          if (!Array.isArray(statusServers) || statusServers.length === 0) {
+            return NextResponse.json(
+              { error: 'No PPPoE servers found on router' },
+              { status: 404 }
+            );
+          }
 
-        if (!statusServer) {
-          return NextResponse.json(
-            { error: `PPPoE server '${serverName}' not found` },
-            { status: 404 }
+          const statusServer = statusServers.find((s: any) => s['service-name'] === serverName);
+
+          if (!statusServer) {
+            return NextResponse.json(
+              { error: `PPPoE server '${serverName}' not found` },
+              { status: 404 }
+            );
+          }
+
+          // CRITICAL: Extract and cache mikrotikId
+          const statusServerId = statusServer['.id'];
+
+          // Update cache in database if not present or different
+          if (!cachedMikrotikId || cachedMikrotikId !== statusServerId) {
+            await db.collection('routers').updateOne(
+              { _id: new ObjectId(routerId) },
+              {
+                $set: {
+                  'configuration.pppoe.servers': [
+                    {
+                      serviceName: serverName,
+                      mikrotikId: statusServerId,
+                      interface: statusServer.interface,
+                      lastUpdated: new Date(),
+                    },
+                  ],
+                  updatedAt: new Date(),
+                },
+              }
+            );
+            console.log(`[PPPoE] Updated cached server mikrotikId: ${statusServerId}`);
+          }
+
+          // Get active PPPoE users (WITH .id for session management)
+          const activeUsers = await MikroTikService.getActivePPPoEUsers(connectionConfig);
+
+          // Get PPP secrets (configured users) WITH .id
+          const secrets = await MikroTikService.makeRequest(
+            connectionConfig,
+            '/rest/ppp/secret',
+            'GET'
           );
+
+          result = {
+            success: true,
+            server: {
+              serviceName: statusServer['service-name'],
+              interface: statusServer.interface,
+              defaultProfile: statusServer['default-profile'],
+              disabled: statusServer.disabled === 'true',
+              oneSessionPerHost: statusServer['one-session-per-host'],
+              maxSessions: statusServer['max-sessions'],
+              mikrotikId: statusServerId, // ← CRITICAL: Include in response
+            },
+            activeUsers: activeUsers.length,
+            configuredUsers: Array.isArray(secrets) ? secrets.length : 0,
+            users: activeUsers.map((user: any) => ({
+              name: user.name,
+              address: user.address,
+              uptime: user.uptime,
+              service: user.service,
+              callerID: user['caller-id'],
+              encoding: user.encoding,
+              sessionId: user['.id'], // Already includes .id - good!
+            })),
+            // CRITICAL: Include configured secrets with mikrotikId
+            configuredSecrets: Array.isArray(secrets)
+              ? secrets.map((secret: any) => ({
+                  name: secret.name,
+                  profile: secret.profile,
+                  localAddress: secret['local-address'],
+                  remoteAddress: secret['remote-address'],
+                  disabled: secret.disabled === 'true',
+                  mikrotikId: secret['.id'], // ← CRITICAL: PPP secret .id
+                }))
+              : [],
+          };
+          actionDescription = `Retrieved PPPoE service status: ${serverName}`;
+        } catch (statusError) {
+          console.error('[PPPoE] Status fetch failed:', statusError);
+          throw statusError;
         }
-
-        // Get active PPPoE users
-        const activeUsers = await MikroTikService.getActivePPPoEUsers(connectionConfig);
-
-        // Get PPP secrets (configured users)
-        const secrets = await MikroTikService.makeRequest(
-          connectionConfig,
-          '/rest/ppp/secret',
-          'GET'
-        );
-
-        result = {
-          success: true,
-          server: {
-            serviceName: statusServer['service-name'],
-            interface: statusServer.interface,
-            defaultProfile: statusServer['default-profile'],
-            disabled: statusServer.disabled === 'true',
-            oneSessionPerHost: statusServer['one-session-per-host'],
-            maxSessions: statusServer['max-sessions'],
-          },
-          activeUsers: activeUsers.length,
-          configuredUsers: Array.isArray(secrets) ? secrets.length : 0,
-          users: activeUsers.map((user: any) => ({
-            name: user.name,
-            address: user.address,
-            uptime: user.uptime,
-            service: user.service,
-            callerID: user['caller-id'],
-            encoding: user.encoding,
-            sessionId: user['.id'],
-          })),
-        };
-        actionDescription = `Retrieved PPPoE service status: ${serverName}`;
         break;
     }
 
@@ -343,7 +497,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     return NextResponse.json(result);
   } catch (error) {
-    console.error('Error controlling PPPoE service:', error);
+    console.error('[PPPoE] Error controlling service:', error);
     return NextResponse.json(
       {
         error: 'Failed to control PPPoE service',
@@ -362,8 +516,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-  const userId = session.user.id;
-  const { id: routerId } = await params;
+    const userId = session.user.id;
+    const { id: routerId } = await params;
 
     // Validate ObjectId
     if (!ObjectId.isValid(routerId)) {
@@ -395,14 +549,16 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: 'Router not found' }, { status: 404 });
     }
 
-    // Return PPPoE configuration from database
+    // Return PPPoE configuration from database (including cached mikrotikIds)
     return NextResponse.json({
       success: true,
       pppoe: router.configuration?.pppoe || {},
       enabled: router.configuration?.pppoe?.enabled || false,
+      // Include cached server info with mikrotikIds
+      servers: router.configuration?.pppoe?.servers || [],
     });
   } catch (error) {
-    console.error('Error fetching PPPoE info:', error);
+    console.error('[PPPoE] Error fetching info:', error);
     return NextResponse.json(
       {
         error: 'Failed to fetch PPPoE information',

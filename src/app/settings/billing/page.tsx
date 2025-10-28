@@ -28,8 +28,8 @@ export default async function BillingSettingsPage() {
           </a>
         </Button>
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Billing Settings</h1>
-          <p className="text-gray-600 mt-1">
+          <h1 className="text-2xl font-bold text-foreground">Billing Settings</h1>
+          <p className="text-muted-foreground mt-1">
             Manage payment methods, billing address, and commission settings
           </p>
         </div>

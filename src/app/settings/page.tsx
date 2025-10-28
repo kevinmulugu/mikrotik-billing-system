@@ -32,11 +32,11 @@ export default async function SettingsPage() {
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+        <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
           <Settings className="h-6 w-6 text-blue-600" />
           Settings
         </h1>
-        <p className="text-gray-600 mt-1">
+        <p className="text-muted-foreground mt-1">
           Manage your account settings and preferences
         </p>
       </div>
@@ -51,10 +51,10 @@ export default async function SettingsPage() {
               <CardTitle>Profile Settings</CardTitle>
             </CardHeader>
             <CardContent className="text-center">
-              <p className="text-gray-600 mb-4">
+              <p className="text-muted-foreground mb-4">
                 Update your personal information, contact details, and business info
               </p>
-              <div className="text-sm text-gray-500">
+              <div className="text-sm text-muted-foreground">
                 Name, Email, Phone, Business Details
               </div>
             </CardContent>
@@ -69,10 +69,10 @@ export default async function SettingsPage() {
               <CardTitle>Notifications</CardTitle>
             </CardHeader>
             <CardContent className="text-center">
-              <p className="text-gray-600 mb-4">
+              <p className="text-muted-foreground mb-4">
                 Configure email, SMS, and push notification preferences
               </p>
-              <div className="text-sm text-gray-500">
+              <div className="text-sm text-muted-foreground">
                 Email, SMS, Push Notifications
               </div>
             </CardContent>
@@ -87,10 +87,10 @@ export default async function SettingsPage() {
               <CardTitle>Billing Settings</CardTitle>
             </CardHeader>
             <CardContent className="text-center">
-              <p className="text-gray-600 mb-4">
+              <p className="text-muted-foreground mb-4">
                 Manage payment methods, billing address, and commission settings
               </p>
-              <div className="text-sm text-gray-500">
+              <div className="text-sm text-muted-foreground">
                 Payment Methods, Commission Rates
               </div>
             </CardContent>
@@ -105,10 +105,10 @@ export default async function SettingsPage() {
               <CardTitle>Security</CardTitle>
             </CardHeader>
             <CardContent className="text-center">
-              <p className="text-gray-600 mb-4">
+              <p className="text-muted-foreground mb-4">
                 Password, two-factor authentication, and login activity
               </p>
-              <div className="text-sm text-gray-500">
+              <div className="text-sm text-muted-foreground">
                 Password, 2FA, Login History
               </div>
             </CardContent>
@@ -122,7 +122,7 @@ export default async function SettingsPage() {
             <CardTitle>Language & Region</CardTitle>
           </CardHeader>
           <CardContent className="text-center">
-            <p className="text-gray-600 mb-4">
+            <p className="text-muted-foreground mb-4">
               Set your preferred language, timezone, and currency
             </p>
             <div className="flex justify-center gap-2">
@@ -139,7 +139,7 @@ export default async function SettingsPage() {
             <CardTitle>App Preferences</CardTitle>
           </CardHeader>
           <CardContent className="text-center">
-            <p className="text-gray-600 mb-4">
+            <p className="text-muted-foreground mb-4">
               Theme, dashboard layout, and display preferences
             </p>
             <div className="flex justify-center gap-2">
@@ -163,7 +163,7 @@ export default async function SettingsPage() {
                   <Mail className="h-5 w-5 text-blue-600" />
                   <div>
                     <p className="font-medium">Email Notifications</p>
-                    <p className="text-sm text-gray-600">Receive updates via email</p>
+                    <p className="text-sm text-muted-foreground">Receive updates via email</p>
                   </div>
                 </div>
                 <Button size="sm" variant="outline">Configure</Button>
@@ -174,7 +174,7 @@ export default async function SettingsPage() {
                   <Smartphone className="h-5 w-5 text-green-600" />
                   <div>
                     <p className="font-medium">SMS Alerts</p>
-                    <p className="text-sm text-gray-600">Critical alerts via SMS</p>
+                    <p className="text-sm text-muted-foreground">Critical alerts via SMS</p>
                   </div>
                 </div>
                 <Button size="sm" variant="outline">Configure</Button>
@@ -187,7 +187,7 @@ export default async function SettingsPage() {
                   <Lock className="h-5 w-5 text-red-600" />
                   <div>
                     <p className="font-medium">Two-Factor Authentication</p>
-                    <p className="text-sm text-gray-600">Extra security for your account</p>
+                    <p className="text-sm text-muted-foreground">Extra security for your account</p>
                   </div>
                 </div>
                 <Button size="sm" variant="outline">Enable</Button>
@@ -198,7 +198,7 @@ export default async function SettingsPage() {
                   <CreditCard className="h-5 w-5 text-purple-600" />
                   <div>
                     <p className="font-medium">Payment Method</p>
-                    <p className="text-sm text-gray-600">Company Paybill (15% commission)</p>
+                    <p className="text-sm text-muted-foreground">Company Paybill (15% commission)</p>
                   </div>
                 </div>
                 <Button size="sm" variant="outline">Change</Button>

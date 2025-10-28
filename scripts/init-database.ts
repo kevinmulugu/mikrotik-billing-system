@@ -1,5 +1,19 @@
 // scripts/init-database.ts
-import { MongoClient } from 'mongodb';
+/**
+ * Comprehensive Database Initialization Script
+ * 
+ * This script initializes the entire MongoDB database including:
+ * - All collections
+ * - All indexes (including ticket-specific indexes)
+ * - VPN infrastructure (tunnels, IP pool, server config)
+ * - Validation rules
+ * - Default system configuration
+ * 
+ * Usage: pnpm db:init
+ * Command: npx tsx scripts/init-database.ts
+ */
+
+import { MongoClient, Db, ObjectId } from 'mongodb';
 import * as dotenv from 'dotenv';
 import * as path from 'path';
 
@@ -13,8 +27,125 @@ if (!MONGODB_URI) {
   throw new Error('Please define MONGODB_URI in .env.local');
 }
 
+// ============================================
+// HELPER FUNCTIONS
+// ============================================
+
+/**
+ * Get SLA times based on ticket priority
+ */
+function getSLATimes(priority: string) {
+  const slaMapping: Record<string, { responseTime: number; resolutionTime: number }> = {
+    urgent: { responseTime: 1, resolutionTime: 4 },
+    high: { responseTime: 2, resolutionTime: 24 },
+    medium: { responseTime: 4, resolutionTime: 48 },
+    low: { responseTime: 24, resolutionTime: 72 },
+  };
+  return slaMapping[priority] || slaMapping.medium;
+}
+
+/**
+ * Create ticket-specific indexes
+ */
+async function createTicketIndexes(db: Db) {
+  const collection = db.collection('tickets');
+
+  console.log('  📋 Creating ticket indexes...');
+
+  // Single field indexes
+  await collection.createIndex({ customerId: 1 });
+  console.log('    ✓ customerId');
+
+  await collection.createIndex({ userId: 1 });
+  console.log('    ✓ userId');
+
+  await collection.createIndex({ routerId: 1 });
+  console.log('    ✓ routerId');
+
+  await collection.createIndex({ status: 1 });
+  console.log('    ✓ status');
+
+  await collection.createIndex({ createdAt: -1 });
+  console.log('    ✓ createdAt (desc)');
+
+  await collection.createIndex({ 'sla.breachedSla': 1 });
+  console.log('    ✓ sla.breachedSla');
+
+  // Compound indexes for common queries
+  await collection.createIndex({ customerId: 1, status: 1 });
+  console.log('    ✓ customerId + status (compound)');
+
+  await collection.createIndex({ status: 1, 'ticket.priority': 1 });
+  console.log('    ✓ status + ticket.priority (compound)');
+
+  // Text search index for ticket content
+  await collection.createIndex(
+    { 'ticket.title': 'text', 'ticket.description': 'text' },
+    { name: 'ticket_text_search' }
+  );
+  console.log('    ✓ ticket.title + ticket.description (text search)');
+}
+
+/**
+ * Get ticket statistics helper function
+ */
+async function getTicketStatistics(db: Db, customerId: string) {
+  const collection = db.collection('tickets');
+
+  const stats = await collection.aggregate([
+    {
+      $match: { customerId: new ObjectId(customerId) }
+    },
+    {
+      $group: {
+        _id: null,
+        total: { $sum: 1 },
+        open: {
+          $sum: { $cond: [{ $eq: ['$status', 'open'] }, 1, 0] }
+        },
+        inProgress: {
+          $sum: { $cond: [{ $eq: ['$status', 'in_progress'] }, 1, 0] }
+        },
+        resolved: {
+          $sum: { $cond: [{ $eq: ['$status', 'resolved'] }, 1, 0] }
+        },
+        breachedSla: {
+          $sum: { $cond: ['$sla.breachedSla', 1, 0] }
+        },
+        avgResponseTime: {
+          $avg: {
+            $cond: [
+              { $ne: ['$sla.firstResponseAt', null] },
+              {
+                $divide: [
+                  { $subtract: ['$sla.firstResponseAt', '$createdAt'] },
+                  3600000 // Convert to hours
+                ]
+              },
+              null
+            ]
+          }
+        }
+      }
+    }
+  ]).toArray();
+
+  return stats[0] || {
+    total: 0,
+    open: 0,
+    inProgress: 0,
+    resolved: 0,
+    breachedSla: 0,
+    avgResponseTime: 0
+  };
+}
+
+// ============================================
+// MAIN INITIALIZATION FUNCTION
+// ============================================
+
 async function initializeDatabase() {
-  console.log('🚀 Starting database initialization...\n');
+  console.log('🚀 Starting comprehensive database initialization...\n');
 
   const client = new MongoClient(MONGODB_URI as string);
 
@@ -25,11 +156,11 @@ async function initializeDatabase() {
     const db = client.db(MONGODB_DB_NAME);
 
     // ==========================================
-    // 1. CREATE COLLECTIONS
+    // 1. CREATE CORE COLLECTIONS
     // ==========================================
-    console.log('📦 Creating collections...');
+    console.log('📦 Creating core collections...');
 
-    const collections = [
+    const coreCollections = [
       'users',
       'accounts',
       'sessions',
@@ -50,7 +181,7 @@ async function initializeDatabase() {
       'system_config',
     ];
 
-    for (const collectionName of collections) {
+    for (const collectionName of coreCollections) {
       const exists = await db.listCollections({ name: collectionName }).hasNext();
       if (!exists) {
         await db.createCollection(collectionName);
@@ -63,9 +194,97 @@ async function initializeDatabase() {
     console.log('\n');
 
     // ==========================================
-    // 2. CREATE INDEXES
+    // 2. CREATE VPN COLLECTIONS
     // ==========================================
-    console.log('🔍 Creating indexes...\n');
+    console.log('🔐 Creating VPN collections...\n');
+
+    // VPN Tunnels Collection with validation
+    const vpnTunnelsExists = await db.listCollections({ name: 'vpn_tunnels' }).hasNext();
+    if (!vpnTunnelsExists) {
+      await db.createCollection('vpn_tunnels', {
+        validator: {
+          $jsonSchema: {
+            bsonType: 'object',
+            required: ['routerId', 'customerId', 'vpnConfig', 'connection'],
+            properties: {
+              routerId: { bsonType: 'objectId', description: 'Reference to routers collection' },
+              customerId: { bsonType: 'objectId', description: 'Reference to customers collection' },
+              vpnConfig: {
+                bsonType: 'object',
+                required: ['clientPublicKey', 'assignedIP', 'endpoint'],
+                properties: {
+                  clientPrivateKey: { bsonType: 'string' },
+                  clientPublicKey: { bsonType: 'string' },
+                  serverPublicKey: { bsonType: 'string' },
+                  assignedIP: { bsonType: 'string' },
+                  endpoint: { bsonType: 'string' },
+                  allowedIPs: { bsonType: 'string' },
+                  persistentKeepalive: { bsonType: 'int' }
+                }
+              },
+              connection: {
+                bsonType: 'object',
+                properties: {
+                  status: { enum: ['connected', 'disconnected', 'setup', 'failed'] },
+                  lastHandshake: { bsonType: 'date' },
+                  bytesReceived: { bsonType: 'long' },
+                  bytesSent: { bsonType: 'long' },
+                  lastSeen: { bsonType: 'date' }
+                }
+              },
+              createdAt: { bsonType: 'date' },
+              updatedAt: { bsonType: 'date' }
+            }
+          }
+        }
+      });
+      console.log('  ✓ Created vpn_tunnels collection with validation');
+    } else {
+      console.log('  ⊙ vpn_tunnels collection already exists');
+    }
+
+    // VPN Setup Tokens Collection
+    const vpnSetupTokensExists = await db.listCollections({ name: 'vpn_setup_tokens' }).hasNext();
+    if (!vpnSetupTokensExists) {
+      await db.createCollection('vpn_setup_tokens');
+      console.log('  ✓ Created vpn_setup_tokens collection');
+    } else {
+      console.log('  ⊙ vpn_setup_tokens collection already exists');
+    }
+
+    // VPN IP Pool Collection
+    const vpnIpPoolExists = await db.listCollections({ name: 'vpn_ip_pool' }).hasNext();
+    if (!vpnIpPoolExists) {
+      await db.createCollection('vpn_ip_pool');
+      console.log('  ✓ Created vpn_ip_pool collection');
+
+      // Initialize VPN IP pool
+      await db.collection('vpn_ip_pool').insertOne({
+        network: '10.99.0.0/16',
+        reserved: {
+          '10.99.0.1': 'VPN Server',
+          '10.99.0.2': 'Reserved',
+          '10.99.0.255': 'Reserved',
+          '10.99.255.255': 'Broadcast'
+        },
+        assigned: {},
+        nextAvailable: '10.99.1.1',
+        totalCapacity: 65534,
+        usedCount: 0,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      });
+      console.log('  ✓ Initialized VPN IP pool (10.99.0.0/16)');
+    } else {
+      console.log('  ⊙ vpn_ip_pool collection already exists');
+    }
+
+    console.log('\n');
+
+    // ==========================================
+    // 3. CREATE CORE INDEXES
+    // ==========================================
+    console.log('🔑 Creating core indexes...\n');
 
     // Users collection indexes
     console.log('  Users indexes:');
@@ -139,6 +358,14 @@ async function initializeDatabase() {
     console.log('    ✓ status');
     await db.collection('routers').createIndex({ 'connection.ipAddress': 1 });
     console.log('    ✓ connection.ipAddress');
+    await db.collection('routers').createIndex({ 'vpnTunnel.assignedVPNIP': 1 });
+    console.log('    ✓ vpnTunnel.assignedVPNIP');
+    await db.collection('routers').createIndex({ 'vpnTunnel.status': 1 });
+    console.log('    ✓ vpnTunnel.status');
+    await db.collection('routers').createIndex({ 'vpnTunnel.enabled': 1 });
+    console.log('    ✓ vpnTunnel.enabled');
+    await db.collection('routers').createIndex({ 'connection.preferVPN': 1 });
+    console.log('    ✓ connection.preferVPN');
 
     // Vouchers collection indexes
     console.log('\n  Vouchers indexes:');
@@ -216,49 +443,33 @@ async function initializeDatabase() {
     await db.collection('paybills').createIndex({ status: 1 });
     console.log('    ✓ status');
 
-    // Tickets collection indexes
-    console.log('\n  Tickets indexes:');
-    await db.collection('tickets').createIndex({ customerId: 1 });
-    console.log('    ✓ customerId');
-    await db.collection('tickets').createIndex({ userId: 1 });
-    console.log('    ✓ userId');
-    await db.collection('tickets').createIndex({ 'assignment.assignedTo': 1 });
-    console.log('    ✓ assignment.assignedTo');
-    await db.collection('tickets').createIndex({ status: 1 });
-    console.log('    ✓ status');
-    await db.collection('tickets').createIndex({ 'ticket.priority': 1 });
-    console.log('    ✓ ticket.priority');
-    await db.collection('tickets').createIndex({ createdAt: -1 });
-    console.log('    ✓ createdAt (desc)');
+    // Create ticket indexes using helper function
+    console.log('\n');
+    await createTicketIndexes(db);
 
     // Audit logs collection indexes
     console.log('\n  Audit Logs indexes:');
-    await db.collection('audit_logs').createIndex({ 'user.userId': 1 });
-    console.log('    ✓ user.userId');
+    await db.collection('audit_logs').createIndex({ userId: 1 });
+    console.log('    ✓ userId');
+    await db.collection('audit_logs').createIndex({ customerId: 1 });
+    console.log('    ✓ customerId');
     await db.collection('audit_logs').createIndex({ 'action.type': 1 });
     console.log('    ✓ action.type');
-    await db.collection('audit_logs').createIndex({ 'action.resource': 1 });
-    console.log('    ✓ action.resource');
     await db.collection('audit_logs').createIndex({ timestamp: -1 });
     console.log('    ✓ timestamp (desc)');
-    await db.collection('audit_logs').createIndex({ 'metadata.correlationId': 1 });
-    console.log('    ✓ metadata.correlationId');
-    await db.collection('audit_logs').createIndex(
-      { timestamp: 1 },
-      { expireAfterSeconds: 63072000 } // 2 years
-    );
-    console.log('    ✓ timestamp (TTL - 2 years)');
+    await db.collection('audit_logs').createIndex({ 'metadata.ipAddress': 1 });
+    console.log('    ✓ metadata.ipAddress');
 
     // Notifications collection indexes
     console.log('\n  Notifications indexes:');
-    await db.collection('notifications').createIndex({ 'recipient.userId': 1 });
-    console.log('    ✓ recipient.userId');
-    await db.collection('notifications').createIndex({ 'recipient.customerId': 1 });
-    console.log('    ✓ recipient.customerId');
+    await db.collection('notifications').createIndex({ userId: 1 });
+    console.log('    ✓ userId');
+    await db.collection('notifications').createIndex({ customerId: 1 });
+    console.log('    ✓ customerId');
     await db.collection('notifications').createIndex({ 'notification.type': 1 });
     console.log('    ✓ notification.type');
-    await db.collection('notifications').createIndex({ status: 1 });
-    console.log('    ✓ status');
+    await db.collection('notifications').createIndex({ 'status.read': 1 });
+    console.log('    ✓ status.read');
     await db.collection('notifications').createIndex({ createdAt: -1 });
     console.log('    ✓ createdAt (desc)');
 
@@ -268,13 +479,13 @@ async function initializeDatabase() {
     console.log('    ✓ routerId');
     await db.collection('router_health').createIndex({ timestamp: -1 });
     console.log('    ✓ timestamp (desc)');
-    await db.collection('router_health').createIndex({ 'metrics.status': 1 });
-    console.log('    ✓ metrics.status');
+    await db.collection('router_health').createIndex({ 'health.isOnline': 1 });
+    console.log('    ✓ health.isOnline');
     await db.collection('router_health').createIndex(
       { timestamp: 1 },
-      { expireAfterSeconds: 7776000 } // 90 days
+      { expireAfterSeconds: 2592000 } // 30 days
     );
-    console.log('    ✓ timestamp (TTL - 90 days)');
+    console.log('    ✓ timestamp (TTL - 30 days)');
 
     // Usage analytics collection indexes
     console.log('\n  Usage Analytics indexes:');
@@ -321,12 +532,53 @@ async function initializeDatabase() {
     console.log('\n');
 
     // ==========================================
-    // 3. INSERT DEFAULT SYSTEM CONFIGURATION
+    // 4. CREATE VPN INDEXES
+    // ==========================================
+    console.log('🔐 Creating VPN indexes...\n');
+
+    // VPN tunnels indexes
+    console.log('  VPN Tunnels indexes:');
+    await db.collection('vpn_tunnels').createIndex({ routerId: 1 }, { unique: true });
+    console.log('    ✓ routerId (unique)');
+    await db.collection('vpn_tunnels').createIndex({ 'vpnConfig.assignedIP': 1 }, { unique: true });
+    console.log('    ✓ vpnConfig.assignedIP (unique)');
+    await db.collection('vpn_tunnels').createIndex({ 'vpnConfig.clientPublicKey': 1 }, { unique: true });
+    console.log('    ✓ vpnConfig.clientPublicKey (unique)');
+    await db.collection('vpn_tunnels').createIndex({ 'connection.status': 1 });
+    console.log('    ✓ connection.status');
+    await db.collection('vpn_tunnels').createIndex({ customerId: 1 });
+    console.log('    ✓ customerId');
+    await db.collection('vpn_tunnels').createIndex({ 'connection.lastSeen': 1 });
+    console.log('    ✓ connection.lastSeen');
+
+    // VPN setup tokens indexes
+    console.log('\n  VPN Setup Tokens indexes:');
+    await db.collection('vpn_setup_tokens').createIndex({ token: 1 }, { unique: true });
+    console.log('    ✓ token (unique)');
+    await db.collection('vpn_setup_tokens').createIndex({ 'vpnConfig.vpnIP': 1 }, { unique: true });
+    console.log('    ✓ vpnConfig.vpnIP (unique)');
+    await db.collection('vpn_setup_tokens').createIndex({ status: 1 });
+    console.log('    ✓ status');
+    await db.collection('vpn_setup_tokens').createIndex(
+      { createdAt: 1 },
+      { expireAfterSeconds: 3600 } // 1 hour TTL
+    );
+    console.log('    ✓ createdAt (TTL - 1 hour)');
+
+    // VPN IP pool indexes
+    console.log('\n  VPN IP Pool indexes:');
+    await db.collection('vpn_ip_pool').createIndex({ network: 1 }, { unique: true });
+    console.log('    ✓ network (unique)');
+
+    console.log('\n');
+
+    // ==========================================
+    // 5. INSERT DEFAULT SYSTEM CONFIGURATION
     // ==========================================
     console.log('⚙️  Inserting default system configuration...\n');
 
     const configExists = await db.collection('system_config').countDocuments();
-    
+
     if (configExists === 0) {
       await db.collection('system_config').insertMany([
         {
@@ -434,11 +686,42 @@ async function initializeDatabase() {
             environment: 'production',
           },
         },
+        {
+          category: 'vpn',
+          key: 'wireguard_server',
+          value: {
+            serverPublicKey: process.env.VPN_SERVER_PUBLIC_KEY || 'YOUR_SERVER_PUBLIC_KEY_HERE',
+            endpoint: process.env.VPN_SERVER_ENDPOINT || 'vpn.yourdomain.com:51820',
+            ipPool: {
+              network: '10.99.0.0/16',
+              serverIP: '10.99.0.1',
+              clientRangeStart: '10.99.1.1',
+              clientRangeEnd: '10.99.255.254'
+            },
+            settings: {
+              persistentKeepalive: 25,
+              allowedIPs: '10.99.0.0/16',
+              mtu: 1420,
+              listenPort: 51820
+            }
+          },
+          encrypted: false,
+          description: 'WireGuard VPN server configuration for router management',
+          metadata: {
+            lastModified: new Date(),
+            modifiedBy: null,
+            version: 1,
+            environment: 'production'
+          },
+          createdAt: new Date(),
+          updatedAt: new Date()
+        },
       ]);
 
       console.log('  ✓ Commission rates');
       console.log('  ✓ Default voucher packages');
       console.log('  ✓ M-Pesa settings');
+      console.log('  ✓ VPN server configuration');
     } else {
       console.log('  ⊙ System configuration already exists');
     }
@@ -446,7 +729,7 @@ async function initializeDatabase() {
     console.log('\n');
 
     // ==========================================
-    // 4. VALIDATION RULES
+    // 6. VALIDATION RULES
     // ==========================================
     console.log('✔️  Setting up validation rules...\n');
 
@@ -498,15 +781,96 @@ async function initializeDatabase() {
     });
     console.log('  ✓ Payments validation');
 
+    // Update routers collection schema with VPN fields
+    await db.command({
+      collMod: 'routers',
+      validator: {
+        $jsonSchema: {
+          bsonType: 'object',
+          required: ['customerId', 'routerInfo', 'connection', 'configuration', 'health'],
+          properties: {
+            customerId: { bsonType: 'objectId' },
+            routerInfo: { bsonType: 'object' },
+            connection: {
+              bsonType: 'object',
+              properties: {
+                localIP: { bsonType: 'string' },
+                vpnIP: { bsonType: ['string', 'null'] },
+                preferVPN: { bsonType: 'bool' },
+                ipAddress: { bsonType: 'string' },
+                port: { bsonType: 'int' },
+                apiUser: { bsonType: 'string' },
+                apiPassword: { bsonType: 'string' },
+                restApiEnabled: { bsonType: 'bool' },
+                sshEnabled: { bsonType: 'bool' }
+              }
+            },
+            vpnTunnel: {
+              bsonType: 'object',
+              properties: {
+                enabled: { bsonType: 'bool' },
+                clientPublicKey: { bsonType: ['string', 'null'] },
+                serverPublicKey: { bsonType: ['string', 'null'] },
+                assignedVPNIP: { bsonType: ['string', 'null'] },
+                status: { enum: ['connected', 'disconnected', 'setup', 'failed', 'pending'] },
+                lastHandshake: { bsonType: ['date', 'null'] },
+                provisionedAt: { bsonType: ['date', 'null'] },
+                error: { bsonType: ['string', 'null'] },
+                lastAttempt: { bsonType: ['date', 'null'] }
+              }
+            },
+            configuration: { bsonType: 'object' },
+            health: { bsonType: 'object' },
+            statistics: { bsonType: 'object' },
+            status: { bsonType: 'string' }
+          }
+        }
+      }
+    });
+    console.log('  ✓ Routers validation (with VPN support)');
+
     console.log('\n✅ Database initialization completed successfully!\n');
 
-    // Show summary
+    // ==========================================
+    // 7. SHOW SUMMARY
+    // ==========================================
     console.log('📊 Summary:');
     console.log(`  Database: ${MONGODB_DB_NAME}`);
-    console.log(`  Collections: ${collections.length}`);
+    console.log(`  Core Collections: ${coreCollections.length}`);
+    console.log(`  VPN Collections: 3 (vpn_tunnels, vpn_setup_tokens, vpn_ip_pool)`);
+    console.log(`  Total Collections: ${coreCollections.length + 3}`);
     console.log(`  Indexes: Created with TTL where applicable`);
-    console.log(`  Configuration: Default settings inserted`);
-    console.log('\n🎉 Your MikroTik Billing database is ready!\n');
+    console.log(`  Configuration: Default settings + VPN config inserted`);
+    console.log(`  Ticket System: Full-text search enabled`);
+    console.log(`  VPN Infrastructure: WireGuard ready`);
+
+    console.log('\n📋 Next Steps:');
+    console.log('  1. Update VPN_SERVER_PUBLIC_KEY in .env.local');
+    console.log('  2. Update VPN_SERVER_ENDPOINT in .env.local');
+    console.log('  3. Configure WireGuard on your VPN server');
+    console.log('  4. Test router onboarding with VPN');
+    console.log('  5. Monitor VPN tunnels in admin dashboard');
+
+    console.log('\n🎉 Your MikroTik Billing database is fully initialized!\n');
+
+    // ==========================================
+    // 8. HELPER FUNCTIONS FOR LATER USE
+    // ==========================================
+    console.log('💡 Available helper functions in mongodb-helpers.ts:');
+    console.log('  - TicketHelpers.getStatistics(customerId)');
+    console.log('  - TicketHelpers.checkSLABreach(ticket)');
+    console.log('  - TicketHelpers.getSLATimes(priority)');
+    console.log('  - UserHelpers.findById(userId)');
+    console.log('  - RouterHelpers.findByIdAndCustomer(routerId, customerId)');
+    console.log('  - CustomerHelpers.findById(customerId)');
+
+    console.log('\n🔍 VPN Management Functions:');
+    console.log('  Run these in MongoDB shell for VPN monitoring:');
+    console.log('  - db.vpn_tunnels.find({ "connection.status": "connected" }).count()');
+    console.log('  - db.vpn_tunnels.find({ "connection.status": "failed" })');
+    console.log('  - db.vpn_ip_pool.findOne() // Check IP pool usage');
+    console.log('  - db.routers.find({ "vpnTunnel.enabled": true }).count()');
+
   } catch (error) {
     console.error('❌ Error initializing database:', error);
     process.exit(1);

@@ -1,4 +1,4 @@
-// src/app/api/routers/[id]/sync/route.ts
+// src/app/api/routers/[id]/sync/route.ts - Enhanced Router Sync with MikroTik .id Validation
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
@@ -13,16 +13,31 @@ interface RouteParams {
   }>;
 }
 
+interface DriftItem {
+  configType: string;
+  configName: string;
+  issue: string;
+  mikrotikId?: string;
+  actualMikrotikId?: string;
+}
+
+interface UnmanagedResource {
+  configType: string;
+  name: string;
+  mikrotikId: string;
+  canAdopt: boolean;
+}
+
 export async function POST(request: NextRequest, { params }: RouteParams) {
   try {
     const session = await getServerSession(authOptions);
-    
+
     if (!session?.user?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-  const userId = session.user.id;
-  const { id: routerId } = await params;
+    const userId = session.user.id;
+    const { id: routerId } = await params;
 
     // Validate ObjectId
     if (!ObjectId.isValid(routerId)) {
@@ -43,24 +58,16 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     }
 
     // Fetch router
-    const router = await db
-      .collection('routers')
-      .findOne({
-        _id: new ObjectId(routerId),
-        customerId: customer._id,
-      });
+    const router = await db.collection('routers').findOne({
+      _id: new ObjectId(routerId),
+      customerId: customer._id,
+    });
 
     if (!router) {
       return NextResponse.json({ error: 'Router not found' }, { status: 404 });
     }
 
     // Prepare connection config
-    // const connectionConfig = {
-    //   ipAddress: router.connection?.ipAddress || '',
-    //   port: router.connection?.port || 8728,
-    //   username: router.connection?.apiUser || 'admin',
-    //   password: MikroTikService.decryptPassword(router.connection?.apiPassword || ''),
-    // };
     const connectionConfig = getRouterConnectionConfig(router, {
       forceLocal: false,
       forceVPN: true,
@@ -117,7 +124,12 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       hotspotServer: false,
       wanStatus: false,
       internetConnectivity: false,
+      configValidation: false,
     };
+
+    // Drift detection results
+    const drifts: DriftItem[] = [];
+    const unmanagedResources: UnmanagedResource[] = [];
 
     // ============================================
     // 1. Get active users count
@@ -140,7 +152,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     // ============================================
     try {
       const interfaces = await MikroTikService.getInterfaces(connectionConfig);
-      
+
       const networkInterfaces = interfaces.map((iface: any) => ({
         name: iface.name,
         type: iface.type || 'unknown',
@@ -162,7 +174,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     // ============================================
     try {
       const bridgePorts = await MikroTikService.getBridgePorts(connectionConfig);
-      
+
       const bridgePortsData = bridgePorts.map((port: any) => ({
         interface: port.interface,
         bridge: port.bridge,
@@ -245,13 +257,13 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       const dhcpLeases = await MikroTikService.getDHCPLeases(connectionConfig);
 
       // Hotspot DHCP
-      const hotspotServer = dhcpServers.find((s: any) => 
-        s.name === 'hotspot-dhcp' || s.interface === 'bridge'
+      const hotspotServer = dhcpServers.find(
+        (s: any) => s.name === 'hotspot-dhcp' || s.interface === 'bridge'
       );
 
       if (hotspotServer) {
-        const hotspotLeases = dhcpLeases.filter((l: any) => 
-          l['active-server'] === hotspotServer.name
+        const hotspotLeases = dhcpLeases.filter(
+          (l: any) => l['active-server'] === hotspotServer.name
         );
 
         updateFields['dhcpStatus.hotspot'] = {
@@ -264,14 +276,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       }
 
       // LAN DHCP
-      const lanServer = dhcpServers.find((s: any) => 
-        s.name === 'defconf' || s.name === 'dhcp1'
-      );
+      const lanServer = dhcpServers.find((s: any) => s.name === 'defconf' || s.name === 'dhcp1');
 
       if (lanServer) {
-        const lanLeases = dhcpLeases.filter((l: any) => 
-          l['active-server'] === lanServer.name
-        );
+        const lanLeases = dhcpLeases.filter((l: any) => l['active-server'] === lanServer.name);
 
         updateFields['dhcpStatus.lan'] = {
           serverName: lanServer.name,
@@ -293,9 +301,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     if (router.configuration?.hotspot?.enabled) {
       try {
         const hotspotServers = await MikroTikService.getHotspotServers(connectionConfig);
-        
-        const hotspotServer = hotspotServers.find((s: any) => 
-          s.name === 'hotspot1' || s.interface === 'bridge'
+
+        const hotspotServer = hotspotServers.find(
+          (s: any) => s.name === 'hotspot1' || s.interface === 'bridge'
         );
 
         if (hotspotServer) {
@@ -343,29 +351,376 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     }
 
     // ============================================
-    // 9. Test Internet Connectivity
-    // ============================================
-    // try {
-    //   const internetConnected = await MikroTikService.testInternetConnection(connectionConfig);
-      
-    //   updateFields['health.internetConnectivity'] = {
-    //     isConnected: internetConnected,
-    //     lastChecked: new Date(),
-    //   };
-    //   syncResults.internetConnectivity = true;
-    // } catch (error) {
-    //   console.error('Failed to test internet connectivity:', error);
-    // }
-    // ============================================
     // 9. Router connectivity already verified
     // ============================================
-    // Skip internet connectivity test - causes timeouts with tool/ping endpoint
-    // Router connection already confirmed by testConnection() at the start
     updateFields['health.internetConnectivity'] = {
-      isConnected: true, // Assume connected if router responds to API calls
+      isConnected: true,
       lastChecked: new Date(),
     };
     syncResults.internetConnectivity = true;
+
+    // ============================================
+    // 10. VALIDATE DEPLOYED CONFIGURATIONS WITH .ID
+    // ============================================
+    try {
+      // Validate IP Pools
+      if (router.configuration?.deployedConfigs?.ipPools) {
+        const actualPools = await MikroTikService.makeRequest(
+          connectionConfig,
+          '/rest/ip/pool',
+          'GET'
+        );
+
+        for (const deployedPool of router.configuration.deployedConfigs.ipPools) {
+          let actualPool = null;
+
+          // Try to find by .id first (most reliable)
+          if (deployedPool.mikrotikId && Array.isArray(actualPools)) {
+            actualPool = actualPools.find((p: any) => p['.id'] === deployedPool.mikrotikId);
+          }
+
+          // Fallback to name matching
+          if (!actualPool && Array.isArray(actualPools)) {
+            actualPool = actualPools.find((p: any) => p.name === deployedPool.name);
+
+            // If found by name but .id differs, it was recreated
+            if (actualPool && actualPool['.id'] !== deployedPool.mikrotikId) {
+              drifts.push({
+                configType: 'ip-pool',
+                configName: deployedPool.name,
+                issue: 'Resource was deleted and recreated (different .id)',
+                mikrotikId: deployedPool.mikrotikId,
+                actualMikrotikId: actualPool['.id'],
+              });
+
+              // Update with new .id
+              await db.collection('routers').updateOne(
+                {
+                  _id: new ObjectId(routerId),
+                  'configuration.deployedConfigs.ipPools.name': deployedPool.name,
+                },
+                {
+                  $set: {
+                    'configuration.deployedConfigs.ipPools.$.mikrotikId': actualPool['.id'],
+                    'configuration.deployedConfigs.ipPools.$.lastChecked': new Date(),
+                    'configuration.deployedConfigs.ipPools.$.status': 'drift',
+                  },
+                }
+              );
+            }
+          }
+
+          if (!actualPool) {
+            drifts.push({
+              configType: 'ip-pool',
+              configName: deployedPool.name,
+              issue: deployedPool.mikrotikId
+                ? 'Configuration missing on router (was deleted)'
+                : 'Configuration missing on router',
+              mikrotikId: deployedPool.mikrotikId,
+            });
+
+            // Mark as error status
+            await db.collection('routers').updateOne(
+              {
+                _id: new ObjectId(routerId),
+                'configuration.deployedConfigs.ipPools.name': deployedPool.name,
+              },
+              {
+                $set: {
+                  'configuration.deployedConfigs.ipPools.$.lastChecked': new Date(),
+                  'configuration.deployedConfigs.ipPools.$.status': 'error',
+                },
+              }
+            );
+          } else if (actualPool['.id'] === deployedPool.mikrotikId) {
+            // Update lastChecked for valid configs
+            await db.collection('routers').updateOne(
+              {
+                _id: new ObjectId(routerId),
+                'configuration.deployedConfigs.ipPools.name': deployedPool.name,
+              },
+              {
+                $set: {
+                  'configuration.deployedConfigs.ipPools.$.lastChecked': new Date(),
+                  'configuration.deployedConfigs.ipPools.$.status': 'active',
+                },
+              }
+            );
+          }
+        }
+
+        // Find unmanaged IP pools
+        if (Array.isArray(actualPools)) {
+          const managedIds = router.configuration.deployedConfigs.ipPools
+            .map((p: any) => p.mikrotikId)
+            .filter(Boolean);
+
+          for (const pool of actualPools) {
+            if (!managedIds.includes(pool['.id'])) {
+              unmanagedResources.push({
+                configType: 'ip-pool',
+                name: pool.name,
+                mikrotikId: pool['.id'],
+                canAdopt: true,
+              });
+            }
+          }
+        }
+      }
+
+      // Validate Hotspot Servers
+      if (router.configuration?.deployedConfigs?.hotspotServers) {
+        const actualHotspots = await MikroTikService.makeRequest(
+          connectionConfig,
+          '/rest/ip/hotspot',
+          'GET'
+        );
+
+        for (const deployedHotspot of router.configuration.deployedConfigs.hotspotServers) {
+          let actualHotspot = null;
+
+          // Try to find by .id first
+          if (deployedHotspot.mikrotikId && Array.isArray(actualHotspots)) {
+            actualHotspot = actualHotspots.find(
+              (h: any) => h['.id'] === deployedHotspot.mikrotikId
+            );
+          }
+
+          // Fallback to name matching
+          if (!actualHotspot && Array.isArray(actualHotspots)) {
+            actualHotspot = actualHotspots.find((h: any) => h.name === deployedHotspot.name);
+
+            if (actualHotspot && actualHotspot['.id'] !== deployedHotspot.mikrotikId) {
+              drifts.push({
+                configType: 'hotspot-server',
+                configName: deployedHotspot.name,
+                issue: 'Resource was deleted and recreated (different .id)',
+                mikrotikId: deployedHotspot.mikrotikId,
+                actualMikrotikId: actualHotspot['.id'],
+              });
+
+              // Update with new .id
+              await db.collection('routers').updateOne(
+                {
+                  _id: new ObjectId(routerId),
+                  'configuration.deployedConfigs.hotspotServers.name': deployedHotspot.name,
+                },
+                {
+                  $set: {
+                    'configuration.deployedConfigs.hotspotServers.$.mikrotikId':
+                      actualHotspot['.id'],
+                    'configuration.deployedConfigs.hotspotServers.$.lastChecked': new Date(),
+                    'configuration.deployedConfigs.hotspotServers.$.status': 'drift',
+                  },
+                }
+              );
+            }
+          }
+
+          if (!actualHotspot) {
+            drifts.push({
+              configType: 'hotspot-server',
+              configName: deployedHotspot.name,
+              issue: deployedHotspot.mikrotikId
+                ? 'Configuration missing on router (was deleted)'
+                : 'Configuration missing on router',
+              mikrotikId: deployedHotspot.mikrotikId,
+            });
+
+            await db.collection('routers').updateOne(
+              {
+                _id: new ObjectId(routerId),
+                'configuration.deployedConfigs.hotspotServers.name': deployedHotspot.name,
+              },
+              {
+                $set: {
+                  'configuration.deployedConfigs.hotspotServers.$.lastChecked': new Date(),
+                  'configuration.deployedConfigs.hotspotServers.$.status': 'error',
+                },
+              }
+            );
+          } else if (actualHotspot['.id'] === deployedHotspot.mikrotikId) {
+            await db.collection('routers').updateOne(
+              {
+                _id: new ObjectId(routerId),
+                'configuration.deployedConfigs.hotspotServers.name': deployedHotspot.name,
+              },
+              {
+                $set: {
+                  'configuration.deployedConfigs.hotspotServers.$.lastChecked': new Date(),
+                  'configuration.deployedConfigs.hotspotServers.$.status': 'active',
+                },
+              }
+            );
+          }
+        }
+
+        // Find unmanaged hotspot servers
+        if (Array.isArray(actualHotspots)) {
+          const managedIds = router.configuration.deployedConfigs.hotspotServers
+            .map((h: any) => h.mikrotikId)
+            .filter(Boolean);
+
+          for (const hotspot of actualHotspots) {
+            if (!managedIds.includes(hotspot['.id'])) {
+              unmanagedResources.push({
+                configType: 'hotspot-server',
+                name: hotspot.name,
+                mikrotikId: hotspot['.id'],
+                canAdopt: true,
+              });
+            }
+          }
+        }
+      }
+
+      // Validate DHCP Servers
+      if (router.configuration?.deployedConfigs?.dhcpServers) {
+        const actualDhcpServers = await MikroTikService.makeRequest(
+          connectionConfig,
+          '/rest/ip/dhcp-server',
+          'GET'
+        );
+
+        for (const deployedDhcp of router.configuration.deployedConfigs.dhcpServers) {
+          let actualDhcp = null;
+
+          if (deployedDhcp.mikrotikId && Array.isArray(actualDhcpServers)) {
+            actualDhcp = actualDhcpServers.find((d: any) => d['.id'] === deployedDhcp.mikrotikId);
+          }
+
+          if (!actualDhcp && Array.isArray(actualDhcpServers)) {
+            actualDhcp = actualDhcpServers.find((d: any) => d.name === deployedDhcp.name);
+
+            if (actualDhcp && actualDhcp['.id'] !== deployedDhcp.mikrotikId) {
+              drifts.push({
+                configType: 'dhcp-server',
+                configName: deployedDhcp.name,
+                issue: 'Resource was deleted and recreated (different .id)',
+                mikrotikId: deployedDhcp.mikrotikId,
+                actualMikrotikId: actualDhcp['.id'],
+              });
+
+              await db.collection('routers').updateOne(
+                {
+                  _id: new ObjectId(routerId),
+                  'configuration.deployedConfigs.dhcpServers.name': deployedDhcp.name,
+                },
+                {
+                  $set: {
+                    'configuration.deployedConfigs.dhcpServers.$.mikrotikId': actualDhcp['.id'],
+                    'configuration.deployedConfigs.dhcpServers.$.lastChecked': new Date(),
+                    'configuration.deployedConfigs.dhcpServers.$.status': 'drift',
+                  },
+                }
+              );
+            }
+          }
+
+          if (!actualDhcp) {
+            drifts.push({
+              configType: 'dhcp-server',
+              configName: deployedDhcp.name,
+              issue: 'Configuration missing on router',
+              mikrotikId: deployedDhcp.mikrotikId,
+            });
+
+            await db.collection('routers').updateOne(
+              {
+                _id: new ObjectId(routerId),
+                'configuration.deployedConfigs.dhcpServers.name': deployedDhcp.name,
+              },
+              {
+                $set: {
+                  'configuration.deployedConfigs.dhcpServers.$.lastChecked': new Date(),
+                  'configuration.deployedConfigs.dhcpServers.$.status': 'error',
+                },
+              }
+            );
+          } else if (actualDhcp['.id'] === deployedDhcp.mikrotikId) {
+            await db.collection('routers').updateOne(
+              {
+                _id: new ObjectId(routerId),
+                'configuration.deployedConfigs.dhcpServers.name': deployedDhcp.name,
+              },
+              {
+                $set: {
+                  'configuration.deployedConfigs.dhcpServers.$.lastChecked': new Date(),
+                  'configuration.deployedConfigs.dhcpServers.$.status': 'active',
+                },
+              }
+            );
+          }
+        }
+      }
+
+      // Validate NAT Rules
+      if (router.configuration?.deployedConfigs?.natRules) {
+        const actualNatRules = await MikroTikService.makeRequest(
+          connectionConfig,
+          '/rest/ip/firewall/nat',
+          'GET'
+        );
+
+        for (const deployedNat of router.configuration.deployedConfigs.natRules) {
+          let actualNat = null;
+
+          if (deployedNat.mikrotikId && Array.isArray(actualNatRules)) {
+            actualNat = actualNatRules.find((n: any) => n['.id'] === deployedNat.mikrotikId);
+          }
+
+          if (!actualNat) {
+            drifts.push({
+              configType: 'nat-rule',
+              configName: deployedNat.name,
+              issue: 'NAT rule missing on router',
+              mikrotikId: deployedNat.mikrotikId,
+            });
+
+            await db.collection('routers').updateOne(
+              {
+                _id: new ObjectId(routerId),
+                'configuration.deployedConfigs.natRules.name': deployedNat.name,
+              },
+              {
+                $set: {
+                  'configuration.deployedConfigs.natRules.$.lastChecked': new Date(),
+                  'configuration.deployedConfigs.natRules.$.status': 'error',
+                },
+              }
+            );
+          } else {
+            await db.collection('routers').updateOne(
+              {
+                _id: new ObjectId(routerId),
+                'configuration.deployedConfigs.natRules.name': deployedNat.name,
+              },
+              {
+                $set: {
+                  'configuration.deployedConfigs.natRules.$.lastChecked': new Date(),
+                  'configuration.deployedConfigs.natRules.$.status': 'active',
+                },
+              }
+            );
+          }
+        }
+      }
+
+      // Update last synced timestamp
+      await db.collection('routers').updateOne(
+        { _id: new ObjectId(routerId) },
+        {
+          $set: {
+            'configurationStatus.lastSyncedAt': new Date(),
+          },
+        }
+      );
+
+      syncResults.configValidation = true;
+    } catch (error) {
+      console.error('Failed to validate deployed configurations:', error);
+    }
 
     // ============================================
     // Update database with all synced data
@@ -395,13 +750,15 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       changes: {
         before: {},
         after: syncResults,
-        fields: Object.keys(syncResults).filter(k => syncResults[k]),
+        fields: Object.keys(syncResults).filter((k) => syncResults[k]),
       },
       metadata: {
         sessionId: '',
         correlationId: `sync-router-${routerId}`,
         source: 'web',
-        severity: 'info',
+        severity: drifts.length > 0 ? 'warning' : 'info',
+        driftsDetected: drifts.length,
+        unmanagedResourcesFound: unmanagedResources.length,
       },
       timestamp: new Date(),
     });
@@ -411,7 +768,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     // ============================================
     return NextResponse.json({
       success: true,
-      message: 'Router synced successfully',
+      message: drifts.length > 0 
+        ? `Router synced with ${drifts.length} configuration drift(s) detected`
+        : 'Router synced successfully',
       syncResults,
       router: {
         status: 'online',
@@ -421,6 +780,14 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         memoryUsage: routerInfo?.memoryUsage || 0,
         connectedUsers,
         firmwareVersion: routerInfo?.version,
+      },
+      configValidation: {
+        hasDrifts: drifts.length > 0,
+        driftCount: drifts.length,
+        drifts: drifts,
+        hasUnmanagedResources: unmanagedResources.length > 0,
+        unmanagedResourceCount: unmanagedResources.length,
+        unmanagedResources: unmanagedResources,
       },
     });
   } catch (error) {

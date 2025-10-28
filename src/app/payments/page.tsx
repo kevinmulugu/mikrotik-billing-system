@@ -47,11 +47,11 @@ export default async function PaymentsPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+          <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
             <CreditCard className="h-6 w-6 text-blue-600" />
             Payment Management
           </h1>
-          <p className="text-gray-600 mt-1">
+          <p className="text-muted-foreground mt-1">
             Track revenue, manage commissions, and configure payment settings
           </p>
         </div>
@@ -93,7 +93,7 @@ export default async function PaymentsPage() {
                     : 'Customer Paybill Active'
                   }
                 </h3>
-                <p className="text-sm text-gray-600">
+                <p className="text-sm text-muted-foreground">
                   {paymentStats.paymentMethod === 'company_paybill'
                     ? 'Using centralized payment processing with 15% commission'
                     : 'Using your own paybill for direct payments'
@@ -114,8 +114,8 @@ export default async function PaymentsPage() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600">Total Revenue</p>
-                <p className="text-2xl font-semibold text-gray-900">
+                <p className="text-sm text-muted-foreground">Total Revenue</p>
+                <p className="text-2xl font-semibold text-foreground">
                   KSh {paymentStats.totalRevenue.toLocaleString()}
                 </p>
               </div>
@@ -128,7 +128,7 @@ export default async function PaymentsPage() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600">This Month</p>
+                <p className="text-sm text-muted-foreground">This Month</p>
                 <p className="text-2xl font-semibold text-blue-600">
                   KSh {paymentStats.monthlyRevenue.toLocaleString()}
                 </p>
@@ -142,7 +142,7 @@ export default async function PaymentsPage() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600">Commission Earned</p>
+                <p className="text-sm text-muted-foreground">Commission Earned</p>
                 <p className="text-2xl font-semibold text-purple-600">
                   KSh {paymentStats.commission.toLocaleString()}
                 </p>
@@ -158,7 +158,7 @@ export default async function PaymentsPage() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600">Success Rate</p>
+                <p className="text-sm text-muted-foreground">Success Rate</p>
                 <p className="text-2xl font-semibold text-green-600">
                   {paymentStats.successRate}%
                 </p>
@@ -199,7 +199,7 @@ export default async function PaymentsPage() {
                     <div key={index} className="flex items-center justify-between py-2">
                       <div>
                         <p className="font-medium">KSh {transaction.amount}</p>
-                        <p className="text-sm text-gray-600">{transaction.type}</p>
+                        <p className="text-sm text-muted-foreground">{transaction.type}</p>
                       </div>
                       <div className="text-right">
                         <Badge 
@@ -208,7 +208,7 @@ export default async function PaymentsPage() {
                         >
                           {transaction.status}
                         </Badge>
-                        <p className="text-xs text-gray-500">{transaction.time}</p>
+                        <p className="text-xs text-muted-foreground">{transaction.time}</p>
                       </div>
                     </div>
                   ))}
@@ -269,7 +269,7 @@ export default async function PaymentsPage() {
                   </div>
                   <h3 className="font-semibold text-lg">Voucher Sales</h3>
                   <p className="text-2xl font-bold text-blue-600">KSh 9,450</p>
-                  <p className="text-sm text-gray-600">142 vouchers sold</p>
+                  <p className="text-sm text-muted-foreground">142 vouchers sold</p>
                 </div>
                 
                 <div className="text-center">
@@ -278,7 +278,7 @@ export default async function PaymentsPage() {
                   </div>
                   <h3 className="font-semibold text-lg">PPPoE Subscriptions</h3>
                   <p className="text-2xl font-bold text-purple-600">KSh 6,300</p>
-                  <p className="text-sm text-gray-600">21 active users</p>
+                  <p className="text-sm text-muted-foreground">21 active users</p>
                 </div>
                 
                 <div className="text-center">
@@ -287,7 +287,7 @@ export default async function PaymentsPage() {
                   </div>
                   <h3 className="font-semibold text-lg">Commission</h3>
                   <p className="text-2xl font-bold text-green-600">KSh 2,362</p>
-                  <p className="text-sm text-gray-600">15% of total revenue</p>
+                  <p className="text-sm text-muted-foreground">15% of total revenue</p>
                 </div>
               </div>
             </CardContent>
@@ -300,7 +300,7 @@ export default async function PaymentsPage() {
               <CardTitle>All Transactions</CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-gray-600">Transaction history interface will be loaded here.</p>
+              <p className="text-muted-foreground">Transaction history interface will be loaded here.</p>
               <Button className="mt-4" asChild>
                 <a href="/payments/history">View Transaction History</a>
               </Button>
@@ -314,7 +314,7 @@ export default async function PaymentsPage() {
               <CardTitle>Commission Tracking</CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-gray-600">Commission tracking interface will be loaded here.</p>
+              <p className="text-muted-foreground">Commission tracking interface will be loaded here.</p>
               <Button className="mt-4" asChild>
                 <a href="/payments/commission">Manage Commission</a>
               </Button>
@@ -328,7 +328,7 @@ export default async function PaymentsPage() {
               <CardTitle>Payment Analytics</CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-gray-600">Payment analytics dashboard will be loaded here.</p>
+              <p className="text-muted-foreground">Payment analytics dashboard will be loaded here.</p>
             </CardContent>
           </Card>
         </TabsContent>

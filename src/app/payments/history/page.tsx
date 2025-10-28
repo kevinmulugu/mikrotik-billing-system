@@ -28,8 +28,8 @@ export default async function PaymentHistoryPage() {
           </a>
         </Button>
         <div className="flex-1">
-          <h1 className="text-2xl font-bold text-gray-900">Payment History</h1>
-          <p className="text-gray-600 mt-1">
+          <h1 className="text-2xl font-bold text-foreground">Payment History</h1>
+          <p className="text-muted-foreground mt-1">
             Complete transaction history and financial reports
           </p>
         </div>

@@ -1,3 +1,4 @@
+// scripts/init-ticket-indexes.ts
 /**
  * Initialize MongoDB Indexes for Tickets Collection
  * 

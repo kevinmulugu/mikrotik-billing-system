@@ -28,8 +28,8 @@ export default async function PaymentSetupPage() {
           </a>
         </Button>
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Payment Setup</h1>
-          <p className="text-gray-600 mt-1">
+          <h1 className="text-2xl font-bold text-foreground">Payment Setup</h1>
+          <p className="text-muted-foreground mt-1">
             Choose how you want to receive payments from your customers
           </p>
         </div>

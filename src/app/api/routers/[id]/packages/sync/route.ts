@@ -177,6 +177,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         });
 
         const newPackage = {
+          mikrotikId: profile['.id'],
           name: profileName,
           displayName: profileName.replace(/-/g, ' ').toUpperCase(),
           price: price,

@@ -7,7 +7,7 @@
 set -euo pipefail
 
 origin_dir="$(pwd)"
-dump_dir="$HOME/dump"
+dump_dir="/mnt/c/Users/zara/Downloads/dump"
 
 mkdir -p "$dump_dir"
 

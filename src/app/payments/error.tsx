@@ -22,11 +22,11 @@ export default function PaymentsError({
           <AlertTriangle className="w-8 h-8 text-red-600" />
         </div>
         
-        <h2 className="text-xl font-semibold text-gray-900 mb-4">
+        <h2 className="text-xl font-semibold text-foreground mb-4">
           Payment System Error
         </h2>
         
-        <p className="text-gray-600 mb-8">
+        <p className="text-muted-foreground mb-8">
           We couldn't load your payment information. This might be a temporary issue with our payment system.
         </p>
         

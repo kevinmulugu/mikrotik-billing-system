@@ -1159,6 +1159,180 @@ export class MikroTikService {
       return remainingDays > 0 ? `${weeks}w${remainingDays}d` : `${weeks}w`;
     }
   }
+
+  /**
+   * Update hotspot user profile by MikroTik .id
+   * Uses .id for reliable updates instead of name lookup
+   */
+  static async updateHotspotUserProfileById(
+    config: MikroTikConnectionConfig,
+    mikrotikId: string,
+    profileConfig: any
+  ): Promise<any> {
+    try {
+      // Validate .id format
+      if (!mikrotikId || !mikrotikId.startsWith('*')) {
+        throw new Error(`Invalid MikroTik ID: ${mikrotikId}`);
+      }
+
+      console.log(`Updating hotspot user profile with ID: ${mikrotikId}`);
+
+      // Make PATCH request to update profile
+      const result = await MikroTikService.makeRequest(
+        config,
+        `/rest/ip/hotspot/user/profile/${mikrotikId}`,
+        'PATCH',
+        profileConfig
+      );
+
+      console.log('Profile updated successfully:', result);
+      return result;
+    } catch (error) {
+      console.error('Failed to update hotspot user profile by ID:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Delete hotspot user profile by MikroTik .id
+   * Uses .id for reliable deletion instead of name lookup
+   */
+  static async deleteHotspotUserProfileById(
+    config: MikroTikConnectionConfig,
+    mikrotikId: string
+  ): Promise<boolean> {
+    try {
+      // Validate .id format
+      if (!mikrotikId || !mikrotikId.startsWith('*')) {
+        throw new Error(`Invalid MikroTik ID: ${mikrotikId}`);
+      }
+
+      console.log(`Deleting hotspot user profile with ID: ${mikrotikId}`);
+
+      // Make DELETE request
+      await MikroTikService.makeRequest(
+        config,
+        `/rest/ip/hotspot/user/profile/${mikrotikId}`,
+        'DELETE'
+      );
+
+      console.log('Profile deleted successfully');
+      return true;
+    } catch (error) {
+      console.error('Failed to delete hotspot user profile by ID:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get hotspot user profile by MikroTik .id
+   * Useful for validation before update/delete
+   */
+  static async getHotspotUserProfileById(
+    config: MikroTikConnectionConfig,
+    mikrotikId: string
+  ): Promise<any | null> {
+    try {
+      // Validate .id format
+      if (!mikrotikId || !mikrotikId.startsWith('*')) {
+        throw new Error(`Invalid MikroTik ID: ${mikrotikId}`);
+      }
+
+      console.log(`Fetching hotspot user profile with ID: ${mikrotikId}`);
+
+      // Make GET request
+      const profile = await MikroTikService.makeRequest(
+        config,
+        `/rest/ip/hotspot/user/profile/${mikrotikId}`,
+        'GET'
+      );
+
+      return profile;
+    } catch (error) {
+      console.error('Failed to get hotspot user profile by ID:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Verify hotspot user profile exists by .id
+   * Quick check without fetching full profile data
+   */
+  static async verifyHotspotUserProfileExists(
+    config: MikroTikConnectionConfig,
+    mikrotikId: string
+  ): Promise<boolean> {
+    try {
+      const profile = await this.getHotspotUserProfileById(config, mikrotikId);
+      return profile !== null;
+    } catch (error) {
+      return false;
+    }
+  }
+
+  /**
+   * Batch update multiple hotspot user profiles
+   * Useful for bulk operations
+   */
+  static async batchUpdateHotspotUserProfiles(
+    config: MikroTikConnectionConfig,
+    updates: Array<{ mikrotikId: string; profileConfig: any }>
+  ): Promise<{ success: number; failed: number; errors: any[] }> {
+    const results = {
+      success: 0,
+      failed: 0,
+      errors: [] as any[],
+    };
+
+    for (const update of updates) {
+      try {
+        await this.updateHotspotUserProfileById(
+          config,
+          update.mikrotikId,
+          update.profileConfig
+        );
+        results.success++;
+      } catch (error) {
+        results.failed++;
+        results.errors.push({
+          mikrotikId: update.mikrotikId,
+          error: error instanceof Error ? error.message : 'Unknown error',
+        });
+      }
+    }
+
+    return results;
+  }
+
+  /**
+   * Batch delete multiple hotspot user profiles
+   * Useful for bulk cleanup operations
+   */
+  static async batchDeleteHotspotUserProfiles(
+    config: MikroTikConnectionConfig,
+    mikrotikIds: string[]
+  ): Promise<{ success: number; failed: number; errors: any[] }> {
+    const results = {
+      success: 0,
+      failed: 0,
+      errors: [] as any[],
+    };
+
+    for (const mikrotikId of mikrotikIds) {
+      try {
+        await this.deleteHotspotUserProfileById(config, mikrotikId);
+        results.success++;
+      } catch (error) {
+        results.failed++;
+        results.errors.push({
+          mikrotikId,
+          error: error instanceof Error ? error.message : 'Unknown error',
+        });
+      }
+    }
+
+    return results;
+  }
 }
 
 // ============================================

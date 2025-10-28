@@ -28,8 +28,8 @@ export default async function ReconciliationPage() {
           </a>
         </Button>
         <div className="flex-1">
-          <h1 className="text-2xl font-bold text-gray-900">Payment Reconciliation</h1>
-          <p className="text-gray-600 mt-1">
+          <h1 className="text-2xl font-bold text-foreground">Payment Reconciliation</h1>
+          <p className="text-muted-foreground mt-1">
             Match M-Pesa payments with voucher sales and PPPoE payments
           </p>
         </div>

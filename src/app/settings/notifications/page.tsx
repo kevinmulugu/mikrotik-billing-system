@@ -28,8 +28,8 @@ export default async function NotificationSettingsPage() {
           </a>
         </Button>
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Notification Settings</h1>
-          <p className="text-gray-600 mt-1">
+          <h1 className="text-2xl font-bold text-foreground">Notification Settings</h1>
+          <p className="text-muted-foreground mt-1">
             Choose how you want to receive updates and alerts
           </p>
         </div>
