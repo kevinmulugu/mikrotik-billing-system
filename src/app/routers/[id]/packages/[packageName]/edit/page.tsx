@@ -10,7 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
-import { 
+import {
   ArrowLeft, Package, Loader2, AlertTriangle, Info,
   Clock, Zap, HardDrive, DollarSign, Lock, Save
 } from 'lucide-react';
@@ -29,7 +29,7 @@ export default function EditPackagePage({ params }: EditPackagePageProps) {
   const { id: routerId, packageName } = use(params);
   const { data: session, status } = useSession();
   const router = useRouter();
-  
+
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [packageData, setPackageData] = useState<any>(null);
@@ -66,7 +66,7 @@ export default function EditPackagePage({ params }: EditPackagePageProps) {
   const fetchPackageData = async () => {
     try {
       setLoading(true);
-      
+
       // Fetch router data to get package info
       const routerResponse = await fetch(`/api/routers/${routerId}`);
       const routerDataResult = await routerResponse.json();
@@ -184,7 +184,7 @@ export default function EditPackagePage({ params }: EditPackagePageProps) {
 
   const handleInputChange = (field: string, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
-    
+
     // Clear error when user starts typing
     if (errors[field]) {
       setErrors(prev => {
@@ -242,8 +242,15 @@ export default function EditPackagePage({ params }: EditPackagePageProps) {
         return;
       }
 
-      if (hasRouterChanges) {
-        toast.success('Package updated! Sync required for changes to take effect.');
+      // Show appropriate message based on sync status
+      const syncStatus = data.package?.syncStatus;
+
+      if (syncStatus === 'synced') {
+        toast.success('Package updated and synced to router successfully!');
+      } else if (syncStatus === 'failed') {
+        toast.warning('Package updated in database, but router sync failed. Please try syncing manually.');
+      } else if (syncStatus === 'out_of_sync') {
+        toast.success('Package updated! Sync to router to apply changes.');
       } else {
         toast.success('Package updated successfully!');
       }
@@ -317,8 +324,8 @@ export default function EditPackagePage({ params }: EditPackagePageProps) {
           <Alert>
             <AlertTriangle className="h-4 w-4" />
             <AlertDescription>
-              You've modified duration, data limit, or bandwidth settings. These changes require 
-              syncing to the router before they take effect. The package will be marked as "Out of Sync" 
+              You've modified duration, data limit, or bandwidth settings. These changes require
+              syncing to the router before they take effect. The package will be marked as "Out of Sync"
               after saving.
             </AlertDescription>
           </Alert>
@@ -328,7 +335,7 @@ export default function EditPackagePage({ params }: EditPackagePageProps) {
           <Alert>
             <Info className="h-4 w-4" />
             <AlertDescription>
-              This package currently has {packageData.activeUsers} active users. Changes to bandwidth 
+              This package currently has {packageData.activeUsers} active users. Changes to bandwidth
               or limits will only affect new sessions.
             </AlertDescription>
           </Alert>
@@ -349,7 +356,7 @@ export default function EditPackagePage({ params }: EditPackagePageProps) {
             {/* Package Name (Read-only) */}
             <div className="space-y-2">
               <Label htmlFor="name">
-                Package Name (Technical) 
+                Package Name (Technical)
                 <Badge variant="secondary" className="ml-2">Read-only</Badge>
               </Label>
               <div className="relative">
@@ -433,7 +440,7 @@ export default function EditPackagePage({ params }: EditPackagePageProps) {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              Usage Limits 
+              Usage Limits
               <Badge variant="outline" className="text-xs">
                 <AlertTriangle className="mr-1 h-3 w-3" />
                 Sync Required
