@@ -585,12 +585,33 @@ async function initializeDatabase() {
           category: 'general',
           key: 'commission_rates',
           value: {
-            homeowner: 15.0,
-            isp: 10.0,
-            enterprise: 5.0,
+            homeowner: 20.0,  // 20% commission per voucher sale for individuals
+            personal: 20.0,   // Same as homeowner
+            isp: 0.0,         // No commission - ISPs pay subscription fees instead
+            enterprise: 0.0,  // No commission - enterprises pay subscription fees
           },
           encrypted: false,
-          description: 'Default commission rates by customer type',
+          description: 'Commission rates by customer type. Individuals pay 20% per sale, ISPs pay subscription fees.',
+          validation: {
+            type: 'object',
+            required: true,
+          },
+          metadata: {
+            lastModified: new Date(),
+            version: 1,
+            environment: 'production',
+          },
+        },
+        {
+          category: 'general',
+          key: 'subscription_fees',
+          value: {
+            personal: 0,        // No subscription fee for individuals (pay commission)
+            isp_5_routers: 2500,   // KES 2,500/month for ISPs with up to 5 routers
+            isp_unlimited: 3900,   // KES 3,900/month for ISPs with unlimited routers
+          },
+          encrypted: false,
+          description: 'Monthly subscription fees. Individuals: 0 (pay 20% commission). ISPs: 2500 for ≤5 routers, 3900 for unlimited.',
           validation: {
             type: 'object',
             required: true,
@@ -844,12 +865,18 @@ async function initializeDatabase() {
     console.log(`  Ticket System: Full-text search enabled`);
     console.log(`  VPN Infrastructure: WireGuard ready`);
 
-    console.log('\n📋 Next Steps:');
+    console.log('\n� Pricing Configuration:');
+    console.log('  Individuals/Homeowners: 20% commission per voucher sale');
+    console.log('  ISPs (≤5 routers): KES 2,500/month subscription');
+    console.log('  ISPs (unlimited): KES 3,900/month subscription');
+
+    console.log('\n�📋 Next Steps:');
     console.log('  1. Update VPN_SERVER_PUBLIC_KEY in .env.local');
     console.log('  2. Update VPN_SERVER_ENDPOINT in .env.local');
     console.log('  3. Configure WireGuard on your VPN server');
-    console.log('  4. Test router onboarding with VPN');
-    console.log('  5. Monitor VPN tunnels in admin dashboard');
+    console.log('  4. Run `pnpm db:seed` to populate demo data');
+    console.log('  5. Test router onboarding with VPN');
+    console.log('  6. Monitor VPN tunnels in admin dashboard');
 
     console.log('\n🎉 Your MikroTik Billing database is fully initialized!\n');
 

@@ -13,26 +13,23 @@ export function RevenueChart() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // TODO: Fetch revenue data based on period
+    // Fetch real revenue data from dashboard analytics (will include overview and chart)
     const fetchData = async () => {
       setLoading(true);
       try {
-        // Simulate API call
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        
-        // Mock data
+        const res = await fetch('/api/analytics/dashboard');
+        if (!res.ok) throw new Error('Failed to fetch analytics');
+        const json = await res.json();
+
+        const overview = json?.overview || {};
+        const chart = json?.revenueChart || [];
+        const customer = json?.customer || {};
+
         setData({
-          total: 45750,
-          change: 12.5,
-          chartData: [
-            { date: '2024-01-01', revenue: 1200 },
-            { date: '2024-01-02', revenue: 1800 },
-            { date: '2024-01-03', revenue: 1500 },
-            { date: '2024-01-04', revenue: 2200 },
-            { date: '2024-01-05', revenue: 1900 },
-            { date: '2024-01-06', revenue: 2500 },
-            { date: '2024-01-07', revenue: 2100 },
-          ],
+          total: overview.totalRevenue || 0,
+          change: overview.revenueChange || 0,
+          chartData: chart,
+          commissionRate: customer.commissionRate ?? null,
         });
       } catch (error) {
         console.error('Failed to fetch revenue data:', error);
@@ -74,7 +71,7 @@ export function RevenueChart() {
             </Badge>
           </div>
         </div>
-        
+
         <div className="flex items-center gap-2">
           {(['7d', '30d', '90d'] as const).map((p) => (
             <Button
@@ -88,7 +85,7 @@ export function RevenueChart() {
           ))}
         </div>
       </CardHeader>
-      
+
       <CardContent>
         <div className="h-64 flex items-center justify-center bg-gray-50 rounded-lg">
           <div className="text-center text-gray-500">
@@ -97,7 +94,7 @@ export function RevenueChart() {
             <p className="text-xs">Using recharts or similar chart library</p>
           </div>
         </div>
-        
+
         {/* Quick Stats */}
         <div className="grid grid-cols-3 gap-4 mt-4 pt-4 border-t">
           <div className="text-center">
@@ -115,7 +112,7 @@ export function RevenueChart() {
           <div className="text-center">
             <p className="text-sm text-gray-600">Commission</p>
             <p className="text-lg font-semibold text-green-600">
-              {formatCurrency((data?.total || 0) * 0.15)}
+              {formatCurrency(((data?.total || 0) * ((data?.commissionRate ?? 0) / 100)) || 0)}
             </p>
           </div>
         </div>

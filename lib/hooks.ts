@@ -8,7 +8,7 @@ import { toast } from 'sonner';
 // Auth hooks
 export function useAuth() {
   const { data: session, status } = useSession();
-  
+
   return {
     user: session?.user,
     isLoading: status === 'loading',
@@ -57,7 +57,7 @@ export function useRouter(id: string) {
 
   const fetchRouter = useCallback(async () => {
     if (!id) return;
-    
+
     try {
       setLoading(true);
       const response = await apiClient.getRouter(id);
@@ -385,28 +385,35 @@ export function useDashboardStats() {
     try {
       setLoading(true);
       const response = await apiClient.getDashboardStats();
-      
-      // Mock data for development - replace with actual API response
+
+      // Response shape from server: { overview: { ... }, customer: { commissionRate }, ... }
+      const body = response?.data || response || {};
+      const overview = body.overview || {};
+      const customer = body.customer || {};
+
+      // Compute commission if not provided explicitly
+      const computedCommission = overview.totalCommission ?? (overview.totalRevenue ? (overview.totalRevenue * (customer.commissionRate ?? 0) / 100) : 0);
+
       const mockStats: DashboardStats = {
-        totalRevenue: response.data?.totalRevenue || 87650,
-        monthlyRevenue: response.data?.monthlyRevenue || 15750,
-        todayRevenue: response.data?.todayRevenue || 2850,
-        activeUsers: response.data?.activeUsers || 127,
-        totalUsers: response.data?.totalUsers || 345,
-        onlineRouters: response.data?.onlineRouters || 3,
-        totalRouters: response.data?.totalRouters || 4,
-        commission: response.data?.commission || 13147.5,
-        revenueChange: response.data?.revenueChange || 12.5,
-        userChange: response.data?.userChange || 8.3,
-        routerUptime: response.data?.routerUptime || 99.2,
-        commissionChange: response.data?.commissionChange || 15.7,
+        totalRevenue: overview.totalRevenue || 87650,
+        monthlyRevenue: overview.monthlyRevenue || 15750,
+        todayRevenue: overview.todayRevenue || 2850,
+        activeUsers: overview.totalActiveUsers || 127,
+        totalUsers: overview.totalUsers || 345,
+        onlineRouters: overview.onlineRouters || 3,
+        totalRouters: overview.totalRouters || 4,
+        commission: computedCommission || 13147.5,
+        revenueChange: overview.revenueChange || 12.5,
+        userChange: overview.userChange || 8.3,
+        routerUptime: overview.routerUptime || 99.2,
+        commissionChange: overview.commissionChange || 15.7,
       };
-      
+
       setStats(mockStats);
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch stats');
-      
+
       // Fallback to mock data on error for better UX
       const fallbackStats: DashboardStats = {
         totalRevenue: 87650,

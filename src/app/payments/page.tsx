@@ -6,10 +6,10 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
-import { 
-  CreditCard, 
-  DollarSign, 
-  TrendingUp, 
+import {
+  CreditCard,
+  DollarSign,
+  TrendingUp,
   Users,
   Settings,
   History,
@@ -35,7 +35,7 @@ export default async function PaymentsPage() {
     totalRevenue: 87650,
     monthlyRevenue: 15750,
     todayRevenue: 2850,
-    commission: 13147.5, // 15% of total revenue
+    commission: 17530, // 20% of total revenue
     pendingPayments: 5,
     totalTransactions: 234,
     successRate: 98.5,
@@ -55,7 +55,7 @@ export default async function PaymentsPage() {
             Track revenue, manage commissions, and configure payment settings
           </p>
         </div>
-        
+
         <div className="flex gap-3">
           <Button variant="outline" asChild>
             <a href="/payments/setup">
@@ -73,11 +73,10 @@ export default async function PaymentsPage() {
       </div>
 
       {/* Payment Method Status */}
-      <Card className={`border-l-4 ${
-        paymentStats.paymentMethod === 'company_paybill' 
-          ? 'border-l-blue-500 bg-blue-50' 
-          : 'border-l-green-500 bg-green-50'
-      }`}>
+      <Card className={`border-l-4 ${paymentStats.paymentMethod === 'company_paybill'
+        ? 'border-l-blue-500 bg-blue-50'
+        : 'border-l-green-500 bg-green-50'
+        }`}>
         <CardContent className="p-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -88,14 +87,14 @@ export default async function PaymentsPage() {
               )}
               <div>
                 <h3 className="font-medium">
-                  {paymentStats.paymentMethod === 'company_paybill' 
-                    ? 'Company Paybill Active' 
+                  {paymentStats.paymentMethod === 'company_paybill'
+                    ? 'Company Paybill Active'
                     : 'Customer Paybill Active'
                   }
                 </h3>
                 <p className="text-sm text-muted-foreground">
                   {paymentStats.paymentMethod === 'company_paybill'
-                    ? 'Using centralized payment processing with 15% commission'
+                    ? 'Using centralized payment processing with 20% commission'
                     : 'Using your own paybill for direct payments'
                   }
                 </p>
@@ -148,7 +147,7 @@ export default async function PaymentsPage() {
                 </p>
               </div>
               <div className="bg-purple-100 p-2 rounded-lg">
-                <span className="text-xs font-medium text-purple-600">15%</span>
+                <span className="text-xs font-medium text-purple-600">20%</span>
               </div>
             </div>
           </CardContent>
@@ -202,7 +201,7 @@ export default async function PaymentsPage() {
                         <p className="text-sm text-muted-foreground">{transaction.type}</p>
                       </div>
                       <div className="text-right">
-                        <Badge 
+                        <Badge
                           variant={transaction.status === 'completed' ? 'default' : 'secondary'}
                           className="mb-1"
                         >
@@ -231,21 +230,21 @@ export default async function PaymentsPage() {
                     Payment Reconciliation
                   </a>
                 </Button>
-                
+
                 <Button className="w-full justify-start" variant="outline" asChild>
                   <a href="/payments/commission">
                     <DollarSign className="h-4 w-4 mr-2" />
                     Commission Tracking
                   </a>
                 </Button>
-                
+
                 <Button className="w-full justify-start" variant="outline" asChild>
                   <a href="/payments/setup">
                     <Settings className="h-4 w-4 mr-2" />
                     Payment Settings
                   </a>
                 </Button>
-                
+
                 <Button className="w-full justify-start" variant="outline" asChild>
                   <a href="/payments/history">
                     <History className="h-4 w-4 mr-2" />
@@ -271,7 +270,7 @@ export default async function PaymentsPage() {
                   <p className="text-2xl font-bold text-blue-600">KSh 9,450</p>
                   <p className="text-sm text-muted-foreground">142 vouchers sold</p>
                 </div>
-                
+
                 <div className="text-center">
                   <div className="bg-purple-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-3">
                     <Users className="h-8 w-8 text-purple-600" />
@@ -280,14 +279,14 @@ export default async function PaymentsPage() {
                   <p className="text-2xl font-bold text-purple-600">KSh 6,300</p>
                   <p className="text-sm text-muted-foreground">21 active users</p>
                 </div>
-                
+
                 <div className="text-center">
                   <div className="bg-green-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-3">
                     <TrendingUp className="h-8 w-8 text-green-600" />
                   </div>
                   <h3 className="font-semibold text-lg">Commission</h3>
                   <p className="text-2xl font-bold text-green-600">KSh 2,362</p>
-                  <p className="text-sm text-muted-foreground">15% of total revenue</p>
+                  <p className="text-sm text-muted-foreground">20% of total revenue</p>
                 </div>
               </div>
             </CardContent>

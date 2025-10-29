@@ -129,7 +129,7 @@ async function seedDatabase() {
           preferredMethod: 'company_paybill',
           paybillNumber: null,
           accountNumber: null,
-          commissionRate: 15.0,
+          commissionRate: 20.0,
           autoPayouts: true,
         },
         subscription: {
@@ -449,6 +449,99 @@ async function seedDatabase() {
     }
 
     // ==========================================
+    // 3B. SEED DEMO ISP CUSTOMER
+    // ==========================================
+    console.log('\n🏢 Creating demo ISP customer...');
+
+    const ispUserId = new ObjectId();
+    const ispCustomerId = new ObjectId();
+
+    const ispExists = await db
+      .collection('users')
+      .findOne({ email: 'isp@demo.com' });
+
+    if (!ispExists) {
+      // Create ISP user
+      await db.collection('users').insertOne({
+        _id: ispUserId,
+        name: 'Demo ISP Networks',
+        email: 'isp@demo.com',
+        emailVerified: new Date(),
+        role: 'isp',
+        customerId: ispCustomerId,
+        status: 'active',
+        preferences: {
+          language: 'en',
+          notifications: {
+            email: true,
+            sms: true,
+            push: true,
+          },
+          theme: 'system',
+        },
+        metadata: {
+          loginCount: 0,
+          lastLogin: null,
+        },
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+
+      // Create ISP customer profile
+      await db.collection('customers').insertOne({
+        _id: ispCustomerId,
+        userId: ispUserId,
+        businessInfo: {
+          name: 'Demo ISP Networks Ltd',
+          type: 'isp',
+          address: {
+            street: '456 Tech Park Avenue',
+            city: 'Nairobi',
+            county: 'Nairobi',
+            country: 'Kenya',
+            postalCode: '00200',
+          },
+          contact: {
+            phone: '+254722334455',
+            email: 'isp@demo.com',
+          },
+        },
+        paymentSettings: {
+          preferredMethod: 'bank_transfer',
+          paybillNumber: null,
+          accountNumber: null,
+          commissionRate: 0,  // ISPs pay 0% commission
+          autoPayouts: false,
+        },
+        subscription: {
+          plan: 'isp_5_routers',  // Up to 5 routers
+          status: 'active',
+          monthlyFee: 2500,  // KES 2,500/month
+          startDate: new Date(),
+          endDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000), // 1 year
+          features: ['up_to_5_routers', 'advanced_analytics', 'priority_support', 'custom_branding'],
+          maxRouters: 5,
+        },
+        statistics: {
+          totalRouters: 0,
+          activeUsers: 0,
+          totalRevenue: 0,
+          monthlyRevenue: 0,
+        },
+        status: 'active',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+
+      console.log('  ✓ Demo ISP customer created');
+      console.log('    Email: isp@demo.com');
+      console.log('    Plan: ISP (up to 5 routers) - KES 2,500/month');
+      console.log('    Commission: 0% (pays subscription fee)');
+    } else {
+      console.log('  ⊙ Demo ISP already exists');
+    }
+
+    // ==========================================
     // 4. SEED DEMO VOUCHERS
     // ==========================================
     console.log('\n🎫 Creating demo vouchers...');
@@ -499,7 +592,7 @@ async function seedDatabase() {
               transactionId: null,
               phoneNumber: null,
               amount: pkg.price,
-              commission: pkg.price * 0.15,
+              commission: pkg.price * 0.20,  // 20% commission for homeowners
               paymentDate: null,
             },
             batch: {
@@ -645,17 +738,21 @@ async function seedDatabase() {
 
     // Show summary
     console.log('📊 Seeded Data Summary:');
-    console.log('  👤 Users: 2 (1 admin, 1 homeowner)');
-    console.log('  🏢 Customers: 1 homeowner');
+    console.log('  👤 Users: 3 (1 admin, 1 homeowner, 1 ISP)');
+    console.log('  🏢 Customers: 2 (1 homeowner, 1 ISP)');
     console.log('  🔌 Routers: 1 demo router');
     console.log('  🎫 Vouchers: 10 (3 used, 7 active)');
     console.log('  💰 Payments: 5 completed transactions');
     console.log('  📱 Paybills: 1 company paybill');
+    console.log('\n💡 Pricing Model:');
+    console.log('  Homeowners: 20% commission per voucher sale');
+    console.log('  ISPs: KES 2,500/month (≤5 routers) or KES 3,900/month (unlimited)');
     console.log('\n🎉 Demo data ready for testing!\n');
 
     console.log('🔑 Demo Login Credentials:');
     console.log('  Admin: admin@mikrotikbilling.com');
-    console.log('  Homeowner: homeowner@demo.com');
+    console.log('  Homeowner: homeowner@demo.com (20% commission per sale)');
+    console.log('  ISP: isp@demo.com (KES 2,500/month subscription)');
     console.log('  (Use email magic link or OAuth to login)\n');
   } catch (error) {
     console.error('❌ Error seeding database:', error);

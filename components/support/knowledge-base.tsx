@@ -169,7 +169,7 @@ export const KnowledgeBase: React.FC = () => {
     {
       id: "faq-5",
       question: "How do commissions work?",
-      answer: "If you're using the company paybill, you earn a commission on every voucher sale. The commission rate depends on your customer type (typically 10-15%). Commissions are calculated automatically and can be withdrawn via M-Pesa.",
+      answer: "If you're using the company paybill, you earn a commission on every voucher sale. The commission rate depends on your customer type (typically 20% for individuals). Commissions are calculated automatically and can be withdrawn via M-Pesa.",
       category: "payments",
       helpful: 112,
     },

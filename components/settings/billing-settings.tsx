@@ -1,3 +1,4 @@
+// componets/settings/billing-settings.tsx
 "use client";
 
 import React, { useState } from "react";
@@ -77,6 +78,35 @@ export const BillingSettings: React.FC = () => {
   const [showAddPaybill, setShowAddPaybill] = useState(false);
   const [autoPayoutEnabled, setAutoPayoutEnabled] = useState(true);
   const [minPayoutAmount, setMinPayoutAmount] = useState("1000");
+
+  // Dynamic billing config from server
+  const [commissionRate, setCommissionRate] = useState<number | null>(null);
+  const [subscriptionFees, setSubscriptionFees] = useState<any | null>(null);
+  const [billingLoading, setBillingLoading] = useState(true);
+  // Fetch the billing settings from the server
+  React.useEffect(() => {
+    let mounted = true;
+    const fetchBilling = async () => {
+      setBillingLoading(true);
+      try {
+        const res = await fetch('/api/settings/billing');
+        if (!res.ok) throw new Error('Failed to load billing settings');
+        const data = await res.json();
+        if (!mounted) return;
+        setCommissionRate(data?.customer?.commissionRate ?? null);
+        setSubscriptionFees(data?.subscriptionFees ?? null);
+      } catch (err) {
+        console.warn('Failed to fetch billing settings', err);
+      } finally {
+        if (mounted) setBillingLoading(false);
+      }
+    };
+
+    fetchBilling();
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   const [newPaybill, setNewPaybill] = useState({
     paybillNumber: "",
@@ -296,7 +326,7 @@ export const BillingSettings: React.FC = () => {
           <CardContent>
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <TrendingUp className="h-4 w-4" />
-              <span>15% commission rate</span>
+              <span>{billingLoading ? 'Commission rate' : `${commissionRate ?? '—'}% commission rate`}</span>
             </div>
           </CardContent>
         </Card>
@@ -440,8 +470,9 @@ export const BillingSettings: React.FC = () => {
                   <Alert className="bg-muted/50">
                     <CheckCircle2 className="h-4 w-4" />
                     <AlertDescription className="text-xs">
-                      Using company paybill with 15% commission. Automated reconciliation
-                      and payouts.
+                      {billingLoading
+                        ? 'Using company paybill. Commission rate loading...'
+                        : `Using company paybill with ${commissionRate ?? '—'}% commission. Automated reconciliation and payouts.`}
                     </AlertDescription>
                   </Alert>
                 )}

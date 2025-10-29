@@ -4,11 +4,11 @@ import { redirect } from 'next/navigation';
 import { authOptions } from '@/lib/auth';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { 
-  Settings, 
-  User, 
-  Bell, 
-  CreditCard, 
+import {
+  Settings,
+  User,
+  Bell,
+  CreditCard,
   Shield,
   Globe,
   Smartphone,
@@ -198,7 +198,7 @@ export default async function SettingsPage() {
                   <CreditCard className="h-5 w-5 text-purple-600" />
                   <div>
                     <p className="font-medium">Payment Method</p>
-                    <p className="text-sm text-muted-foreground">Company Paybill (15% commission)</p>
+                    <p className="text-sm text-muted-foreground">Company Paybill (20% commission)</p>
                   </div>
                 </div>
                 <Button size="sm" variant="outline">Change</Button>

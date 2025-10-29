@@ -178,6 +178,11 @@ export async function POST(
       });
     }
 
+    // Determine commission rate: default 20% for personal/homeowner, 0% for ISPs if detected
+    const commissionRate = (customer.subscription?.plan === 'isp' || customer.businessInfo?.type === 'isp')
+      ? 0
+      : (customer.paymentSettings?.commissionRate ?? 20);
+
     // Generate vouchers
     const vouchers = [];
     const voucherCodes = new Set<string>();
@@ -223,7 +228,7 @@ export async function POST(
           });
         } catch (mikrotikError) {
           console.error(`[Voucher ${code}] Failed to create MikroTik user:`, mikrotikError);
-          
+
           mikrotikCreationResults.push({
             code: code,
             success: false,
@@ -263,7 +268,7 @@ export async function POST(
           transactionId: null,
           phoneNumber: null,
           amount: price,
-          commission: price * ((customer.paymentSettings?.commissionRate || 15) / 100),
+          commission: price * (commissionRate / 100),
           paymentDate: null,
         },
         batch: {
@@ -364,23 +369,23 @@ export async function POST(
       summary: {
         totalGenerated: quantity,
         totalValue: quantity * price,
-        commission: quantity * price * ((customer.paymentSettings?.commissionRate || 15) / 100),
+        commission: quantity * price * (commissionRate / 100),
         packageName: displayName,
         duration: formatDuration(duration),
         expiryDate: expiresAt.toISOString(),
       },
       routerSync: syncToRouter
         ? {
-            enabled: true,
-            synced: syncedCount,
-            failed: failedCount,
-            successRate: quantity > 0 ? `${Math.round((syncedCount / quantity) * 100)}%` : '0%',
-            details: mikrotikCreationResults,
-          }
+          enabled: true,
+          synced: syncedCount,
+          failed: failedCount,
+          successRate: quantity > 0 ? `${Math.round((syncedCount / quantity) * 100)}%` : '0%',
+          details: mikrotikCreationResults,
+        }
         : {
-            enabled: false,
-            message: 'Vouchers created in database only. Sync to router manually.',
-          },
+          enabled: false,
+          message: 'Vouchers created in database only. Sync to router manually.',
+        },
     });
   } catch (error) {
     console.error('[Voucher Generation] Error:', error);

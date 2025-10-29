@@ -134,9 +134,9 @@ export const PPPOE_PACKAGES = [
 
 // Commission rates by customer type
 export const COMMISSION_RATES = {
-  homeowner: 15.0, // 15%
-  isp: 10.0, // 10%
-  business: 5.0, // 5%
+  homeowner: 20.0, // 20%
+  isp: 0.0, // 0% (ISPs pay subscription fees)
+  business: 0.0, // 0%
 } as const;
 
 // Status constants

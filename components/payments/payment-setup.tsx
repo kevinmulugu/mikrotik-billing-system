@@ -73,7 +73,7 @@ export const PaymentSetup: React.FC<PaymentSetupProps> = ({
   const companyPaybillFeatures = [
     "No setup required - start earning immediately",
     "Automated payment reconciliation",
-    "15% commission on all transactions",
+    "20% commission on all transactions",
     "Monthly automated payouts via M-Pesa",
     "Real-time payment notifications",
     "24/7 customer support",
@@ -82,7 +82,7 @@ export const PaymentSetup: React.FC<PaymentSetupProps> = ({
   const customerPaybillFeatures = [
     "Use your own M-Pesa paybill number",
     "Receive payments directly to your account",
-    "Still earn 15% commission",
+    "Still earn 20% commission",
     "Optional automated reconciliation",
     "Full payment control",
     "Requires paybill verification (1-2 days)",
@@ -192,7 +192,7 @@ export const PaymentSetup: React.FC<PaymentSetupProps> = ({
         <AlertTitle>How It Works</AlertTitle>
         <AlertDescription>
           Choose between using our company paybill (recommended for homeowners) or your own M-Pesa paybill.
-          Both options include 15% commission on transactions.
+          Both options include 20% commission on transactions.
         </AlertDescription>
       </Alert>
 
@@ -200,11 +200,10 @@ export const PaymentSetup: React.FC<PaymentSetupProps> = ({
       <div className="grid gap-6 md:grid-cols-2">
         {/* Company Paybill Card */}
         <Card
-          className={`cursor-pointer transition-all ${
-            selectedMethod === "company"
-              ? "border-primary ring-2 ring-primary ring-offset-2"
-              : "hover:border-primary/50"
-          }`}
+          className={`cursor-pointer transition-all ${selectedMethod === "company"
+            ? "border-primary ring-2 ring-primary ring-offset-2"
+            : "hover:border-primary/50"
+            }`}
           onClick={() => setSelectedMethod("company")}
         >
           <CardHeader>
@@ -229,7 +228,7 @@ export const PaymentSetup: React.FC<PaymentSetupProps> = ({
             <div className="rounded-lg bg-muted p-4">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-sm font-medium">Commission Rate</span>
-                <Badge variant="default">15%</Badge>
+                <Badge variant="default">20%</Badge>
               </div>
               <p className="text-xs text-muted-foreground">
                 Earn on every transaction with automated monthly payouts
@@ -258,12 +257,12 @@ export const PaymentSetup: React.FC<PaymentSetupProps> = ({
                   <span className="font-medium">{formatCurrency(1000)}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-muted-foreground">Your Commission (15%):</span>
-                  <span className="font-medium text-green-600">{formatCurrency(150)}</span>
+                  <span className="text-muted-foreground">Your Commission (20%):</span>
+                  <span className="font-medium text-green-600">{formatCurrency(200)}</span>
                 </div>
                 <div className="flex justify-between text-xs pt-1 border-t">
                   <span className="text-muted-foreground">Monthly (100 sales):</span>
-                  <span className="font-semibold text-green-600">{formatCurrency(15000)}</span>
+                  <span className="font-semibold text-green-600">{formatCurrency(20000)}</span>
                 </div>
               </div>
             </div>
@@ -277,11 +276,10 @@ export const PaymentSetup: React.FC<PaymentSetupProps> = ({
 
         {/* Customer Paybill Card */}
         <Card
-          className={`cursor-pointer transition-all ${
-            selectedMethod === "customer"
-              ? "border-primary ring-2 ring-primary ring-offset-2"
-              : "hover:border-primary/50"
-          }`}
+          className={`cursor-pointer transition-all ${selectedMethod === "customer"
+            ? "border-primary ring-2 ring-primary ring-offset-2"
+            : "hover:border-primary/50"
+            }`}
           onClick={() => setSelectedMethod("customer")}
         >
           <CardHeader>
@@ -306,7 +304,7 @@ export const PaymentSetup: React.FC<PaymentSetupProps> = ({
             <div className="rounded-lg bg-muted p-4">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-sm font-medium">Commission Rate</span>
-                <Badge variant="default">15%</Badge>
+                <Badge variant="default">20%</Badge>
               </div>
               <p className="text-xs text-muted-foreground">
                 Same commission rate with direct payment control
@@ -373,8 +371,8 @@ export const PaymentSetup: React.FC<PaymentSetupProps> = ({
                 </tr>
                 <tr>
                   <td className="py-3">Commission Rate</td>
-                  <td className="text-center">15%</td>
-                  <td className="text-center">15%</td>
+                  <td className="text-center">20%</td>
+                  <td className="text-center">20%</td>
                 </tr>
                 <tr>
                   <td className="py-3">Payment Control</td>
@@ -427,8 +425,8 @@ export const PaymentSetup: React.FC<PaymentSetupProps> = ({
             <AccordionItem value="item-2">
               <AccordionTrigger>How are commissions calculated?</AccordionTrigger>
               <AccordionContent>
-                Commissions are calculated at 15% of every transaction. For example, if a
-                customer purchases a 1000 KES voucher, you earn 150 KES commission. The
+                Commissions are calculated at 20% of every transaction. For example, if a
+                customer purchases a 1000 KES voucher, you earn 200 KES commission. The
                 calculation is automatic and transparent in your dashboard.
               </AccordionContent>
             </AccordionItem>
@@ -454,7 +452,7 @@ export const PaymentSetup: React.FC<PaymentSetupProps> = ({
             <AccordionItem value="item-5">
               <AccordionTrigger>Are there any hidden fees?</AccordionTrigger>
               <AccordionContent>
-                No hidden fees! The 15% commission is the only cost. M-Pesa transaction fees
+                No hidden fees! The 20% commission is the only cost. M-Pesa transaction fees
                 are borne by the customer. With company paybill, all payment processing is
                 included. With your own paybill, standard M-Pesa charges apply.
               </AccordionContent>
