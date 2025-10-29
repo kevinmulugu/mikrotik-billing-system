@@ -2,12 +2,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
+import clientPromise from '@/lib/mongodb';
+import { ObjectId } from 'mongodb';
 
 interface RouteContext {
-  params: {
+  params: Promise<{
     id: string;
     packageName: string;
-  };
+  }>;
 }
 
 // PATCH /api/routers/[id]/packages/[packageName]/status - Enable or disable package
@@ -18,82 +20,106 @@ export async function PATCH(
   try {
     const session = await getServerSession(authOptions);
 
-    if (!session || !session.user) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
+    if (!session || !session.user?.id) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { id: routerId, packageName } = context.params;
+    const { id: routerId, packageName } = await context.params;
+    const userId = session.user.id;
     const body = await request.json();
 
-    // Validate enabled field
-    if (typeof body.enabled !== 'boolean') {
+    const decodedPackageName = decodeURIComponent(packageName);
+
+    // Validate disabled field
+    if (typeof body.disabled !== 'boolean') {
       return NextResponse.json(
-        { error: 'enabled field must be a boolean' },
+        { error: 'disabled field must be a boolean' },
         { status: 400 }
       );
     }
 
-    const backendUrl = process.env.BACKEND_API_URL || 'http://localhost:8080';
-
-    // If disabling, check for active users first
-    if (!body.enabled) {
-      const activeUsersResponse = await fetch(
-        `${backendUrl}/api/routers/${routerId}/packages/${encodeURIComponent(packageName)}/active-users`,
-        {
-          headers: {
-            'Authorization': `Bearer ${session.accessToken}`,
-          },
-        }
-      );
-
-      if (activeUsersResponse.ok) {
-        const activeUsersData = await activeUsersResponse.json();
-        
-        if (activeUsersData.activeUsers > 0) {
-          return NextResponse.json(
-            { 
-              error: 'Cannot disable package with active users',
-              activeUsers: activeUsersData.activeUsers,
-              userDetails: activeUsersData.users,
-            },
-            { status: 400 }
-          );
-        }
-      }
+    // Validate router ID
+    if (!ObjectId.isValid(routerId)) {
+      return NextResponse.json({ error: 'Invalid router ID' }, { status: 400 });
     }
 
-    // Update package status via backend API
-    const response = await fetch(
-      `${backendUrl}/api/routers/${routerId}/packages/${encodeURIComponent(packageName)}/status`,
-      {
-        method: 'PATCH',
-        headers: {
-          'Authorization': `Bearer ${session.accessToken}`,
-          'Content-Type': 'application/json',
+    // Connect to database
+    const client = await clientPromise;
+    const db = client.db(process.env.MONGODB_DB_NAME || 'mikrotik_billing');
+
+    // Get customer
+    const customer = await db
+      .collection('customers')
+      .findOne({ userId: new ObjectId(userId) });
+
+    if (!customer) {
+      return NextResponse.json({ error: 'Customer not found' }, { status: 404 });
+    }
+
+    // Verify router ownership
+    const router = await db.collection('routers').findOne({
+      _id: new ObjectId(routerId),
+      customerId: customer._id,
+    });
+
+    if (!router) {
+      return NextResponse.json(
+        { error: 'Router not found or access denied' },
+        { status: 404 }
+      );
+    }
+
+    // Find package
+    const packageIndex = router.packages?.hotspot?.findIndex(
+      (pkg: any) => pkg.name === decodedPackageName
+    );
+
+    if (packageIndex === undefined || packageIndex === -1) {
+      return NextResponse.json(
+        { error: `Package "${decodedPackageName}" not found` },
+        { status: 404 }
+      );
+    }
+
+    const packageData = router.packages.hotspot[packageIndex];
+
+    // If enabling (disabled=false), check for active users first
+    if (body.disabled && packageData.activeUsers > 0) {
+      return NextResponse.json(
+        {
+          error: 'Cannot disable package with active users',
+          activeUsers: packageData.activeUsers,
         },
-        body: JSON.stringify({ enabled: body.enabled }),
+        { status: 400 }
+      );
+    }
+
+    // Update package status in database
+    const updateResult = await db.collection('routers').updateOne(
+      {
+        _id: new ObjectId(routerId),
+        customerId: customer._id,
+      },
+      {
+        $set: {
+          [`packages.hotspot.${packageIndex}.disabled`]: body.disabled,
+          [`packages.hotspot.${packageIndex}.updatedAt`]: new Date(),
+        },
       }
     );
 
-    if (!response.ok) {
-      const error = await response.json();
+    if (updateResult.matchedCount === 0) {
       return NextResponse.json(
-        { error: error.message || 'Failed to update package status' },
-        { status: response.status }
+        { error: 'Failed to update package status' },
+        { status: 500 }
       );
     }
 
-    const data = await response.json();
-
     return NextResponse.json({
       success: true,
-      package: data.package,
-      message: body.enabled 
-        ? 'Package enabled successfully. New vouchers can now be purchased.'
-        : 'Package disabled successfully. No new vouchers can be purchased.',
+      message: body.disabled
+        ? 'Package disabled successfully. No new vouchers can be purchased.'
+        : 'Package enabled successfully. New vouchers can now be purchased.',
     });
   } catch (error) {
     console.error('Error updating package status:', error);
@@ -112,41 +138,66 @@ export async function GET(
   try {
     const session = await getServerSession(authOptions);
 
-    if (!session || !session.user) {
+    if (!session || !session.user?.id) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const { id: routerId, packageName } = await context.params;
+    const userId = session.user.id;
+
+    const decodedPackageName = decodeURIComponent(packageName);
+
+    // Validate router ID
+    if (!ObjectId.isValid(routerId)) {
+      return NextResponse.json({ error: 'Invalid router ID' }, { status: 400 });
+    }
+
+    // Connect to database
+    const client = await clientPromise;
+    const db = client.db(process.env.MONGODB_DB_NAME || 'mikrotik_billing');
+
+    // Get customer
+    const customer = await db
+      .collection('customers')
+      .findOne({ userId: new ObjectId(userId) });
+
+    if (!customer) {
+      return NextResponse.json({ error: 'Customer not found' }, { status: 404 });
+    }
+
+    // Verify router ownership
+    const router = await db.collection('routers').findOne({
+      _id: new ObjectId(routerId),
+      customerId: customer._id,
+    });
+
+    if (!router) {
       return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
+        { error: 'Router not found or access denied' },
+        { status: 404 }
       );
     }
 
-    const { id: routerId, packageName } = context.params;
-
-    // Fetch package status from backend API
-    const backendUrl = process.env.BACKEND_API_URL || 'http://localhost:8080';
-    const response = await fetch(
-      `${backendUrl}/api/routers/${routerId}/packages/${encodeURIComponent(packageName)}/status`,
-      {
-        headers: {
-          'Authorization': `Bearer ${session.accessToken}`,
-        },
-      }
+    // Find package
+    const packageData = router.packages?.hotspot?.find(
+      (pkg: any) => pkg.name === decodedPackageName
     );
 
-    if (!response.ok) {
-      const error = await response.json();
+    if (!packageData) {
       return NextResponse.json(
-        { error: error.message || 'Failed to fetch package status' },
-        { status: response.status }
+        { error: `Package "${decodedPackageName}" not found` },
+        { status: 404 }
       );
     }
 
-    const data = await response.json();
+    const activeUsers = packageData.activeUsers || 0;
 
     return NextResponse.json({
       success: true,
-      enabled: data.enabled,
-      activeUsers: data.activeUsers || 0,
-      canDisable: data.activeUsers === 0,
+      disabled: packageData.disabled || false,
+      activeUsers,
+      canDisable: !packageData.disabled && activeUsers === 0,
+      canEnable: !!packageData.disabled,
     });
   } catch (error) {
     console.error('Error fetching package status:', error);

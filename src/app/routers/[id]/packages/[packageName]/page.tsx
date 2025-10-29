@@ -17,8 +17,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { 
-  ArrowLeft, Package, Loader2, Edit, RefreshCw, 
+import {
+  ArrowLeft, Package, Loader2, Edit, RefreshCw,
   Clock, Zap, HardDrive, DollarSign, Calendar,
   TrendingUp, Users, Ticket, AlertTriangle,
   CheckCircle2, XCircle, Activity, BarChart3
@@ -38,7 +38,7 @@ export default function ViewPackagePage({ params }: ViewPackagePageProps) {
   const { id: routerId, packageName } = use(params);
   const { data: session, status } = useSession();
   const router = useRouter();
-  
+
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
   const [packageData, setPackageData] = useState<any>(null);
@@ -61,7 +61,7 @@ export default function ViewPackagePage({ params }: ViewPackagePageProps) {
   const fetchPackageData = async () => {
     try {
       setLoading(true);
-      
+
       // Fetch router data to get package info
       const routerResponse = await fetch(`/api/routers/${routerId}`);
       const routerData = await routerResponse.json();
@@ -119,12 +119,12 @@ export default function ViewPackagePage({ params }: ViewPackagePageProps) {
   const handleToggleStatus = async () => {
     setActionLoading(true);
     try {
-      const newStatus = packageData.enabled ? 'disabled' : 'enabled';
-      
+      const newStatus = packageData.disabled ? 'enabled' : 'disabled';
+
       const response = await fetch(`/api/routers/${routerId}/packages/${packageName}/status`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ enabled: !packageData.enabled }),
+        body: JSON.stringify({ disabled: !packageData.disabled }),
       });
 
       const data = await response.json();
@@ -222,8 +222,9 @@ export default function ViewPackagePage({ params }: ViewPackagePageProps) {
   }
 
   const activeUsers = packageData.activeUsers || 0;
-  const canDisable = packageData.enabled && activeUsers === 0;
-  const canEnable = !packageData.enabled;
+  // DB stores `disabled` (true = not purchasable). Compute convenience flags from it.
+  const canDisable = !packageData.disabled && activeUsers === 0;
+  const canEnable = !!packageData.disabled;
 
   return (
     <div className="space-y-6 max-w-6xl mx-auto">
@@ -240,7 +241,7 @@ export default function ViewPackagePage({ params }: ViewPackagePageProps) {
               <h1 className="text-2xl font-bold sm:text-3xl truncate">
                 {packageData.displayName || packageData.name}
               </h1>
-              {packageData.enabled ? (
+              {!packageData.disabled ? (
                 <Badge className="bg-green-500">Active</Badge>
               ) : (
                 <Badge variant="secondary">Disabled</Badge>
@@ -258,8 +259,8 @@ export default function ViewPackagePage({ params }: ViewPackagePageProps) {
         {/* Action Buttons */}
         <div className="flex flex-wrap gap-2">
           {(packageData.syncStatus === 'out_of_sync' || packageData.syncStatus === 'not_on_router') && (
-            <Button 
-              size="sm" 
+            <Button
+              size="sm"
               onClick={handleSync}
               disabled={actionLoading || routerData.status !== 'online'}
             >
@@ -277,7 +278,7 @@ export default function ViewPackagePage({ params }: ViewPackagePageProps) {
               Edit Package
             </Link>
           </Button>
-          {packageData.enabled ? (
+          {!packageData.disabled ? (
             <Button
               size="sm"
               variant="destructive"
@@ -290,7 +291,7 @@ export default function ViewPackagePage({ params }: ViewPackagePageProps) {
             <Button
               size="sm"
               onClick={() => openToggleDialog('enable')}
-              disabled={actionLoading}
+              disabled={actionLoading || !canEnable}
             >
               Enable Package
             </Button>
@@ -299,7 +300,7 @@ export default function ViewPackagePage({ params }: ViewPackagePageProps) {
       </div>
 
       {/* Warning if package is disabled */}
-      {!packageData.enabled && (
+      {packageData.disabled && (
         <Alert>
           <AlertTriangle className="h-4 w-4" />
           <AlertDescription>
@@ -510,7 +511,7 @@ export default function ViewPackagePage({ params }: ViewPackagePageProps) {
                   <p className="text-xs text-muted-foreground mt-1">Current availability</p>
                 </div>
                 <div className="text-right">
-                  {packageData.enabled ? (
+                  {!packageData.disabled ? (
                     <Badge className="bg-green-500">Active</Badge>
                   ) : (
                     <Badge variant="secondary">Disabled</Badge>
@@ -552,7 +553,7 @@ export default function ViewPackagePage({ params }: ViewPackagePageProps) {
             <div className="space-y-2">
               <p className="text-sm font-medium text-muted-foreground">Average per Sale</p>
               <p className="text-3xl font-bold">
-                KSh {packageData.stats?.count > 0 
+                KSh {packageData.stats?.count > 0
                   ? Math.round((packageData.stats.revenue || 0) / packageData.stats.count).toLocaleString()
                   : 0
                 }
@@ -605,20 +606,20 @@ export default function ViewPackagePage({ params }: ViewPackagePageProps) {
                 <>
                   {activeUsers > 0 ? (
                     <>
-                      This package currently has <strong>{activeUsers} active users</strong>. 
-                      You cannot disable it while users are connected. Please wait for all users 
+                      This package currently has <strong>{activeUsers} active users</strong>.
+                      You cannot disable it while users are connected. Please wait for all users
                       to disconnect or manually disconnect them first.
                     </>
                   ) : (
                     <>
-                      This will prevent new vouchers from being purchased for this package. 
+                      This will prevent new vouchers from being purchased for this package.
                       Existing vouchers will continue to work. You can re-enable it anytime.
                     </>
                   )}
                 </>
               ) : (
                 <>
-                  This will make the package available for new voucher purchases. 
+                  This will make the package available for new voucher purchases.
                   Make sure it's synced to the router before enabling.
                 </>
               )}

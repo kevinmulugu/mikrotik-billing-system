@@ -83,7 +83,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
   }
 }
 
-// PATCH /api/routers/[id]/packages/[packageName] - Update package (delegates to PUT on main route)
+// PATCH /api/routers/[id]/packages/[packageName] - Update package
 export async function PATCH(request: NextRequest, context: RouteContext) {
   try {
     const session = await getServerSession(authOptions);
@@ -93,6 +93,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     }
 
     const { id: routerId, packageName } = await context.params;
+    const userId = session.user.id;
     const body = await request.json();
 
     // Decode package name
@@ -106,31 +107,163 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       );
     }
 
-    // Call the PUT endpoint on the main packages route
-    const baseUrl = request.nextUrl.origin;
-    const response = await fetch(`${baseUrl}/api/routers/${routerId}/packages`, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        'Cookie': request.headers.get('cookie') || '',
-      },
-      body: JSON.stringify({
-        name: decodedPackageName,
-        ...body,
-      }),
+    // Validate router ID
+    if (!ObjectId.isValid(routerId)) {
+      return NextResponse.json({ error: 'Invalid router ID' }, { status: 400 });
+    }
+
+    // Connect to database
+    const client = await clientPromise;
+    const db = client.db(process.env.MONGODB_DB_NAME || 'mikrotik_billing');
+
+    // Get customer
+    const customer = await db
+      .collection('customers')
+      .findOne({ userId: new ObjectId(userId) });
+
+    if (!customer) {
+      return NextResponse.json({ error: 'Customer not found' }, { status: 404 });
+    }
+
+    // Verify router ownership
+    const router = await db.collection('routers').findOne({
+      _id: new ObjectId(routerId),
+      customerId: customer._id,
     });
 
-    if (!response.ok) {
-      const error = await response.json();
+    if (!router) {
       return NextResponse.json(
-        { error: error.error || 'Failed to update package' },
-        { status: response.status }
+        { error: 'Router not found or access denied' },
+        { status: 404 }
       );
     }
 
-    const data = await response.json();
+    // Find existing package
+    const existingPackageIndex = router.packages?.hotspot?.findIndex(
+      (pkg: any) => pkg.name === decodedPackageName
+    );
 
-    return NextResponse.json(data);
+    if (existingPackageIndex === undefined || existingPackageIndex === -1) {
+      return NextResponse.json(
+        { error: `Package with name "${decodedPackageName}" not found` },
+        { status: 404 }
+      );
+    }
+
+    const existingPackage = router.packages.hotspot[existingPackageIndex];
+
+    // Build updated package data (merge with existing)
+    const updatedFields: any = {
+      updatedAt: new Date(),
+    };
+
+    if (body.displayName !== undefined) updatedFields.displayName = body.displayName.trim();
+    if (body.description !== undefined) updatedFields.description = body.description.trim();
+    if (body.price !== undefined) updatedFields.price = parseFloat(body.price.toString());
+    if (body.dataLimit !== undefined)
+      updatedFields.dataLimit = parseInt(body.dataLimit.toString());
+    if (body.validity !== undefined) updatedFields.validity = parseInt(body.validity.toString());
+    if (body.disabled !== undefined) updatedFields.disabled = body.disabled === true;
+
+    // Handle duration update
+    if (body.duration !== undefined) {
+      updatedFields.duration = parseInt(body.duration.toString());
+      // Convert to MikroTik format
+      const duration = updatedFields.duration;
+      if (duration < 60) {
+        updatedFields.sessionTimeout = `${duration}m`;
+      } else if (duration < 1440) {
+        const hours = Math.floor(duration / 60);
+        const remainingMinutes = duration % 60;
+        updatedFields.sessionTimeout = remainingMinutes > 0 ? `${hours}h${remainingMinutes}m` : `${hours}h`;
+      } else {
+        const days = Math.floor(duration / 1440);
+        const remainingHours = Math.floor((duration % 1440) / 60);
+        updatedFields.sessionTimeout = remainingHours > 0 ? `${days}d${remainingHours}h` : `${days}d`;
+      }
+    }
+
+    // Handle bandwidth update
+    if (body.bandwidth !== undefined) {
+      updatedFields.bandwidth = {
+        upload: parseInt(body.bandwidth.upload.toString()),
+        download: parseInt(body.bandwidth.download.toString()),
+      };
+
+      // Rebuild rate limit string
+      const uploadMbps =
+        updatedFields.bandwidth.upload >= 1024
+          ? `${Math.floor(updatedFields.bandwidth.upload / 1024)}M`
+          : `${updatedFields.bandwidth.upload}k`;
+      const downloadMbps =
+        updatedFields.bandwidth.download >= 1024
+          ? `${Math.floor(updatedFields.bandwidth.download / 1024)}M`
+          : `${updatedFields.bandwidth.download}k`;
+      updatedFields.rateLimit = `${uploadMbps}/${downloadMbps}`;
+    }
+
+    // Merge with existing package
+    const mergedPackage = {
+      ...existingPackage,
+      ...updatedFields,
+    };
+
+    // Update package in MongoDB using array filter
+    const updateResult = await db.collection('routers').updateOne(
+      {
+        _id: new ObjectId(routerId),
+        'packages.hotspot.name': decodedPackageName,
+      },
+      {
+        $set: {
+          'packages.hotspot.$': mergedPackage,
+          'packages.lastSynced': new Date(),
+          updatedAt: new Date(),
+        },
+      }
+    );
+
+    if (updateResult.matchedCount === 0) {
+      return NextResponse.json({ error: 'Failed to update package' }, { status: 500 });
+    }
+
+    // Log audit trail
+    await db.collection('audit_logs').insertOne({
+      user: {
+        userId: new ObjectId(userId),
+        email: session.user.email || '',
+        role: session.user.role || 'homeowner',
+        ipAddress: request.headers.get('x-forwarded-for') || 'unknown',
+        userAgent: request.headers.get('user-agent') || 'unknown',
+      },
+      action: {
+        type: 'update',
+        resource: 'package',
+        resourceId: new ObjectId(routerId),
+        description: `Updated package "${mergedPackage.displayName}" (${decodedPackageName})`,
+      },
+      changes: {
+        before: existingPackage,
+        after: mergedPackage,
+        fields: Object.keys(updatedFields),
+      },
+      metadata: {
+        source: 'web',
+        severity: 'info',
+      },
+      timestamp: new Date(),
+    });
+
+    return NextResponse.json({
+      success: true,
+      package: {
+        ...mergedPackage,
+        createdAt: mergedPackage.createdAt?.toISOString() || new Date().toISOString(),
+        updatedAt: mergedPackage.updatedAt?.toISOString() || new Date().toISOString(),
+        lastSynced: mergedPackage.lastSynced?.toISOString() || null,
+      },
+      message: 'Package updated successfully. Changes will be synced to router on next sync.',
+    });
   } catch (error) {
     console.error('Error updating package:', error);
     return NextResponse.json(
@@ -141,7 +274,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       { status: 500 }
     );
   }
-}// DELETE /api/routers/[id]/packages/[packageName] - Delete package (delegates to DELETE on main route)
+}// DELETE /api/routers/[id]/packages/[packageName] - Delete package
 export async function DELETE(request: NextRequest, context: RouteContext) {
   try {
     const session = await getServerSession(authOptions);
@@ -151,33 +284,120 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
     }
 
     const { id: routerId, packageName } = await context.params;
+    const userId = session.user.id;
 
     // Decode package name
     const decodedPackageName = decodeURIComponent(packageName);
 
-    // Call the DELETE endpoint on the main packages route
-    const baseUrl = request.nextUrl.origin;
-    const response = await fetch(
-      `${baseUrl}/api/routers/${routerId}/packages?name=${encodeURIComponent(decodedPackageName)}`,
-      {
-        method: 'DELETE',
-        headers: {
-          'Cookie': request.headers.get('cookie') || '',
-        },
-      }
-    );
+    // Validate router ID
+    if (!ObjectId.isValid(routerId)) {
+      return NextResponse.json({ error: 'Invalid router ID' }, { status: 400 });
+    }
 
-    if (!response.ok) {
-      const error = await response.json();
+    // Connect to database
+    const client = await clientPromise;
+    const db = client.db(process.env.MONGODB_DB_NAME || 'mikrotik_billing');
+
+    // Get customer
+    const customer = await db
+      .collection('customers')
+      .findOne({ userId: new ObjectId(userId) });
+
+    if (!customer) {
+      return NextResponse.json({ error: 'Customer not found' }, { status: 404 });
+    }
+
+    // Verify router ownership
+    const router = await db.collection('routers').findOne({
+      _id: new ObjectId(routerId),
+      customerId: customer._id,
+    });
+
+    if (!router) {
       return NextResponse.json(
-        { error: error.error || 'Failed to delete package' },
-        { status: response.status }
+        { error: 'Router not found or access denied' },
+        { status: 404 }
       );
     }
 
-    const data = await response.json();
+    // Find existing package
+    const existingPackage = router.packages?.hotspot?.find(
+      (pkg: any) => pkg.name === decodedPackageName
+    );
 
-    return NextResponse.json(data);
+    if (!existingPackage) {
+      return NextResponse.json(
+        { error: `Package with name "${decodedPackageName}" not found` },
+        { status: 404 }
+      );
+    }
+
+    // Check if package has active vouchers
+    const activeVouchers = await db
+      .collection('vouchers')
+      .countDocuments({
+        routerId: new ObjectId(routerId),
+        'voucherInfo.packageType': decodedPackageName,
+        status: { $in: ['active', 'unused'] },
+      });
+
+    if (activeVouchers > 0) {
+      return NextResponse.json(
+        {
+          error: `Cannot delete package "${decodedPackageName}" because it has ${activeVouchers} active voucher(s)`,
+          activeVouchers,
+        },
+        { status: 400 }
+      );
+    }
+
+    // Remove package from MongoDB
+    const updateResult = await db.collection('routers').updateOne(
+      { _id: new ObjectId(routerId) },
+      {
+        $pull: { 'packages.hotspot': { name: decodedPackageName } },
+        $set: {
+          'packages.lastSynced': new Date(),
+          updatedAt: new Date(),
+        },
+      } as any
+    );
+
+    if (updateResult.matchedCount === 0) {
+      return NextResponse.json({ error: 'Failed to delete package' }, { status: 500 });
+    }
+
+    // Log audit trail
+    await db.collection('audit_logs').insertOne({
+      user: {
+        userId: new ObjectId(userId),
+        email: session.user.email || '',
+        role: session.user.role || 'homeowner',
+        ipAddress: request.headers.get('x-forwarded-for') || 'unknown',
+        userAgent: request.headers.get('user-agent') || 'unknown',
+      },
+      action: {
+        type: 'delete',
+        resource: 'package',
+        resourceId: new ObjectId(routerId),
+        description: `Deleted package "${existingPackage.displayName}" (${decodedPackageName})`,
+      },
+      changes: {
+        before: existingPackage,
+        after: null,
+        fields: ['packages'],
+      },
+      metadata: {
+        source: 'web',
+        severity: 'warning',
+      },
+      timestamp: new Date(),
+    });
+
+    return NextResponse.json({
+      success: true,
+      message: `Package "${decodedPackageName}" deleted successfully`,
+    });
   } catch (error) {
     console.error('Error deleting package:', error);
     return NextResponse.json(
