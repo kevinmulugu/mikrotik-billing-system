@@ -4,6 +4,8 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import clientPromise from '@/lib/mongodb';
 import { ObjectId } from 'mongodb';
+import { MikroTikService } from '@/lib/services/mikrotik';
+import { getRouterConnectionConfig } from '@/lib/services/router-connection';
 
 interface RouteContext {
   params: Promise<{
@@ -207,6 +209,67 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       ...existingPackage,
       ...updatedFields,
     };
+
+    // Try to sync updated package to MikroTik if router is online and we have router connection info.
+    let mikrotikSyncResult = null;
+    if (router.health?.status === 'online') {
+      try {
+        const routerConfig = getRouterConnectionConfig(router, {
+          forceLocal: false,
+          forceVPN: true,
+        });
+
+        // If the package already exists on the router (has mikrotikId), update it.
+        if (existingPackage.mikrotikId) {
+          const mikrotikProfile = {
+            'address-pool': mergedPackage.addressPool,
+            'session-timeout': mergedPackage.sessionTimeout,
+            'idle-timeout': mergedPackage.idleTimeout,
+            'keepalive-timeout': mergedPackage.keepaliveTimeout,
+            'status-autorefresh': mergedPackage.statusAutorefresh,
+            'shared-users': mergedPackage.sharedUsers,
+            'rate-limit': mergedPackage.rateLimit,
+            'transparent-proxy': mergedPackage.transparentProxy,
+          };
+
+          const result = await MikroTikService.updateHotspotUserProfileById(
+            routerConfig,
+            existingPackage.mikrotikId,
+            mikrotikProfile
+          );
+
+          mergedPackage.syncStatus = 'synced';
+          mergedPackage.lastSynced = new Date();
+          mergedPackage.syncError = null;
+          mikrotikSyncResult = { success: true, mikrotikId: existingPackage.mikrotikId };
+        } else {
+          // If package not yet on the router, create it and record mikrotikId
+          const mikrotikProfile = {
+            name: mergedPackage.name,
+            'address-pool': mergedPackage.addressPool,
+            'session-timeout': mergedPackage.sessionTimeout,
+            'idle-timeout': mergedPackage.idleTimeout,
+            'keepalive-timeout': mergedPackage.keepaliveTimeout,
+            'status-autorefresh': mergedPackage.statusAutorefresh,
+            'shared-users': mergedPackage.sharedUsers,
+            'rate-limit': mergedPackage.rateLimit,
+            'transparent-proxy': mergedPackage.transparentProxy,
+          };
+
+          const result = await MikroTikService.createHotspotUserProfile(routerConfig, mikrotikProfile);
+          mergedPackage.mikrotikId = result?.['.id'] || null;
+          mergedPackage.syncStatus = 'synced';
+          mergedPackage.lastSynced = new Date();
+          mergedPackage.syncError = null;
+          mikrotikSyncResult = { success: true, mikrotikId: mergedPackage.mikrotikId };
+        }
+      } catch (mikrotikError) {
+        console.error('Failed to sync updated package to MikroTik:', mikrotikError);
+        mergedPackage.syncStatus = 'failed';
+        mergedPackage.syncError = mikrotikError instanceof Error ? mikrotikError.message : String(mikrotikError);
+        mikrotikSyncResult = { success: false, error: mergedPackage.syncError };
+      }
+    }
 
     // Update package in MongoDB using array filter
     const updateResult = await db.collection('routers').updateOne(
