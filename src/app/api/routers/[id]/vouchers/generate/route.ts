@@ -87,7 +87,7 @@ export async function POST(
     const {
       quantity = 10,
       packageName, // Package name from router (e.g., "3hours-25ksh")
-      autoExpire = true,
+      autoExpire = false, // default to false per new requirement
       expiryDays = 30,
       syncToRouter = true, // Whether to create users on router immediately
     } = body;
@@ -164,10 +164,11 @@ export async function POST(
     // Generate batch ID
     const batchId = `BATCH-${Date.now()}`;
 
-    // Calculate expiry date
-    const expiresAt = autoExpire
+    // Calculate activation expiry date (when an unused voucher can no longer be activated)
+    // If autoExpire is false we leave activationExpiresAt as null (no automatic activation expiry)
+    const activationExpiresAt = autoExpire
       ? new Date(Date.now() + expiryDays * 24 * 60 * 60 * 1000)
-      : new Date(Date.now() + 365 * 24 * 60 * 60 * 1000); // 1 year default
+      : null;
 
     // Prepare router config if sync is enabled
     let routerConfig = null;
@@ -262,6 +263,10 @@ export async function POST(
           endTime: null,
           dataUsed: 0,
           timeUsed: 0,
+          // Max duration (minutes) that will be applied when voucher is activated
+          maxDurationMinutes: duration,
+          // expectedEndTime will be set when voucher is activated (startTime + maxDurationMinutes)
+          expectedEndTime: null,
         },
         payment: {
           method: null,
@@ -277,7 +282,8 @@ export async function POST(
           generatedBy: new ObjectId(userId),
         },
         expiry: {
-          expiresAt: expiresAt,
+          // Activation expiry (when voucher can no longer be activated). Null means no activation expiry.
+          expiresAt: activationExpiresAt,
           autoDelete: autoExpire,
         },
         // CRITICAL: Store MikroTik user ID for future operations
@@ -357,7 +363,7 @@ export async function POST(
       duration: formatDuration(v.voucherInfo.duration),
       durationMinutes: v.voucherInfo.duration,
       price: v.voucherInfo.price,
-      expiresAt: v.expiry.expiresAt.toISOString(),
+      expiresAt: v.expiry.expiresAt ? new Date(v.expiry.expiresAt).toISOString() : null,
       mikrotikUserId: v.mikrotikUserId, // Include in response for transparency
       syncedToRouter: v.mikrotikUserId !== null,
     }));
@@ -372,7 +378,7 @@ export async function POST(
         commission: quantity * price * (commissionRate / 100),
         packageName: displayName,
         duration: formatDuration(duration),
-        expiryDate: expiresAt.toISOString(),
+        expiryDate: activationExpiresAt ? activationExpiresAt.toISOString() : null,
       },
       routerSync: syncToRouter
         ? {

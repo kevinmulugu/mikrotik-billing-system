@@ -44,7 +44,7 @@ export function VoucherGenerator({ routerId }: VoucherGeneratorProps) {
   // Form state
   const [selectedPackage, setSelectedPackage] = useState<string>('');
   const [quantity, setQuantity] = useState<string>('10');
-  const [autoExpire, setAutoExpire] = useState<boolean>(true);
+  const [autoExpire, setAutoExpire] = useState<boolean>(false);
   const [expiryDays, setExpiryDays] = useState<string>('30');
   const [syncToRouter, setSyncToRouter] = useState<boolean>(true);
 
@@ -68,7 +68,7 @@ export function VoucherGenerator({ routerId }: VoucherGeneratorProps) {
       }
 
       const hotspotPackages = data.router?.packages?.hotspot || [];
-      
+
       if (hotspotPackages.length === 0) {
         toast.error('No packages found on router. Please sync packages first.');
         return;
@@ -84,7 +84,7 @@ export function VoucherGenerator({ routerId }: VoucherGeneratorProps) {
       }
 
       setPackages(syncedPackages);
-      
+
       // Auto-select first package
       if (syncedPackages.length > 0) {
         setSelectedPackage(syncedPackages[0].name);
@@ -156,7 +156,7 @@ export function VoucherGenerator({ routerId }: VoucherGeneratorProps) {
           packageName: selectedPackage,
           quantity: parseInt(quantity),
           autoExpire,
-          expiryDays: autoExpire ? parseInt(expiryDays) : 365,
+          expiryDays: autoExpire ? parseInt(expiryDays) : null,
           syncToRouter,
         }),
       });
@@ -197,7 +197,7 @@ export function VoucherGenerator({ routerId }: VoucherGeneratorProps) {
         v.packageDisplayName,
         v.duration,
         `KSh ${v.price}`,
-        new Date(v.expiresAt).toLocaleDateString(),
+        v.expiresAt ? new Date(v.expiresAt).toLocaleDateString() : 'Never',
       ]),
     ]
       .map((row) => row.join(','))
