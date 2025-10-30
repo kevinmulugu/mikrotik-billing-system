@@ -47,7 +47,6 @@ export function VoucherGenerator({ routerId }: VoucherGeneratorProps) {
   const [autoExpire, setAutoExpire] = useState<boolean>(true);
   const [expiryDays, setExpiryDays] = useState<string>('30');
   const [usageTimedOnPurchase, setUsageTimedOnPurchase] = useState<boolean>(false);
-  const [autoTerminateOnPurchase, setAutoTerminateOnPurchase] = useState<boolean>(false);
   const [syncToRouter, setSyncToRouter] = useState<boolean>(true);
 
   // Result state
@@ -162,7 +161,6 @@ export function VoucherGenerator({ routerId }: VoucherGeneratorProps) {
           autoExpire,
           expiryDays: autoExpire ? parseInt(expiryDays) : null,
           usageTimedOnPurchase,
-          autoTerminateOnPurchase,
           syncToRouter,
         }),
       });
@@ -379,22 +377,7 @@ export function VoucherGenerator({ routerId }: VoucherGeneratorProps) {
             />
           </div>
 
-          {/* Auto Terminate Vouchers */}
-          <div className="flex items-center justify-between space-x-2 rounded-lg border p-4">
-            <div className="flex-1">
-              <Label htmlFor="autoTerminateOnPurchase" className="font-medium">
-                Auto Terminate Vouchers
-              </Label>
-              <p className="text-sm text-muted-foreground mt-1">
-                Automatically retire the voucher in the database and remove it from MikroTik when the package uptime elapses since purchase.
-              </p>
-            </div>
-            <Switch
-              id="autoTerminateOnPurchase"
-              checked={autoTerminateOnPurchase}
-              onCheckedChange={setAutoTerminateOnPurchase}
-            />
-          </div>
+          {/* Note: Auto Terminate behavior is handled by the cron expiry job for both Auto Expire and Time-usage-after-purchase options. */}
 
           {/* Sync to Router */}
           <div className="flex items-center justify-between space-x-2 rounded-lg border p-4">

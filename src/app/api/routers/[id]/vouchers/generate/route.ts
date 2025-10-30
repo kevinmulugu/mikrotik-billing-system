@@ -92,8 +92,6 @@ export async function POST(
       expiryDays = 30,
       // Whether voucher usage should be timed starting from purchase time
       usageTimedOnPurchase = false,
-      // If true, voucher will be auto-terminated (deleted from DB/router) when purchase/usage window elapses
-      autoTerminateOnPurchase = false,
       syncToRouter = true, // Whether to create users on router immediately
     } = body;
 
@@ -298,8 +296,7 @@ export async function POST(
           // purchaseExpiresAt will be set when voucher is purchased (purchaseTime + maxDurationMinutes)
           // The webhook will calculate this using the package duration
           purchaseExpiresAt: null,
-          // Whether to auto-terminate/delete voucher after purchase expiry (remove from DB/router)
-          autoTerminateOnPurchase: !!autoTerminateOnPurchase,
+          // Auto-terminate flag removed: cron expiry job will always remove hotspot users and mark vouchers expired
         },
         payment: {
           method: null,

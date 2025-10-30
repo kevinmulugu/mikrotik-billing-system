@@ -374,6 +374,11 @@ async function initializeDatabase() {
       { unique: true }
     );
     console.log('    ✓ voucherInfo.code (unique)');
+    await db.collection('vouchers').createIndex(
+      { reference: 1 },
+      { unique: true }
+    );
+    console.log('    ✓ reference (unique)');
     await db.collection('vouchers').createIndex({ routerId: 1 });
     console.log('    ✓ routerId');
     await db.collection('vouchers').createIndex({ customerId: 1 });
@@ -384,6 +389,8 @@ async function initializeDatabase() {
     console.log('    ✓ batch.batchId');
     await db.collection('vouchers').createIndex({ 'expiry.expiresAt': 1 });
     console.log('    ✓ expiry.expiresAt');
+    await db.collection('vouchers').createIndex({ 'usage.purchaseExpiresAt': 1 });
+    console.log('    ✓ usage.purchaseExpiresAt');
     await db.collection('vouchers').createIndex({ 'payment.transactionId': 1 });
     console.log('    ✓ payment.transactionId');
 
