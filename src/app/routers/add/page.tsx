@@ -68,15 +68,15 @@ export default async function AddRouterPage() {
           </div>
         </div>
 
-        <Card className="border-orange-200 bg-orange-50 dark:bg-orange-950">
+        <Card className="border border-border bg-card">
           <CardHeader>
             <div className="flex items-start gap-3">
-              <AlertTriangle className="h-6 w-6 text-orange-600 dark:text-orange-400 mt-1" />
+              <AlertTriangle className="h-6 w-6 text-foreground/80 mt-1" />
               <div>
-                <CardTitle className="text-orange-900 dark:text-orange-100">
+                <CardTitle className="text-foreground">
                   You've reached your plan limit
                 </CardTitle>
-                <CardDescription className="text-orange-800 dark:text-orange-200 mt-2">
+                <CardDescription className="text-muted-foreground mt-2">
                   Your <strong>{planLimit?.name}</strong> allows up to {planLimit?.maxRouters} router{planLimit?.maxRouters > 1 ? 's' : ''}.
                   You currently have <strong>{currentRouters} router{currentRouters > 1 ? 's' : ''}</strong>.
                 </CardDescription>
@@ -84,7 +84,7 @@ export default async function AddRouterPage() {
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="bg-white dark:bg-gray-900 p-4 rounded-lg">
+            <div className="p-4 rounded-lg bg-muted">
               <h3 className="font-semibold mb-3">Upgrade Options:</h3>
               <div className="space-y-3">
                 {currentPlan === 'individual' && (
