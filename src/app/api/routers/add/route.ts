@@ -559,6 +559,42 @@ export async function POST(req: NextRequest) {
       timestamp: new Date(),
     });
 
+    // === Push captive portal files to router (if hotspot enabled) ===
+    if (body.hotspotEnabled) {
+      try {
+        console.log(`[Router Add] Pushing captive portal files to router ${routerId}...`);
+
+        // Decrypt API password for use with FTP if needed
+        const decryptedPassword = MikroTikService.decryptPassword(encryptedPassword);
+
+        const uploadResult = await MikroTikService.uploadCaptivePortalFiles(
+          {
+            ipAddress: connectionConfig.ipAddress,
+            port: connectionConfig.port,
+            username: connectionConfig.username,
+            password: decryptedPassword,
+          },
+          {
+            routerId: routerId,
+            customerId: customer._id.toString(),
+            routerName: body.name,
+            location: body.location.name || body.location.county,
+            baseUrl: process.env.NEXT_PUBLIC_BASE_URL || process.env.BASE_URL || 'http://localhost:3000',
+            // ftpUser and ftpPassword omitted to default to API user
+            remotePath: '/hotspot',
+          }
+        );
+
+        if (!uploadResult.success) {
+          console.warn(`[Router Add] ⚠ Captive portal upload reported issues: ${uploadResult.error || uploadResult.stderr}`);
+        } else {
+          console.log(`[Router Add] ✓ Captive portal files uploaded: ${uploadResult.stdout?.slice(0, 200)}`);
+        }
+      } catch (uploadErr) {
+        console.error(`[Router Add] ❌ Failed to upload captive portal files:`, uploadErr);
+      }
+    }
+
     // Prepare response
     const responseData = {
       success: true,

@@ -1,5 +1,13 @@
 // lib/services/mikrotik.ts - Complete MikroTik Service (Fixed Version with Cleanup)
 
+import * as fs from 'fs/promises';
+import * as fssync from 'fs';
+import * as path from 'path';
+import os from 'os';
+import { promisify } from 'util';
+import { exec as _exec } from 'child_process';
+const exec = promisify(_exec);
+
 // ============================================
 // TYPE DEFINITIONS
 // ============================================
@@ -203,7 +211,7 @@ export class MikroTikService {
       return await this.makeRequest(config, endpoint, 'POST', body);
     } catch (error1) {
       const errorMsg = error1 instanceof Error ? error1.message : '';
-      
+
       // Strategy 2: Try POST with /add suffix (older RouterOS versions)
       if (errorMsg.includes('400') || errorMsg.includes('no such command')) {
         try {
@@ -213,7 +221,7 @@ export class MikroTikService {
           return await this.makeCliRequest(config, endpoint, body);
         }
       }
-      
+
       throw error1;
     }
   }
@@ -228,7 +236,7 @@ export class MikroTikService {
   ): Promise<any> {
     const cliPath = endpoint.replace('/rest', '');
     const commands = [cliPath];
-    
+
     // Convert body object to CLI parameters
     for (const [key, value] of Object.entries(body)) {
       commands.push(`=${key}=${value}`);
@@ -397,6 +405,127 @@ export class MikroTikService {
       console.error('Failed to get MAC address:', error);
       return '';
     }
+  }
+
+  /**
+   * Upload captive portal static files to a MikroTik router using lftp mirror.
+   * It will create a temporary staging directory, copy the project's `captive-portal-files`
+   * into it, generate an `api.json` with runtime values (routerId, customerId, baseUrl, etc.),
+   * then push the directory to the router's hotspot directory using lftp.
+   *
+   * Requirements: `lftp` installed on the server where this runs and the router reachable via FTP.
+   */
+  static async uploadCaptivePortalFiles(
+    config: MikroTikConnectionConfig,
+    options: {
+      routerId: string;
+      customerId: string;
+      routerName?: string;
+      location?: string;
+      baseUrl?: string; // API base url to embed in api.json
+      localSourcePath?: string; // path to captive-portal-files in project
+      remotePath?: string; // remote path on router, default '/hotspot'
+      ftpUser?: string; // optional - if different from API user
+      ftpPassword?: string;
+    }
+  ): Promise<{ success: boolean; stdout?: string; stderr?: string; error?: string }> {
+    const {
+      routerId,
+      customerId,
+      routerName = '',
+      location = '',
+      baseUrl = process.env.NEXT_PUBLIC_BASE_URL || process.env.BASE_URL || 'http://localhost:3000',
+      localSourcePath = path.resolve(process.cwd(), 'captive-portal-files'),
+      remotePath = '/hotspot',
+      ftpUser,
+      ftpPassword,
+    } = options;
+
+    try {
+      // Ensure source exists
+      const sourceStat = await fs.stat(localSourcePath).catch(() => null);
+      if (!sourceStat) {
+        return { success: false, error: `Local captive portal files not found at ${localSourcePath}` };
+      }
+
+      // Create temp directory
+      const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'captive-portal-'));
+
+      // Copy files recursively (fs.cp available in newer Node versions)
+      // Fallback to manual copy if not available
+      if ((fs as any).cp) {
+        await (fs as any).cp(localSourcePath, tmpDir, { recursive: true });
+      } else {
+        // naive recursive copy
+        const copyRecursive = async (src: string, dest: string) => {
+          await fs.mkdir(dest, { recursive: true });
+          const entries = await fs.readdir(src, { withFileTypes: true });
+          for (const entry of entries) {
+            const srcPath = path.join(src, entry.name);
+            const destPath = path.join(dest, entry.name);
+            if (entry.isDirectory()) {
+              await copyRecursive(srcPath, destPath);
+            } else if (entry.isFile()) {
+              await fs.copyFile(srcPath, destPath);
+            }
+          }
+        };
+        await copyRecursive(localSourcePath, tmpDir);
+      }
+
+      // Generate api.json content
+      const apiJsonPath = path.join(tmpDir, 'api.json');
+      const apiJson = {
+        router_id: routerId,
+        customer_id: customerId,
+        router_name: routerName,
+        location: location,
+        api: {
+          base_url: baseUrl,
+          endpoints: {
+            branding: '/api/captive/branding',
+            packages: '/api/captive/packages',
+            verify_mpesa: '/api/captive/verify-mpesa',
+            purchase: '/api/captive/purchase',
+            payment_status: '/api/captive/payment-status',
+          },
+          version: '1.0',
+        },
+        metadata: {
+          generated_at: new Date().toISOString(),
+          environment: process.env.NODE_ENV || 'development',
+        },
+      };
+
+      await fs.writeFile(apiJsonPath, JSON.stringify(apiJson, null, 2), 'utf8');
+
+      // Build lftp command
+      const ip = config.ipAddress;
+      const user = ftpUser || config.username;
+      const pass = ftpPassword || config.password;
+
+      // Use mirror -R to upload tmpDir content to remotePath
+      // The command logs in with provided credentials and mirrors, then exits
+      const lftpCmd = `lftp -u ${this.escapeShellArg(user)},${this.escapeShellArg(pass)} ${this.escapeShellArg(ip)} -e \"mirror -R ${this.escapeShellArg(tmpDir)} ${this.escapeShellArg(remotePath)}; bye\"`;
+
+      const { stdout, stderr } = await exec(lftpCmd, { maxBuffer: 10 * 1024 * 1024 });
+
+      // Optionally, cleanup tmpDir
+      try {
+        await fs.rm(tmpDir, { recursive: true, force: true });
+      } catch (e) {
+        // ignore cleanup errors
+      }
+
+      return { success: true, stdout, stderr };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  }
+
+  private static escapeShellArg(s: string) {
+    if (!s) return "''";
+    return `'${s.replace(/'/g, "'\\''")}'`;
   }
 
   static async checkHotspotStatus(config: MikroTikConnectionConfig): Promise<boolean> {
@@ -585,7 +714,7 @@ export class MikroTikService {
     type: 'hotspot' | 'pppoe'
   ): Promise<boolean> {
     try {
-      const endpoint = type === 'hotspot' 
+      const endpoint = type === 'hotspot'
         ? `/rest/ip/hotspot/active/${sessionId}`
         : `/rest/ppp/active/${sessionId}`;
 
@@ -628,21 +757,21 @@ export class MikroTikService {
     try {
       // Auto-generate comment if not provided
       // Extract display name from profile (e.g., "3hours-25ksh" -> "3hours-25ksh")
-      const comment = userConfig.comment || 
+      const comment = userConfig.comment ||
         `${userConfig.profile} voucher - Generated automatically`;
-      
+
       // Default server to 'hotspot1' if not provided
       const server = userConfig.server || 'hotspot1';
-      
+
       // Validate required fields
       if (!userConfig.name || !userConfig.password || !userConfig.profile) {
         throw new Error('name, password, and profile are required');
       }
-      
+
       if (!userConfig.limitUptime) {
         throw new Error('limitUptime is required for hotspot users');
       }
-      
+
       // Build MikroTik API payload
       // Note: MikroTik uses kebab-case for parameter names
       const mikrotikPayload = {
@@ -653,7 +782,7 @@ export class MikroTikService {
         server: server,
         comment: comment,
       };
-      
+
       return await this.makeHybridRequest(
         config,
         '/rest/ip/hotspot/user',
@@ -678,7 +807,7 @@ export class MikroTikService {
         '/rest/ip/hotspot/user',
         'GET'
       );
-      
+
       if (!Array.isArray(users)) return null;
       return users.find((u: any) => u.name === username) || null;
     } catch (error) {
@@ -778,7 +907,7 @@ export class MikroTikService {
     try {
       const pools = await this.getIPPools(config);
       const pool = pools.find((p: any) => p.name === poolName);
-      
+
       if (!pool) return null;
 
       // Get pool usage from DHCP leases or active sessions
@@ -788,8 +917,8 @@ export class MikroTikService {
         'GET'
       );
 
-      const usedIPs = Array.isArray(leases) 
-        ? leases.filter((l: any) => l['address-pool'] === poolName).length 
+      const usedIPs = Array.isArray(leases)
+        ? leases.filter((l: any) => l['address-pool'] === poolName).length
         : 0;
 
       return {
@@ -957,7 +1086,7 @@ export class MikroTikService {
     try {
       const interfaces = await this.getInterfaces(config);
       const iface = interfaces.find((i: any) => i.name === interfaceName);
-      
+
       if (!iface) return null;
 
       // Get traffic stats
@@ -1007,9 +1136,9 @@ export class MikroTikService {
         '/rest/log',
         'GET'
       );
-      
+
       if (!Array.isArray(logs)) return [];
-      
+
       // Return most recent logs first
       return logs.slice(-limit).reverse();
     } catch (error) {
@@ -1359,7 +1488,7 @@ export class MikroTikCleanup {
 
       if (defaultBridge) {
         console.log('Found default bridge, cleaning up...');
-        
+
         // Get all ports on default bridge
         const ports = await MikroTikService.getBridgePorts(config);
         const defaultBridgePorts = ports.filter(p => p.bridge === 'bridge');
@@ -1586,9 +1715,9 @@ export class MikroTikNetworkConfig {
 
         const existing = Array.isArray(existingAddresses)
           ? existingAddresses.find(
-              (addr: any) =>
-                addr.interface === iface.interface && addr.address === iface.address
-            )
+            (addr: any) =>
+              addr.interface === iface.interface && addr.address === iface.address
+          )
           : null;
 
         if (!existing) {
@@ -1659,7 +1788,7 @@ export class MikroTikNetworkConfig {
       // Step 3: Process each interface with proper cleanup
       for (const iface of interfaces) {
         console.log(`Processing interface: ${iface}`);
-        
+
         // Check if interface is already on ANY bridge
         const existingPort = existingPorts.find(p => p.interface === iface);
 
@@ -1702,9 +1831,9 @@ export class MikroTikNetworkConfig {
 
       const addressExists = Array.isArray(existingAddresses)
         ? existingAddresses.find(
-            (addr: any) =>
-              addr.interface === bridgeName && addr.address === bridgeAddress
-          )
+          (addr: any) =>
+            addr.interface === bridgeName && addr.address === bridgeAddress
+        )
         : false;
 
       if (!addressExists) {
@@ -1915,11 +2044,11 @@ export class MikroTikNetworkConfig {
 
         const ruleExists = Array.isArray(existingRules)
           ? existingRules.find(
-              (r: any) =>
-                r.chain === rule.chain &&
-                r['src-address'] === rule['src-address'] &&
-                r['out-interface'] === rule['out-interface']
-            )
+            (r: any) =>
+              r.chain === rule.chain &&
+              r['src-address'] === rule['src-address'] &&
+              r['out-interface'] === rule['out-interface']
+          )
           : false;
 
         if (!ruleExists) {
@@ -1970,10 +2099,10 @@ export class MikroTikServiceConfig {
 
         const serverExists = Array.isArray(existingServers)
           ? existingServers.find(
-              (s: any) =>
-                s['service-name'] === server['service-name'] &&
-                s.interface === server.interface
-            )
+            (s: any) =>
+              s['service-name'] === server['service-name'] &&
+              s.interface === server.interface
+          )
           : false;
 
         if (!serverExists) {
