@@ -87,8 +87,12 @@ export async function POST(
     const {
       quantity = 10,
       packageName, // Package name from router (e.g., "3hours-25ksh")
-      autoExpire = false, // default to false per new requirement
+      // Auto-expire controls activation expiry (unused vouchers). Default true for batches.
+      autoExpire = true,
       expiryDays = 30,
+      // Whether voucher usage should be timed starting from purchase time
+      usageTimedOnPurchase = false,
+      purchaseExpiryDays = null,
       syncToRouter = true, // Whether to create users on router immediately
     } = body;
 
@@ -267,6 +271,12 @@ export async function POST(
           maxDurationMinutes: duration,
           // expectedEndTime will be set when voucher is activated (startTime + maxDurationMinutes)
           expectedEndTime: null,
+          // Whether to start a purchase-based deadline for this voucher
+          timedOnPurchase: !!usageTimedOnPurchase,
+          // Window (days) after purchase when voucher will expire regardless of activation
+          purchaseExpiryWindowDays: usageTimedOnPurchase ? purchaseExpiryDays : null,
+          // purchaseExpiresAt will be set when voucher is purchased (purchaseTime + purchaseExpiryWindowDays)
+          purchaseExpiresAt: null,
         },
         payment: {
           method: null,

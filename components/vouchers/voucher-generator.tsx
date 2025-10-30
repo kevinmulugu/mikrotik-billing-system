@@ -44,8 +44,10 @@ export function VoucherGenerator({ routerId }: VoucherGeneratorProps) {
   // Form state
   const [selectedPackage, setSelectedPackage] = useState<string>('');
   const [quantity, setQuantity] = useState<string>('10');
-  const [autoExpire, setAutoExpire] = useState<boolean>(false);
+  const [autoExpire, setAutoExpire] = useState<boolean>(true);
   const [expiryDays, setExpiryDays] = useState<string>('30');
+  const [usageTimedOnPurchase, setUsageTimedOnPurchase] = useState<boolean>(false);
+  const [purchaseExpiryDays, setPurchaseExpiryDays] = useState<string>('7');
   const [syncToRouter, setSyncToRouter] = useState<boolean>(true);
 
   // Result state
@@ -138,6 +140,14 @@ export function VoucherGenerator({ routerId }: VoucherGeneratorProps) {
       }
     }
 
+    if (usageTimedOnPurchase) {
+      const pDays = parseInt(purchaseExpiryDays);
+      if (isNaN(pDays) || pDays < 1 || pDays > 365) {
+        toast.error('Purchase expiry days must be between 1 and 365');
+        return false;
+      }
+    }
+
     return true;
   };
 
@@ -157,6 +167,8 @@ export function VoucherGenerator({ routerId }: VoucherGeneratorProps) {
           quantity: parseInt(quantity),
           autoExpire,
           expiryDays: autoExpire ? parseInt(expiryDays) : null,
+          usageTimedOnPurchase,
+          purchaseExpiryDays: usageTimedOnPurchase ? parseInt(purchaseExpiryDays) : null,
           syncToRouter,
         }),
       });
@@ -326,7 +338,7 @@ export function VoucherGenerator({ routerId }: VoucherGeneratorProps) {
                 Auto Expire Vouchers
               </Label>
               <p className="text-sm text-muted-foreground mt-1">
-                Automatically expire unused vouchers after specified days
+                Automatically expire unused vouchers after specified days (prevents stale/hoarded vouchers)
               </p>
             </div>
             <Switch
@@ -351,6 +363,41 @@ export function VoucherGenerator({ routerId }: VoucherGeneratorProps) {
               />
               <p className="text-xs text-muted-foreground">
                 Unused vouchers will expire after this many days (1-365)
+              </p>
+            </div>
+          )}
+
+          {/* Usage deadline on purchase */}
+          <div className="flex items-center justify-between space-x-2 rounded-lg border p-4">
+            <div className="flex-1">
+              <Label htmlFor="usageTimedOnPurchase" className="font-medium">
+                Time usage after purchase
+              </Label>
+              <p className="text-sm text-muted-foreground mt-1">
+                When enabled, a purchase starts a countdown (in days). Once the purchase window elapses the voucher cannot be used — prevents hoarding.
+              </p>
+            </div>
+            <Switch
+              id="usageTimedOnPurchase"
+              checked={usageTimedOnPurchase}
+              onCheckedChange={setUsageTimedOnPurchase}
+            />
+          </div>
+
+          {usageTimedOnPurchase && (
+            <div className="space-y-2">
+              <Label htmlFor="purchaseExpiryDays">Purchase Expiry Window (Days)</Label>
+              <Input
+                id="purchaseExpiryDays"
+                type="number"
+                min="1"
+                max="365"
+                value={purchaseExpiryDays}
+                onChange={(e) => setPurchaseExpiryDays(e.target.value)}
+                placeholder="Days after purchase before voucher expires"
+              />
+              <p className="text-xs text-muted-foreground">
+                Once purchased, the voucher will expire after this many days regardless of activation.
               </p>
             </div>
           )}

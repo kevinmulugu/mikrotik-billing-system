@@ -15,7 +15,8 @@
     "db:init-tickets": "tsx scripts/init-ticket-indexes.ts",
     "test:router": "tsx scripts/test-router-config.ts",
     "test:router-existing": "tsx scripts/test-router-config-existing.ts",
-    "test:router-improved": "tsx scripts/test-router-config-improved.ts"
+    "test:router-improved": "tsx scripts/test-router-config-improved.ts",
+    "expire:vouchers": "tsx scripts/expire-vouchers.ts"
   },
   "dependencies": {
     "@auth/mongodb-adapter": "^3.10.0",
