@@ -216,6 +216,10 @@ export async function POST(
             }
           );
 
+          // Log created user result json for debugging
+          console.log(`[Voucher ${code}] Created MikroTik user result:`, JSON.stringify(userResult, null, 2));
+          console.log(`[Voucher ${code}] User result raw:`, userResult);
+
           // CRITICAL FIX: Correct path to .id field
           mikrotikUserId = userResult?.['.id'] || null;
 
