@@ -92,7 +92,8 @@ export async function POST(
       expiryDays = 30,
       // Whether voucher usage should be timed starting from purchase time
       usageTimedOnPurchase = false,
-      purchaseExpiryDays = null,
+      // If true, voucher will be auto-terminated (deleted from DB/router) when purchase/usage window elapses
+      autoTerminateOnPurchase = false,
       syncToRouter = true, // Whether to create users on router immediately
     } = body;
 
@@ -107,6 +108,22 @@ export async function POST(
     if (quantity < 1 || quantity > 1000) {
       return NextResponse.json(
         { error: 'Quantity must be between 1 and 1000' },
+        { status: 400 }
+      );
+    }
+
+    // Note: Auto Expire (activation expiry) and Time-after-Purchase (purchase-timed expiry)
+    // are allowed to coexist. Auto Expire controls when an unused voucher generated in a
+    // batch becomes invalid for activation. Time-after-Purchase controls when a purchased
+    // voucher's purchase-window elapses. Both operate independently.
+
+    // Validate that if autoExpire is enabled, expiryDays must be valid
+    if (autoExpire && (!expiryDays || expiryDays < 1)) {
+      return NextResponse.json(
+        {
+          error: 'Invalid configuration',
+          message: 'When "Auto Expire Vouchers" is enabled, you must specify the number of days (minimum 1).',
+        },
         { status: 400 }
       );
     }
@@ -168,8 +185,9 @@ export async function POST(
     // Generate batch ID
     const batchId = `BATCH-${Date.now()}`;
 
-    // Calculate activation expiry date (when an unused voucher can no longer be activated)
-    // If autoExpire is false we leave activationExpiresAt as null (no automatic activation expiry)
+    // Calculate activation expiry date (when an unused voucher can no longer be activated).
+    // Auto Expire controls this independently of whether usageTimedOnPurchase is enabled.
+    // If autoExpire is false we leave activationExpiresAt as null (no automatic activation expiry).
     const activationExpiresAt = autoExpire
       ? new Date(Date.now() + expiryDays * 24 * 60 * 60 * 1000)
       : null;
@@ -277,10 +295,11 @@ export async function POST(
           expectedEndTime: null,
           // Whether to start a purchase-based deadline for this voucher
           timedOnPurchase: !!usageTimedOnPurchase,
-          // Window (days) after purchase when voucher will expire regardless of activation
-          purchaseExpiryWindowDays: usageTimedOnPurchase ? purchaseExpiryDays : null,
-          // purchaseExpiresAt will be set when voucher is purchased (purchaseTime + purchaseExpiryWindowDays)
+          // purchaseExpiresAt will be set when voucher is purchased (purchaseTime + maxDurationMinutes)
+          // The webhook will calculate this using the package duration
           purchaseExpiresAt: null,
+          // Whether to auto-terminate/delete voucher after purchase expiry (remove from DB/router)
+          autoTerminateOnPurchase: !!autoTerminateOnPurchase,
         },
         payment: {
           method: null,

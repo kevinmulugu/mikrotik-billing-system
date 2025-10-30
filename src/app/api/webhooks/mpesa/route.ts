@@ -169,19 +169,16 @@ export async function POST(request: NextRequest) {
     let expectedEndTime: Date | null = null;
 
     // If voucher has purchase expiry enabled, calculate purchaseExpiresAt
-    if (voucher.usage?.timedOnPurchase && voucher.usage?.purchaseExpiryWindowDays) {
-      const daysToAdd = voucher.usage.purchaseExpiryWindowDays;
-      purchaseExpiresAt = new Date(purchaseTime.getTime() + daysToAdd * 24 * 60 * 60 * 1000);
-      console.log(`[M-Pesa Webhook] Purchase expiry set to: ${purchaseExpiresAt.toISOString()}`);
+    // based on the package duration (maxDurationMinutes)
+    if (voucher.usage?.timedOnPurchase && voucher.usage?.maxDurationMinutes) {
+      const minutesToAdd = voucher.usage.maxDurationMinutes;
+      purchaseExpiresAt = new Date(purchaseTime.getTime() + minutesToAdd * 60 * 1000);
+      console.log(`[M-Pesa Webhook] Purchase expiry set to: ${purchaseExpiresAt.toISOString()} (${minutesToAdd} minutes from purchase)`);
     }
 
-    // Calculate expectedEndTime if voucher will be activated immediately
-    // (or if auto-activation is enabled in future)
-    // For now, expectedEndTime will be set when the voucher is actually used/activated
-    // But we can pre-calculate it based on maxDurationMinutes
+    // expectedEndTime will be set when the voucher is actually activated/used
+    // For now, we log the package duration for reference
     if (voucher.usage?.maxDurationMinutes) {
-      // This will be set when voucher is activated, but we can prepare the logic
-      // expectedEndTime = activationTime + maxDurationMinutes
       console.log(`[M-Pesa Webhook] Voucher has max duration: ${voucher.usage.maxDurationMinutes} minutes`);
     }
 

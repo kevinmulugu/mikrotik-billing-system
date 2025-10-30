@@ -47,7 +47,6 @@ export function VoucherGenerator({ routerId }: VoucherGeneratorProps) {
   const [autoExpire, setAutoExpire] = useState<boolean>(true);
   const [expiryDays, setExpiryDays] = useState<string>('30');
   const [usageTimedOnPurchase, setUsageTimedOnPurchase] = useState<boolean>(false);
-  const [purchaseExpiryDays, setPurchaseExpiryDays] = useState<string>('7');
   const [autoTerminateOnPurchase, setAutoTerminateOnPurchase] = useState<boolean>(false);
   const [syncToRouter, setSyncToRouter] = useState<boolean>(true);
 
@@ -133,18 +132,12 @@ export function VoucherGenerator({ routerId }: VoucherGeneratorProps) {
       return false;
     }
 
+
+
     if (autoExpire) {
       const expiry = parseInt(expiryDays);
       if (isNaN(expiry) || expiry < 1 || expiry > 365) {
         toast.error('Expiry days must be between 1 and 365');
-        return false;
-      }
-    }
-
-    if (usageTimedOnPurchase) {
-      const pDays = parseInt(purchaseExpiryDays);
-      if (isNaN(pDays) || pDays < 1 || pDays > 365) {
-        toast.error('Purchase expiry days must be between 1 and 365');
         return false;
       }
     }
@@ -169,7 +162,6 @@ export function VoucherGenerator({ routerId }: VoucherGeneratorProps) {
           autoExpire,
           expiryDays: autoExpire ? parseInt(expiryDays) : null,
           usageTimedOnPurchase,
-          purchaseExpiryDays: usageTimedOnPurchase ? parseInt(purchaseExpiryDays) : null,
           autoTerminateOnPurchase,
           syncToRouter,
         }),
@@ -377,7 +369,7 @@ export function VoucherGenerator({ routerId }: VoucherGeneratorProps) {
                 Time usage after purchase
               </Label>
               <p className="text-sm text-muted-foreground mt-1">
-                When enabled, a purchase starts a countdown (in days). Once the purchase window elapses the voucher cannot be used — prevents hoarding.
+                Voucher expires automatically after the package duration elapses from purchase time. For example, a 1-hour package purchased at 7am expires at 8am, even if unused or partially used.
               </p>
             </div>
             <Switch
@@ -403,24 +395,6 @@ export function VoucherGenerator({ routerId }: VoucherGeneratorProps) {
               onCheckedChange={setAutoTerminateOnPurchase}
             />
           </div>
-
-          {usageTimedOnPurchase && (
-            <div className="space-y-2">
-              <Label htmlFor="purchaseExpiryDays">Purchase Expiry Window (Days)</Label>
-              <Input
-                id="purchaseExpiryDays"
-                type="number"
-                min="1"
-                max="365"
-                value={purchaseExpiryDays}
-                onChange={(e) => setPurchaseExpiryDays(e.target.value)}
-                placeholder="Days after purchase before voucher expires"
-              />
-              <p className="text-xs text-muted-foreground">
-                Once purchased, the voucher will expire after this many days regardless of activation.
-              </p>
-            </div>
-          )}
 
           {/* Sync to Router */}
           <div className="flex items-center justify-between space-x-2 rounded-lg border p-4">
