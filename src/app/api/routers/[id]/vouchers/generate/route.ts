@@ -259,8 +259,11 @@ export async function POST(
         }
       }
 
-      // Generate unique payment reference (separate from voucher code for security)
-      const paymentReference = `VCH${Date.now().toString(36).toUpperCase()}${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
+      // Generate unique payment reference (separate from voucher code for security). Capped to 12 characters
+      // This will be used for initiating M-PESA STK Push.
+      // AccountReference displayed to the customer in the STK Pin Prompt message.  Maximum of 12 characters.
+      const paymentReference = `VCH${(Date.now().toString(36) + Math.random().toString(36).slice(2, 4)).toUpperCase().slice(-9)}`;
+
 
       // Create voucher document with mikrotikUserId
       const voucher = {

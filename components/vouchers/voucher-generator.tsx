@@ -44,7 +44,7 @@ export function VoucherGenerator({ routerId }: VoucherGeneratorProps) {
   // Form state
   const [selectedPackage, setSelectedPackage] = useState<string>('');
   const [quantity, setQuantity] = useState<string>('10');
-  const [autoExpire, setAutoExpire] = useState<boolean>(true);
+  const [autoExpire, setAutoExpire] = useState<boolean>(false);
   const [expiryDays, setExpiryDays] = useState<string>('30');
   const [usageTimedOnPurchase, setUsageTimedOnPurchase] = useState<boolean>(false);
   const [syncToRouter, setSyncToRouter] = useState<boolean>(true);
