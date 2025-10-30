@@ -1,3 +1,4 @@
+// src/app/api/auth/signup/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import clientPromise from '@/lib/database';
 import { signIn } from 'next-auth/react';
@@ -43,7 +44,7 @@ export async function POST(request: NextRequest) {
       name: name || null,
       emailVerified: null, // Will be set when they click the magic link
       image: null,
-      role: 'homeowner',
+      role: 'homeowner', // Default role, will be updated when user adds a router
       status: 'pending', // Changed to pending until email verified
       preferences: {
         language: 'en',
@@ -63,12 +64,13 @@ export async function POST(request: NextRequest) {
     const userResult = await usersCollection.insertOne(newUser);
     const userId = userResult.insertedId;
 
-    // Create customer record
+    // Create customer record with default settings
+    // Plan will be set when user adds their first router
     const newCustomer = {
       userId: userId,
       businessInfo: {
         name: name ? `${name}'s WiFi` : 'My WiFi Business',
-        type: 'homeowner',
+        type: 'homeowner', // Default, will be updated when adding router
         address: {
           street: '',
           city: '',
@@ -85,15 +87,15 @@ export async function POST(request: NextRequest) {
         preferredMethod: 'company_paybill',
         paybillNumber: null,
         accountNumber: null,
-        commissionRate: 20, // 20% for Personal/Homeowner
+        commissionRate: 20, // Default 20%, will be updated based on plan selection
         autoPayouts: true
       },
       subscription: {
-        plan: 'personal',
-        status: 'active',
+        plan: 'none', // No plan selected yet, will be set when adding router
+        status: 'pending', // Pending until router is added
         startDate: now,
-        endDate: new Date(now.getTime() + 365 * 24 * 60 * 60 * 1000), // 1 year
-        features: ['single_router', 'basic_analytics', 'email_support']
+        endDate: null,
+        features: []
       },
       statistics: {
         totalRouters: 0,

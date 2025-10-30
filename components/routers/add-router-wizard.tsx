@@ -62,6 +62,7 @@ interface RouterFormData {
   pppoeEnabled: boolean;
   pppoeInterface: string;
   defaultProfile: string;
+  plan?: 'individual' | 'isp' | 'isp_pro'; // NEW: Plan selection for first router
 }
 
 interface AddRouterWizardProps {
@@ -110,6 +111,11 @@ export const AddRouterWizard: React.FC<AddRouterWizardProps> = ({
   const [showHotspotPassword, setShowHotspotPassword] = useState(false);
   const [verificationAttempts, setVerificationAttempts] = useState(0);
 
+  // NEW: Customer subscription state
+  const [customerPlan, setCustomerPlan] = useState<string | null>(null);
+  const [needsPlanSelection, setNeedsPlanSelection] = useState(false);
+  const [isLoadingCustomer, setIsLoadingCustomer] = useState(true);
+
   const [formData, setFormData] = useState<RouterFormData>({
     name: "",
     model: "",
@@ -132,6 +138,44 @@ export const AddRouterWizard: React.FC<AddRouterWizardProps> = ({
     pppoeInterface: "ether1",
     defaultProfile: "default",
   });
+
+  // NEW: Fetch customer subscription status and check if plan selection needed
+  React.useEffect(() => {
+    const checkCustomerPlan = async () => {
+      try {
+        const response = await fetch('/api/customer/profile');
+        if (!response.ok) {
+          console.error('Failed to fetch customer profile');
+          return;
+        }
+
+        const data = await response.json();
+        const plan = data.customer?.subscription?.plan;
+        const status = data.customer?.subscription?.status;
+
+        setCustomerPlan(plan);
+
+        // Need plan selection if no plan or plan is 'none' or status is pending
+        const noPlan = !plan || plan === 'none' || status === 'pending';
+        setNeedsPlanSelection(noPlan);
+
+        // Get plan from query params if provided (from pricing page)
+        if (noPlan && typeof window !== 'undefined') {
+          const params = new URLSearchParams(window.location.search);
+          const queryPlan = params.get('plan');
+          if (queryPlan && ['individual', 'isp', 'isp_pro'].includes(queryPlan)) {
+            setFormData(prev => ({ ...prev, plan: queryPlan as any }));
+          }
+        }
+      } catch (error) {
+        console.error('Error checking customer plan:', error);
+      } finally {
+        setIsLoadingCustomer(false);
+      }
+    };
+
+    checkCustomerPlan();
+  }, []);
 
   const [errors, setErrors] = useState<Partial<Record<string, string>>>({});
 
@@ -189,6 +233,10 @@ export const AddRouterWizard: React.FC<AddRouterWizardProps> = ({
     const newErrors: Partial<Record<string, string>> = {};
 
     if (step === 1) {
+      // Validate plan selection if needed
+      if (needsPlanSelection && !formData.plan) {
+        newErrors.plan = "Please select a plan to continue";
+      }
       if (!formData.name || formData.name.length < 3) {
         newErrors.name = "Router name must be at least 3 characters";
       }
@@ -243,7 +291,7 @@ export const AddRouterWizard: React.FC<AddRouterWizardProps> = ({
         setScriptCopied(false);
         setVerificationAttempts(0);
       }
-      
+
       setCurrentStep(currentStep - 1);
     }
   };
@@ -290,7 +338,7 @@ export const AddRouterWizard: React.FC<AddRouterWizardProps> = ({
 
     } catch (error) {
       console.error("[Wizard] Script generation error:", error);
-      
+
       setSetupStatus("error");
       toast.error(
         `Failed to generate setup script: ${error instanceof Error ? error.message : "Unknown error"}`,
@@ -331,7 +379,7 @@ export const AddRouterWizard: React.FC<AddRouterWizardProps> = ({
 
     try {
       console.log("[Wizard] Verifying VPN connection...");
-      
+
       toast.info("Waiting for VPN tunnel to establish... This may take up to 90 seconds", {
         duration: 5000,
       });
@@ -374,7 +422,7 @@ export const AddRouterWizard: React.FC<AddRouterWizardProps> = ({
 
     } catch (error) {
       console.error("[Wizard] VPN verification error:", error);
-      
+
       setSetupStatus("error");
       toast.error(
         error instanceof Error ? error.message : "VPN verification failed. You can retry or go back to edit router details.",
@@ -414,6 +462,8 @@ export const AddRouterWizard: React.FC<AddRouterWizardProps> = ({
         vpnConfigured: true,
         vpnIP: vpnVerification.vpnIP,
         vpnPublicKey: vpnVerification.publicKey,
+        // Include plan if customer needs to select one
+        ...(needsPlanSelection && formData.plan ? { plan: formData.plan } : {}),
       };
 
       console.log("[Wizard] Submitting router with VPN config...");
@@ -434,7 +484,12 @@ export const AddRouterWizard: React.FC<AddRouterWizardProps> = ({
 
       console.log("[Wizard] ✅ Router added successfully:", data.routerId);
 
-      toast.success("Router added successfully with secure remote access!", { duration: 5000 });
+      // Show success message with trial info if applicable
+      const successMessage = data.subscription?.isNewPlan
+        ? `Router added successfully! Your 15-day free trial starts now and ends on ${new Date(data.subscription.trialEndsAt).toLocaleDateString()}.`
+        : "Router added successfully with secure remote access!";
+
+      toast.success(successMessage, { duration: 7000 });
 
       if (onComplete) {
         onComplete(data.routerId);
@@ -443,7 +498,7 @@ export const AddRouterWizard: React.FC<AddRouterWizardProps> = ({
       }
     } catch (error) {
       console.error("[Wizard] Submit error:", error);
-      
+
       toast.error(
         `Failed to add router: ${error instanceof Error ? error.message : "Unknown error"}`,
         { duration: 7000 }
@@ -472,8 +527,8 @@ export const AddRouterWizard: React.FC<AddRouterWizardProps> = ({
                       ${isCompleted
                         ? "bg-green-500 text-white"
                         : isActive
-                        ? "bg-primary text-primary-foreground"
-                        : "bg-muted text-muted-foreground"
+                          ? "bg-primary text-primary-foreground"
+                          : "bg-muted text-muted-foreground"
                       }
                     `}
                   >
@@ -522,6 +577,87 @@ export const AddRouterWizard: React.FC<AddRouterWizardProps> = ({
           {/* Step 1: Basic Information */}
           {currentStep === 1 && (
             <div className="space-y-6">
+              {/* Plan Selection (only if needed) */}
+              {needsPlanSelection && !isLoadingCustomer && (
+                <>
+                  <Alert className="border-primary">
+                    <Info className="h-4 w-4" />
+                    <AlertTitle>Choose Your Plan</AlertTitle>
+                    <AlertDescription>
+                      Select a plan before adding your first router. You'll get a 15-day free trial to try all features.
+                    </AlertDescription>
+                  </Alert>
+
+                  <div className="space-y-3">
+                    <label className="text-sm font-medium">Select Plan *</label>
+                    <div className="grid gap-4">
+                      {[
+                        {
+                          id: 'individual',
+                          name: 'Individual / Homeowner',
+                          description: 'Perfect for apartments and homes',
+                          price: '20% commission per sale',
+                          features: ['1 router', 'Basic analytics', 'Email support']
+                        },
+                        {
+                          id: 'isp',
+                          name: 'ISP Basic',
+                          description: 'For small to medium ISPs',
+                          price: 'KES 2,500/month',
+                          features: ['Up to 5 routers', 'Advanced analytics', 'Priority support']
+                        },
+                        {
+                          id: 'isp_pro',
+                          name: 'ISP Pro',
+                          description: 'For established ISPs',
+                          price: 'KES 3,900/month',
+                          features: ['Unlimited routers', 'Enterprise analytics', '24/7 support']
+                        }
+                      ].map((plan) => (
+                        <div
+                          key={plan.id}
+                          className={`
+                            relative rounded-lg border-2 p-4 cursor-pointer transition-all
+                            ${formData.plan === plan.id
+                              ? 'border-primary bg-primary/5'
+                              : 'border-muted hover:border-primary/50'
+                            }
+                          `}
+                          onClick={() => handleInputChange('plan', plan.id)}
+                        >
+                          <div className="flex items-start gap-3">
+                            <div className={`
+                              w-5 h-5 rounded-full border-2 flex items-center justify-center mt-0.5
+                              ${formData.plan === plan.id ? 'border-primary bg-primary' : 'border-muted'}
+                            `}>
+                              {formData.plan === plan.id && (
+                                <CheckCircle2 className="h-3 w-3 text-primary-foreground" />
+                              )}
+                            </div>
+                            <div className="flex-1">
+                              <div className="font-semibold">{plan.name}</div>
+                              <div className="text-sm text-muted-foreground">{plan.description}</div>
+                              <div className="text-sm font-medium text-primary mt-1">{plan.price}</div>
+                              <ul className="text-xs text-muted-foreground mt-2 space-y-1">
+                                {plan.features.map((feature, idx) => (
+                                  <li key={idx} className="flex items-center gap-1">
+                                    <CheckCircle2 className="h-3 w-3 text-green-500" />
+                                    {feature}
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    {errors.plan && <p className="text-sm text-destructive">{errors.plan}</p>}
+                  </div>
+
+                  <Separator />
+                </>
+              )}
+
               <div className="space-y-4">
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Router Name *</label>

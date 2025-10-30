@@ -1,3 +1,4 @@
+// src/app/(auth)/signup/page.tsx
 'use client';
 
 import { signIn } from 'next-auth/react';
@@ -9,7 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Separator } from '@/components/ui/separator';
 import { toast } from 'sonner';
-import { Mail, CheckCircle, XCircle } from 'lucide-react';
+import { CheckCircle, XCircle } from 'lucide-react';
 
 export default function SignUpPage() {
   const [email, setEmail] = useState('');

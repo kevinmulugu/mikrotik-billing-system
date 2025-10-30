@@ -34,6 +34,8 @@ interface AddRouterRequest {
   vpnConfigured?: boolean;
   vpnIP?: string;
   vpnPublicKey?: string;
+  // NEW: Plan selection for first router
+  plan?: 'individual' | 'isp' | 'isp_pro';
 }
 
 export async function POST(req: NextRequest) {
@@ -103,6 +105,111 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // ============================================
+    // PLAN SELECTION & TRIAL LOGIC
+    // ============================================
+
+    const requestedPlan = body.plan as 'individual' | 'isp' | 'isp_pro' | undefined;
+
+    // Define plan settings
+    const planSettings: Record<string, {
+      commissionRate: number;
+      monthlyFee: number;
+      features: string[];
+      maxRouters: number;
+    }> = {
+      individual: {
+        commissionRate: 20,
+        monthlyFee: 0,
+        features: ['single_router', 'basic_analytics', 'email_support'],
+        maxRouters: 1,
+      },
+      isp: {
+        commissionRate: 0,
+        monthlyFee: 2500,
+        features: ['up_to_5_routers', 'advanced_analytics', 'priority_support', 'bulk_voucher_generation'],
+        maxRouters: 5,
+      },
+      isp_pro: {
+        commissionRate: 0,
+        monthlyFee: 3900,
+        features: ['unlimited_routers', 'enterprise_analytics', 'priority_support', 'bulk_voucher_generation', 'white_label'],
+        maxRouters: Infinity,
+      }
+    };
+
+    // Check if customer has a plan
+    const hasPlan = customer.subscription &&
+      customer.subscription.plan &&
+      customer.subscription.plan !== 'none' &&
+      customer.subscription.status !== 'pending';
+
+    let selectedPlan: string;
+    let trialEnds: Date | null = null;
+
+    if (!hasPlan) {
+      // Customer doesn't have a plan yet - require plan selection
+      if (!requestedPlan || !planSettings[requestedPlan]) {
+        return NextResponse.json(
+          { error: 'Please select a plan (individual, isp, or isp_pro) when adding your first router' },
+          { status: 400 }
+        );
+      }
+      selectedPlan = requestedPlan;
+    } else {
+      // Customer already has a plan
+      selectedPlan = customer.subscription.plan;
+    }
+
+    // Validate router limits for the selected plan
+    const currentRouters = customer.statistics?.totalRouters ?? 0;
+    const settings = planSettings[selectedPlan];
+
+    if (!settings) {
+      return NextResponse.json(
+        { error: 'Invalid plan. Please contact support.' },
+        { status: 400 }
+      );
+    }
+
+    if (currentRouters >= settings.maxRouters) {
+      return NextResponse.json(
+        { error: `Router limit reached for your ${selectedPlan} plan. Please upgrade to add more routers.` },
+        { status: 400 }
+      );
+    }
+
+    // If this is the first router (no plan yet), set up subscription with 15-day trial
+    if (!hasPlan) {
+      const now = new Date();
+      trialEnds = new Date(now.getTime() + 15 * 24 * 60 * 60 * 1000); // 15 days from now
+
+      const subscriptionUpdate = {
+        'subscription.plan': selectedPlan,
+        'subscription.status': 'trial',
+        'subscription.startDate': now,
+        'subscription.endDate': trialEnds,
+        'subscription.monthlyFee': settings.monthlyFee,
+        'subscription.features': settings.features,
+        'paymentSettings.commissionRate': settings.commissionRate,
+        'businessInfo.type': (selectedPlan === 'individual') ? 'individual' : 'isp',
+        'updatedAt': now
+      };
+
+      await db.collection('customers').updateOne(
+        { _id: customer._id },
+        { $set: subscriptionUpdate }
+      );
+
+      console.log(`[Router Add] ✓ Plan '${selectedPlan}' activated with 15-day trial ending ${trialEnds.toISOString()}`);
+    } else {
+      // Customer already has a plan, use existing trial end date if in trial
+      if (customer.subscription.status === 'trial' && customer.subscription.endDate) {
+        trialEnds = new Date(customer.subscription.endDate);
+      }
+    }
+
+
     // Check if router with same IP already exists for this customer
     const existingRouter = await db
       .collection('routers')
@@ -135,7 +242,7 @@ export async function POST(req: NextRequest) {
     // If VPN was configured by client, verify it's working
     if (body.vpnConfigured && body.vpnIP) {
       console.log(`[Router Add] VPN pre-configured by client, testing connection...`);
-      
+
       try {
         const vpnTest = await MikroTikService.testConnection(connectionConfig);
         if (vpnTest.success) {
@@ -154,7 +261,7 @@ export async function POST(req: NextRequest) {
     // ============================================
     // VPN TUNNEL OBJECT
     // ============================================
-    
+
     let vpnTunnel: any = null;
     let vpnProvisioningSuccess = body.vpnConfigured || false;
 
@@ -210,8 +317,8 @@ export async function POST(req: NextRequest) {
         localIP: body.ipAddress,
         vpnIP: vpnTunnel?.assignedVPNIP,
         preferVPN: vpnProvisioningSuccess,
-        ipAddress: vpnProvisioningSuccess 
-          ? vpnTunnel.assignedVPNIP 
+        ipAddress: vpnProvisioningSuccess
+          ? vpnTunnel.assignedVPNIP
           : body.ipAddress,
         port: parseInt(body.port) || 8728,
         apiUser: body.apiUser || 'admin',
@@ -279,7 +386,7 @@ export async function POST(req: NextRequest) {
     // ============================================
     // SAVE VPN TUNNEL TO DATABASE (FIXED)
     // ============================================
-    
+
     if (vpnProvisioningSuccess && body.vpnPublicKey && body.vpnIP) {
       try {
         console.log(`[Router Add] Saving VPN tunnel configuration...`);
@@ -348,7 +455,7 @@ export async function POST(req: NextRequest) {
 
       } catch (vpnError) {
         console.error(`[Router Add] ❌ Failed to save VPN tunnel:`, vpnError);
-        
+
         // Don't fail the entire router add, just log the error
         // Update router status to indicate VPN issue
         await db.collection('routers').updateOne(
@@ -367,9 +474,9 @@ export async function POST(req: NextRequest) {
     // ============================================
     // EXECUTE ROUTER CONFIGURATION
     // ============================================
-    
+
     console.log(`[Router Add] Starting router configuration...`);
-    
+
     let configResult;
     try {
       configResult = await MikroTikOrchestrator.configureRouter(connectionConfig, {
@@ -455,7 +562,7 @@ export async function POST(req: NextRequest) {
     // Prepare response
     const responseData = {
       success: true,
-      message: vpnProvisioningSuccess 
+      message: vpnProvisioningSuccess
         ? 'Router added successfully with secure remote access'
         : 'Router added successfully',
       routerId: routerId,
@@ -482,6 +589,11 @@ export async function POST(req: NextRequest) {
         failedSteps: configResult.failedSteps || [],
         warnings: configResult.warnings || [],
       },
+      subscription: {
+        plan: selectedPlan,
+        trialEndsAt: trialEnds ? trialEnds.toISOString() : null,
+        isNewPlan: !hasPlan,
+      },
     };
 
     console.log(`[Router Add] ✅ Router onboarding complete`);
@@ -490,7 +602,7 @@ export async function POST(req: NextRequest) {
 
   } catch (error) {
     console.error('[Router Add] ❌ API Error:', error);
-    
+
     // Provide more detailed error information
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     const errorDetails = error instanceof Error && error.stack ? error.stack : undefined;

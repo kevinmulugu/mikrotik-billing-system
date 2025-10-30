@@ -1,3 +1,4 @@
+// src/app/pricing/page.tsx
 import { Metadata } from 'next';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
@@ -147,7 +148,7 @@ export default function PricingPage() {
                   </div>
                 </div>
                 <Button asChild className="w-full" size="lg">
-                  <Link href="/signin">
+                  <Link href="/signup?plan=individual">
                     Start Free Trial
                     <ArrowRight className="w-4 h-4 ml-2" />
                   </Link>
@@ -235,7 +236,7 @@ export default function PricingPage() {
                   </div>
                 </div>
                 <Button asChild className="w-full" size="lg" variant="outline">
-                  <Link href="/signin">
+                  <Link href="/signup?plan=isp">
                     Start Free Trial
                     <ArrowRight className="w-4 h-4 ml-2" />
                   </Link>
@@ -323,7 +324,7 @@ export default function PricingPage() {
                   </div>
                 </div>
                 <Button asChild className="w-full" size="lg" variant="outline">
-                  <Link href="/signin">
+                  <Link href="/signup?plan=isp_pro">
                     Start Free Trial
                     <ArrowRight className="w-4 h-4 ml-2" />
                   </Link>
@@ -428,7 +429,7 @@ export default function PricingPage() {
                 Join WiFi providers making passive income today. Start your 15-day free trial - no credit card required.
               </p>
               <Button asChild size="lg" variant="secondary">
-                <Link href="/signin">
+                <Link href="/signup">
                   Start Free Trial
                   <ArrowRight className="w-4 h-4 ml-2" />
                 </Link>
