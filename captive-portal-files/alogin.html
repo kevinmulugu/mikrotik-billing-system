@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="refresh" content="2; url=$(link-redirect)">
+    <meta http-equiv="pragma" content="no-cache">
+    <meta http-equiv="expires" content="-1">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Login Successful</title>
+    
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        :root {
+            --success-color: #10B981;
+            --primary-color: #3B82F6;
+            --text-dark: #1F2937;
+            --text-light: #6B7280;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, var(--success-color) 0%, var(--primary-color) 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            color: white;
+        }
+        
+        .container {
+            text-align: center;
+            animation: fadeIn 0.3s ease-in;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .success-icon {
+            width: 100px;
+            height: 100px;
+            margin: 0 auto 24px;
+            background: white;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            animation: scaleIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+        
+        @keyframes scaleIn {
+            0% { transform: scale(0); }
+            50% { transform: scale(1.1); }
+            100% { transform: scale(1); }
+        }
+        
+        .checkmark {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            display: block;
+            stroke-width: 4;
+            stroke: var(--success-color);
+            stroke-miterlimit: 10;
+            box-shadow: inset 0px 0px 0px var(--success-color);
+            animation: fillCheckmark 0.4s ease-in-out 0.4s forwards, scaleCheckmark 0.3s ease-in-out 0.9s both;
+        }
+        
+        .checkmark-circle {
+            stroke-dasharray: 166;
+            stroke-dashoffset: 166;
+            stroke-width: 4;
+            stroke-miterlimit: 10;
+            stroke: var(--success-color);
+            fill: none;
+            animation: strokeCheckmark 0.6s cubic-bezier(0.65, 0, 0.45, 1) forwards;
+        }
+        
+        .checkmark-check {
+            transform-origin: 50% 50%;
+            stroke-dasharray: 48;
+            stroke-dashoffset: 48;
+            animation: strokeCheckmark 0.3s cubic-bezier(0.65, 0, 0.45, 1) 0.8s forwards;
+        }
+        
+        @keyframes strokeCheckmark {
+            100% { stroke-dashoffset: 0; }
+        }
+        
+        @keyframes scaleCheckmark {
+            0%, 100% { transform: none; }
+            50% { transform: scale3d(1.1, 1.1, 1); }
+        }
+        
+        @keyframes fillCheckmark {
+            100% { box-shadow: inset 0px 0px 0px 30px var(--success-color); }
+        }
+        
+        h1 {
+            font-size: 32px;
+            font-weight: 700;
+            margin-bottom: 12px;
+            text-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+        
+        p {
+            font-size: 16px;
+            opacity: 0.95;
+            margin-bottom: 32px;
+            text-shadow: 0 1px 5px rgba(0, 0, 0, 0.1);
+        }
+        
+        .loading {
+            display: inline-flex;
+            gap: 8px;
+            margin-bottom: 16px;
+        }
+        
+        .loading-dot {
+            width: 12px;
+            height: 12px;
+            background: white;
+            border-radius: 50%;
+            animation: loadingDot 1.4s infinite ease-in-out both;
+        }
+        
+        .loading-dot:nth-child(1) { animation-delay: -0.32s; }
+        .loading-dot:nth-child(2) { animation-delay: -0.16s; }
+        
+        @keyframes loadingDot {
+            0%, 80%, 100% { transform: scale(0); opacity: 0.5; }
+            40% { transform: scale(1); opacity: 1; }
+        }
+        
+        .redirect-info {
+            font-size: 14px;
+            opacity: 0.85;
+        }
+        
+        .redirect-link {
+            color: white;
+            text-decoration: underline;
+            cursor: pointer;
+            font-weight: 600;
+        }
+        
+        /* Mobile optimizations */
+        @media (max-width: 480px) {
+            h1 { font-size: 28px; }
+            p { font-size: 15px; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <!-- Success Icon with Animated Checkmark -->
+    <div class="success-icon">
+        <svg class="checkmark" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 52 52">
+            <circle class="checkmark-circle" cx="26" cy="26" r="25" fill="none"/>
+            <path class="checkmark-check" fill="none" d="M14.1 27.2l7.1 7.2 16.7-16.8"/>
+        </svg>
+    </div>
+    
+    <!-- Success Message -->
+    <h1>✓ Login Successful!</h1>
+    <p>You are now connected to WiFi</p>
+    
+    <!-- Loading Animation -->
+    <div class="loading">
+        <div class="loading-dot"></div>
+        <div class="loading-dot"></div>
+        <div class="loading-dot"></div>
+    </div>
+    
+    <!-- Redirect Info -->
+    <div class="redirect-info">
+        Redirecting you now...<br>
+        <small>If nothing happens, <a href="$(link-redirect-esc)" class="redirect-link">click here</a></small>
+    </div>
+</div>
+
+<script>
+// ============================================================================
+// AUTO-REDIRECT WITH STATUS POPUP
+// ============================================================================
+function startRedirect() {
+    $(if popup == 'true')
+    // Open status window in popup (if enabled)
+    try {
+        window.open('$(link-status)', 'hotspot_status', 'toolbar=0,location=0,directories=0,status=0,menubars=0,resizable=1,width=320,height=400');
+    } catch (error) {
+        console.error('Failed to open status popup:', error);
+    }
+    $(endif)
+    
+    // Redirect to original destination
+    setTimeout(() => {
+        window.location.href = unescape('$(link-redirect-esc)');
+    }, 100);
+}
+
+// ============================================================================
+// LOAD CONFIGURATION (OPTIONAL)
+// ============================================================================
+async function loadConfig() {
+    try {
+        const response = await fetch('/api.json?v=' + Date.now());
+        if (response.ok) {
+            const config = await response.json();
+            console.log('Login successful for router:', config.router_id);
+        }
+    } catch (error) {
+        // Silently fail - config loading is optional here
+        console.log('Config not loaded (optional)');
+    }
+}
+
+// ============================================================================
+// INITIALIZATION
+// ============================================================================
+window.addEventListener('DOMContentLoaded', () => {
+    loadConfig();
+    startRedirect();
+});
+
+// ============================================================================
+// FALLBACK REDIRECT (in case auto-redirect fails)
+// ============================================================================
+setTimeout(() => {
+    if (document.hasFocus()) {
+        window.location.href = unescape('$(link-redirect-esc)');
+    }
+}, 3000);
+
+// ============================================================================
+// CONSOLE INFO
+// ============================================================================
+console.log('%c✓ Login Successful', 'font-size: 16px; font-weight: bold; color: #10B981;');
+console.log('Redirecting to:', '$(link-redirect)');
+$(if popup == 'true')
+console.log('Opening status window...');
+$(endif)
+
+</script>
+
+</body>
+</html>

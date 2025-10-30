@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="pragma" content="no-cache">
+    <meta http-equiv="expires" content="-1">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Logged Out</title>
+    
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        :root {
+            --primary-color: #3B82F6;
+            --secondary-color: #10B981;
+            --text-dark: #1F2937;
+            --text-light: #6B7280;
+            --border-color: #E5E7EB;
+            --bg-light: #F9FAFB;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            color: var(--text-dark);
+        }
+        
+        .container {
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            width: 100%;
+            max-width: 480px;
+            overflow: hidden;
+            animation: fadeIn 0.3s ease-in;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .header {
+            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+            color: white;
+            padding: 40px 24px;
+            text-align: center;
+        }
+        
+        .logout-icon {
+            font-size: 64px;
+            margin-bottom: 16px;
+        }
+        
+        .header h1 {
+            font-size: 28px;
+            font-weight: 700;
+            margin-bottom: 12px;
+        }
+        
+        .header p {
+            font-size: 15px;
+            opacity: 0.95;
+            line-height: 1.5;
+        }
+        
+        .content {
+            padding: 24px;
+        }
+        
+        .summary-card {
+            background: var(--bg-light);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        
+        .summary-card h2 {
+            font-size: 16px;
+            font-weight: 700;
+            color: var(--text-dark);
+            margin-bottom: 16px;
+        }
+        
+        .summary-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 0;
+            border-bottom: 1px solid var(--border-color);
+        }
+        
+        .summary-item:last-child {
+            border-bottom: none;
+        }
+        
+        .summary-label {
+            font-size: 14px;
+            color: var(--text-light);
+        }
+        
+        .summary-value {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-dark);
+        }
+        
+        .summary-value.highlight {
+            color: var(--primary-color);
+            font-size: 16px;
+        }
+        
+        .stat-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin-top: 16px;
+        }
+        
+        .stat-box {
+            background: white;
+            border: 2px solid var(--border-color);
+            border-radius: 8px;
+            padding: 16px;
+            text-align: center;
+        }
+        
+        .stat-value {
+            font-size: 24px;
+            font-weight: 700;
+            color: var(--primary-color);
+            margin-bottom: 4px;
+        }
+        
+        .stat-label {
+            font-size: 12px;
+            color: var(--text-light);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .btn {
+            width: 100%;
+            padding: 16px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+        
+        .btn-primary {
+            background: var(--primary-color);
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background: #2563EB;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+        }
+        
+        .info-box {
+            background: #DBEAFE;
+            border: 1px solid #93C5FD;
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 20px;
+        }
+        
+        .info-box p {
+            font-size: 14px;
+            color: #1E40AF;
+            line-height: 1.6;
+        }
+        
+        .footer {
+            padding: 20px 24px;
+            background: var(--bg-light);
+            border-top: 1px solid var(--border-color);
+            text-align: center;
+        }
+        
+        .footer-text {
+            font-size: 13px;
+            color: var(--text-light);
+            margin-bottom: 8px;
+        }
+        
+        .footer-support {
+            font-size: 13px;
+            color: var(--text-dark);
+        }
+        
+        .footer-support a {
+            color: var(--primary-color);
+            text-decoration: none;
+            font-weight: 600;
+        }
+        
+        /* Mobile optimizations */
+        @media (max-width: 480px) {
+            body {
+                padding: 0;
+            }
+            
+            .container {
+                border-radius: 0;
+                max-width: 100%;
+                min-height: 100vh;
+            }
+            
+            .stat-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+
+<!-- Main container -->
+<div class="container">
+    <!-- Header -->
+    <div class="header">
+        <div class="logout-icon">👋</div>
+        <h1>You Have Logged Out</h1>
+        <p>Thank you for using our WiFi service. We hope to see you again soon!</p>
+    </div>
+    
+    <!-- Content -->
+    <div class="content">
+        <!-- Session Summary -->
+        <div class="summary-card">
+            <h2>📊 Session Summary</h2>
+            
+            <div class="summary-item">
+                <span class="summary-label">Username</span>
+                <span class="summary-value highlight">$(username)</span>
+            </div>
+            
+            <div class="summary-item">
+                <span class="summary-label">IP Address</span>
+                <span class="summary-value">$(ip)</span>
+            </div>
+            
+            <div class="summary-item">
+                <span class="summary-label">MAC Address</span>
+                <span class="summary-value">$(mac)</span>
+            </div>
+            
+            <div class="summary-item">
+                <span class="summary-label">Session Duration</span>
+                <span class="summary-value">$(uptime)</span>
+            </div>
+            
+            $(if session-time-left)
+            <div class="summary-item">
+                <span class="summary-label">Time Remaining</span>
+                <span class="summary-value">$(session-time-left)</span>
+            </div>
+            $(endif)
+            
+            <!-- Data Usage Stats -->
+            <div class="stat-grid">
+                <div class="stat-box">
+                    <div class="stat-value">$(bytes-out-nice)</div>
+                    <div class="stat-label">Downloaded</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-value">$(bytes-in-nice)</div>
+                    <div class="stat-label">Uploaded</div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Info Message -->
+        $(if session-time-left)
+        <div class="info-box">
+            <p><strong>💡 Note:</strong> You still have <strong>$(session-time-left)</strong> remaining on your voucher. You can log back in anytime before it expires.</p>
+        </div>
+        $(endif)
+        
+        <!-- Login Again Button -->
+        <form action="$(link-login)" name="login" onSubmit="return openLogin()" style="margin: 0;">
+            <button type="submit" class="btn btn-primary">
+                🔐 Login Again
+            </button>
+        </form>
+    </div>
+    
+    <!-- Footer -->
+    <div class="footer">
+        <div class="footer-text">We appreciate your business!</div>
+        <div class="footer-support">
+            Need help? <span id="support-contact">Contact Support</span>
+        </div>
+    </div>
+</div>
+
+<script>
+// ============================================================================
+// GLOBAL STATE
+// ============================================================================
+let CONFIG = null;
+
+// ============================================================================
+// INITIALIZATION
+// ============================================================================
+window.addEventListener('DOMContentLoaded', async () => {
+    try {
+        await loadConfiguration();
+        updateSupportInfo();
+    } catch (error) {
+        console.error('Initialization error:', error);
+    }
+});
+
+// ============================================================================
+// CONFIGURATION LOADING
+// ============================================================================
+async function loadConfiguration() {
+    try {
+        const response = await fetch('/api.json?v=' + Date.now());
+        if (!response.ok) throw new Error('Failed to load configuration');
+        CONFIG = await response.json();
+        console.log('Configuration loaded:', CONFIG);
+    } catch (error) {
+        console.error('Config load error:', error);
+        CONFIG = null;
+    }
+}
+
+function updateSupportInfo() {
+    if (!CONFIG || !CONFIG.support) return;
+    
+    const supportEl = document.getElementById('support-contact');
+    if (supportEl && CONFIG.support.phone) {
+        supportEl.innerHTML = `<a href="tel:${CONFIG.support.phone}">${CONFIG.support.phone}</a>`;
+    }
+}
+
+// ============================================================================
+// LOGIN AGAIN HANDLING
+// ============================================================================
+function openLogin() {
+    // If opened in popup window, open login in new window and close current
+    if (window.name === 'hotspot_logout') {
+        window.open('$(link-login)', '_blank', '');
+        window.close();
+        return false;
+    }
+    
+    // Otherwise, navigate normally
+    return true;
+}
+
+// ============================================================================
+// SESSION STORAGE (Optional - save for analytics)
+// ============================================================================
+function saveSessionData() {
+    try {
+        const sessionData = {
+            username: '$(username)',
+            duration: '$(uptime)',
+            downloaded: '$(bytes-out-nice)',
+            uploaded: '$(bytes-in-nice)',
+            timestamp: new Date().toISOString()
+        };
+        
+        // Could send to analytics endpoint if needed
+        console.log('Session completed:', sessionData);
+        
+    } catch (error) {
+        console.error('Failed to save session data:', error);
+    }
+}
+
+// Save session data on page load
+saveSessionData();
+
+// ============================================================================
+// CONSOLE DEBUGGING INFO
+// ============================================================================
+console.log('%c👋 Logged Out', 'font-size: 16px; font-weight: bold; color: #3B82F6;');
+console.log('Username:', '$(username)');
+console.log('Session Duration:', '$(uptime)');
+console.log('Downloaded:', '$(bytes-out-nice)');
+console.log('Uploaded:', '$(bytes-in-nice)');
+$(if session-time-left)
+console.log('Time Remaining:', '$(session-time-left)');
+$(endif)
+
+</script>
+
+</body>
+</html>

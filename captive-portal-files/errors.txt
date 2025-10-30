@@ -1,0 +1,159 @@
+# errors.txt
+# MikroTik Hotspot Error Messages
+# Custom error messages for WiFi captive portal
+#
+# Variables available:
+#   $(error-orig) - original error message from hotspot
+#   $(ip)         - IP address of client
+#   $(username)   - username of client trying to log in
+#   $(mac)        - MAC address of client
+
+# ============================================================================
+# INTERNAL ERRORS
+# ============================================================================
+
+# internal-error
+# Should never happen under normal circumstances
+# If it does, something is seriously wrong with the hotspot configuration
+internal-error = System error occurred. Please contact support immediately. (Technical: $(error-orig))
+
+# config-error
+# Configuration problem on the router
+# Should be fixed by administrator
+config-error = WiFi system is misconfigured. Please inform venue staff. (Configuration issue: $(error-orig))
+
+# ============================================================================
+# SESSION ERRORS
+# ============================================================================
+
+# not-logged-in
+# User trying to access status/logout page without being logged in
+not-logged-in = You are not logged in. Please connect to WiFi and enter your voucher code to access the internet.
+
+# ippool-empty
+# No more IP addresses available in the pool
+# This happens when router reaches maximum capacity
+ippool-empty = WiFi is at full capacity right now. Please wait a few minutes and try again. If this continues, contact venue staff.
+
+# shutting-down
+# Router is shutting down or in maintenance mode
+shutting-down = WiFi service is temporarily unavailable for maintenance. Please try again in a few minutes. Your voucher will remain valid.
+
+# user-session-limit
+# User has reached maximum concurrent sessions
+# Typically means the voucher is already in use on another device
+user-session-limit = Your voucher is already in use on another device. Please logout from the other device first, or purchase a new voucher for multiple devices.
+
+# license-session-limit
+# MikroTik license doesn't allow more users
+# Should upgrade router license if this happens frequently
+license-session-limit = Maximum WiFi capacity reached due to system limitations. Please try again later or contact support. ($(error-orig))
+
+# ============================================================================
+# AUTHENTICATION ERRORS
+# ============================================================================
+
+# wrong-mac-username
+# Username looks like MAC address but doesn't match client MAC
+# Security measure to prevent voucher sharing
+wrong-mac-username = This voucher is registered to a different device and cannot be used here. Please use the correct voucher for your device, or purchase a new one.
+
+# chap-missing
+# Browser didn't send encrypted password response
+# Usually means JavaScript is disabled or page is corrupted
+chap-missing = Login failed - please enable JavaScript in your browser and try again. If the problem persists, try refreshing the page or using a different browser.
+
+# invalid-username
+# Wrong username or password
+# Most common error - incorrect voucher code
+invalid-username = Invalid voucher code or password. Please check your code carefully and try again. Make sure there are no spaces or typos. If you paid via M-Pesa, use the "I Paid M-Pesa" tab to verify your transaction.
+
+# invalid-mac
+# User is bound to different MAC address
+# Prevents voucher sharing between devices
+invalid-mac = This voucher ($(username)) is registered to a different device. Each voucher can only be used on one device. Please purchase a new voucher if you need to connect another device.
+
+# ============================================================================
+# USAGE LIMIT ERRORS
+# ============================================================================
+
+# uptime-limit
+# User has exceeded time limit
+uptime-limit = Your session time has expired. Please purchase a new voucher to continue browsing.
+
+# traffic-limit
+# User has exceeded data limit
+traffic-limit = You have reached your data limit. Please purchase a new voucher to continue browsing.
+
+# ============================================================================
+# RADIUS/SERVER ERRORS
+# ============================================================================
+
+# radius-timeout
+# Authentication server not responding
+# Network issue or server down
+radius-timeout = Authentication server is not responding. This is a temporary issue - please wait 30 seconds and try again. If the problem persists after 3 attempts, contact support.
+
+# auth-in-progress
+# Another authentication attempt is already in progress
+# User probably clicked login button multiple times
+auth-in-progress = Login is already in progress. Please wait a moment and do not click the login button multiple times.
+
+# radius-reply
+# RADIUS server sent a custom error message
+# Pass through the server's message
+radius-reply = $(error-orig)
+
+# ============================================================================
+# PAYMENT-RELATED ERRORS (Custom)
+# ============================================================================
+
+# payment-pending
+# Payment is being processed
+# Note: This is a custom error that might be used by your system
+payment-pending = Your M-Pesa payment is being processed. Please wait a few moments. You will receive a confirmation message shortly.
+
+# payment-failed
+# Payment was not successful
+payment-failed = Payment was not successful. Please try again or contact support if money was deducted from your account.
+
+# voucher-expired
+# Voucher has passed its expiry date
+voucher-expired = This voucher has expired. Vouchers are typically valid for 30 days from purchase. Please buy a new voucher to continue browsing.
+
+# voucher-used
+# Voucher has already been fully used
+voucher-used = This voucher has already been used and has no time remaining. Please purchase a new voucher to continue browsing.
+
+# ============================================================================
+# NETWORK ERRORS (Custom)
+# ============================================================================
+
+# no-internet
+# Router has internet connectivity issues
+no-internet = The WiFi router is experiencing internet connectivity issues. Please inform venue staff or contact support.
+
+# router-offline
+# Router is not responding
+router-offline = The WiFi router is currently offline. Please inform venue staff immediately.
+
+# ============================================================================
+# HELPFUL MESSAGES
+# ============================================================================
+
+# All error messages should:
+# 1. Be written in simple, clear English (Kenyan context)
+# 2. Explain what went wrong in user-friendly terms
+# 3. Suggest what the user should do next
+# 4. Avoid technical jargon where possible
+# 5. Include contact support message for serious issues
+#
+# Common user scenarios:
+# - Typo in voucher code → "invalid-username"
+# - Voucher already used → "user-session-limit" or custom "voucher-used"
+# - No more IP addresses → "ippool-empty"
+# - Router maintenance → "shutting-down"
+# - Payment issues → custom payment errors
+#
+# Support contact should be added to error.html page dynamically
+# from api.json configuration file

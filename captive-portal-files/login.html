@@ -1,0 +1,1002 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="pragma" content="no-cache">
+    <meta http-equiv="expires" content="-1">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>WiFi Login</title>
+    
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        :root {
+            --primary-color: #3B82F6;
+            --secondary-color: #10B981;
+            --error-color: #EF4444;
+            --success-color: #10B981;
+            --text-dark: #1F2937;
+            --text-light: #6B7280;
+            --border-color: #E5E7EB;
+            --bg-light: #F9FAFB;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            color: var(--text-dark);
+        }
+        
+        .container {
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            width: 100%;
+            max-width: 480px;
+            overflow: hidden;
+            animation: fadeIn 0.3s ease-in;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .header {
+            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+            color: white;
+            padding: 30px 24px;
+            text-align: center;
+        }
+        
+        .logo {
+            max-width: 120px;
+            max-height: 60px;
+            margin-bottom: 16px;
+        }
+        
+        .header h1 {
+            font-size: 24px;
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
+        
+        .header p {
+            font-size: 14px;
+            opacity: 0.9;
+        }
+        
+        .tabs {
+            display: flex;
+            border-bottom: 1px solid var(--border-color);
+            background: var(--bg-light);
+        }
+        
+        .tab {
+            flex: 1;
+            padding: 16px 12px;
+            text-align: center;
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-light);
+            background: transparent;
+            border: none;
+            border-bottom: 3px solid transparent;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .tab:hover {
+            background: white;
+            color: var(--primary-color);
+        }
+        
+        .tab.active {
+            color: var(--primary-color);
+            background: white;
+            border-bottom-color: var(--primary-color);
+        }
+        
+        .content {
+            padding: 24px;
+        }
+        
+        .tab-content {
+            display: none;
+        }
+        
+        .tab-content.active {
+            display: block;
+            animation: fadeIn 0.2s ease-in;
+        }
+        
+        .packages {
+            display: grid;
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+        
+        .package {
+            border: 2px solid var(--border-color);
+            border-radius: 12px;
+            padding: 16px;
+            cursor: pointer;
+            transition: all 0.2s;
+            position: relative;
+        }
+        
+        .package:hover {
+            border-color: var(--primary-color);
+            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.1);
+        }
+        
+        .package.selected {
+            border-color: var(--primary-color);
+            background: linear-gradient(135deg, rgba(59, 130, 246, 0.05), rgba(16, 185, 129, 0.05));
+        }
+        
+        .package-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+        
+        .package-name {
+            font-size: 16px;
+            font-weight: 700;
+            color: var(--text-dark);
+        }
+        
+        .package-price {
+            font-size: 20px;
+            font-weight: 700;
+            color: var(--primary-color);
+        }
+        
+        .package-details {
+            font-size: 13px;
+            color: var(--text-light);
+            margin-bottom: 8px;
+        }
+        
+        .package-features {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+        
+        .feature-tag {
+            font-size: 11px;
+            padding: 4px 8px;
+            background: var(--bg-light);
+            border-radius: 4px;
+            color: var(--text-light);
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        label {
+            display: block;
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-dark);
+            margin-bottom: 8px;
+        }
+        
+        input[type="text"],
+        input[type="tel"] {
+            width: 100%;
+            padding: 14px 16px;
+            border: 2px solid var(--border-color);
+            border-radius: 8px;
+            font-size: 16px;
+            transition: all 0.2s;
+        }
+        
+        input:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+        }
+        
+        .input-hint {
+            font-size: 12px;
+            color: var(--text-light);
+            margin-top: 4px;
+        }
+        
+        .btn {
+            width: 100%;
+            padding: 16px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+        
+        .btn-primary {
+            background: var(--primary-color);
+            color: white;
+        }
+        
+        .btn-primary:hover:not(:disabled) {
+            background: #2563EB;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+        }
+        
+        .btn-primary:disabled {
+            background: var(--border-color);
+            color: var(--text-light);
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .alert {
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin-bottom: 16px;
+            font-size: 14px;
+        }
+        
+        .alert-error {
+            background: #FEE2E2;
+            color: #991B1B;
+            border: 1px solid #FCA5A5;
+        }
+        
+        .alert-success {
+            background: #D1FAE5;
+            color: #065F46;
+            border: 1px solid #6EE7B7;
+        }
+        
+        .alert-info {
+            background: #DBEAFE;
+            color: #1E40AF;
+            border: 1px solid #93C5FD;
+        }
+        
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top-color: white;
+            animation: spin 0.8s linear infinite;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        .hidden {
+            display: none !important;
+        }
+        
+        .footer {
+            padding: 20px 24px;
+            background: var(--bg-light);
+            border-top: 1px solid var(--border-color);
+            text-align: center;
+        }
+        
+        .footer-info {
+            font-size: 12px;
+            color: var(--text-light);
+            margin-bottom: 8px;
+        }
+        
+        .footer-support {
+            font-size: 13px;
+            color: var(--text-dark);
+        }
+        
+        .footer-support a {
+            color: var(--primary-color);
+            text-decoration: none;
+            font-weight: 600;
+        }
+        
+        /* Mobile optimizations */
+        @media (max-width: 480px) {
+            body {
+                padding: 0;
+            }
+            
+            .container {
+                border-radius: 0;
+                max-width: 100%;
+                min-height: 100vh;
+            }
+            
+            .tab {
+                font-size: 12px;
+                padding: 14px 8px;
+            }
+        }
+    </style>
+</head>
+<body>
+
+<!-- Hidden MikroTik login form -->
+$(if chap-id)
+<form name="sendin" action="$(link-login-only)" method="post" style="display:none">
+    <input type="hidden" name="username" />
+    <input type="hidden" name="password" />
+    <input type="hidden" name="dst" value="$(link-orig)" />
+    <input type="hidden" name="popup" value="true" />
+</form>
+$(endif)
+
+<!-- Main container -->
+<div class="container">
+    <!-- Header -->
+    <div class="header">
+        <img id="logo" class="logo hidden" alt="Logo">
+        <h1 id="company-name">WiFi Login</h1>
+        <p id="location">Connect to WiFi</p>
+    </div>
+    
+    <!-- Tabs -->
+    <div class="tabs">
+        <button class="tab active" onclick="switchTab('buy', event)">Buy Package</button>
+        <button class="tab" onclick="switchTab('voucher', event)">I Have Voucher</button>
+        <button class="tab" onclick="switchTab('mpesa', event)">I Paid M-Pesa</button>
+    </div>
+    
+    <!-- Content -->
+    <div class="content">
+        <!-- Loading state -->
+        <div id="loading-state" class="tab-content active">
+            <div style="text-align: center; padding: 40px 20px;">
+                <div class="loading" style="margin: 0 auto 16px; border-top-color: var(--primary-color); border-color: var(--border-color);"></div>
+                <p>Loading packages...</p>
+            </div>
+        </div>
+        
+        <!-- Error state -->
+        <div id="error-state" class="hidden">
+            <div class="alert alert-error">
+                <strong>Connection Error</strong>
+                <p id="error-message">Unable to load packages. Please try again.</p>
+            </div>
+            <button class="btn btn-primary" onclick="location.reload()">Retry</button>
+        </div>
+        
+        <!-- Tab 1: Buy Package -->
+        <div id="buy-tab" class="tab-content">
+            <div id="packages-container" class="packages">
+                <!-- Packages loaded dynamically -->
+            </div>
+            
+            <div class="form-group">
+                <label for="phone-number">Phone Number</label>
+                <input type="tel" id="phone-number" placeholder="0712345678 or 254712345678" maxlength="12">
+                <div class="input-hint">Enter M-Pesa registered phone number</div>
+            </div>
+            
+            <button id="buy-btn" class="btn btn-primary" onclick="initiatePurchase()" disabled>
+                Select Package to Continue
+            </button>
+            
+            <div id="payment-status" class="hidden"></div>
+        </div>
+        
+        <!-- Tab 2: Voucher Login -->
+        <div id="voucher-tab" class="tab-content">
+            <div class="form-group">
+                <label for="voucher-code">Voucher Code</label>
+                <input type="text" id="voucher-code" placeholder="Enter your voucher code" maxlength="20" style="text-transform: uppercase;">
+                <div class="input-hint">Enter the voucher code you purchased</div>
+            </div>
+            
+            <button class="btn btn-primary" onclick="loginWithVoucher()">
+                Login with Voucher
+            </button>
+        </div>
+        
+        <!-- Tab 3: M-Pesa Code Verification -->
+        <div id="mpesa-tab" class="tab-content">
+            <div class="alert alert-info">
+                <strong>Already Paid?</strong>
+                <p>Enter your M-Pesa transaction code to get your voucher.</p>
+            </div>
+            
+            <div class="form-group">
+                <label for="mpesa-code">M-Pesa Transaction Code</label>
+                <input type="text" id="mpesa-code" placeholder="e.g., RBK123456" maxlength="12" style="text-transform: uppercase;">
+                <div class="input-hint">Check your M-Pesa message for transaction code</div>
+            </div>
+            
+            <button class="btn btn-primary" onclick="verifyMpesaCode()">
+                Verify & Login
+            </button>
+            
+            <div id="verify-status" class="hidden"></div>
+        </div>
+    </div>
+    
+    <!-- Footer -->
+    <div class="footer">
+        <div class="footer-info" id="router-info">Powered by MikroTik</div>
+        <div class="footer-support">
+            Need help? <a href="tel:+254700000000" id="support-phone">Contact Support</a>
+        </div>
+    </div>
+</div>
+
+<!-- MD5 Script for MikroTik CHAP -->
+<script src="/md5.js"></script>
+
+<!-- Main Application Script -->
+<script>
+// ============================================================================
+// GLOBAL STATE
+// ============================================================================
+let CONFIG = null;
+let BRANDING = null;
+let PACKAGES = [];
+let SELECTED_PACKAGE = null;
+
+// ============================================================================
+// INITIALIZATION
+// ============================================================================
+window.addEventListener('DOMContentLoaded', async () => {
+    try {
+        await loadConfiguration();
+        await loadBranding();
+        await loadPackages();
+        applyBranding();
+        renderPackages();
+        
+        document.getElementById('loading-state').classList.add('hidden');
+        document.getElementById('buy-tab').classList.add('active');
+        
+    } catch (error) {
+        console.error('Initialization error:', error);
+        showError('Unable to load WiFi login page. Please try again.');
+    }
+});
+
+// ============================================================================
+// CONFIGURATION LOADING
+// ============================================================================
+async function loadConfiguration() {
+    try {
+        const response = await fetch('/api.json?v=' + Date.now());
+        if (!response.ok) throw new Error('Failed to load configuration');
+        CONFIG = await response.json();
+        console.log('Configuration loaded:', CONFIG);
+    } catch (error) {
+        console.error('Config load error:', error);
+        CONFIG = {
+            router_id: 'unknown',
+            api: {
+                base_url: 'http://localhost:3000',
+                endpoints: {
+                    branding: '/api/captive/branding',
+                    packages: '/api/captive/packages',
+                    verify_mpesa: '/api/captive/verify-mpesa',
+                    purchase: '/api/captive/purchase',
+                    payment_status: '/api/captive/payment-status'
+                }
+            },
+            support: { phone: '+254700000000', name: 'Support' }
+        };
+    }
+}
+
+async function loadBranding() {
+    try {
+        const url = `${CONFIG.api.base_url}${CONFIG.api.endpoints.branding}?routerId=${CONFIG.router_id}`;
+        const response = await fetch(url);
+        const data = await response.json();
+        
+        BRANDING = data.success ? data.branding : (CONFIG.branding || {});
+    } catch (error) {
+        console.error('Branding load error:', error);
+        BRANDING = CONFIG.branding || {};
+    }
+}
+
+async function loadPackages() {
+    try {
+        const url = `${CONFIG.api.base_url}${CONFIG.api.endpoints.packages}?routerId=${CONFIG.router_id}`;
+        const response = await fetch(url);
+        const data = await response.json();
+        
+        if (data.success && data.packages && data.packages.length > 0) {
+            PACKAGES = data.packages;
+        } else {
+            throw new Error('No packages available');
+        }
+    } catch (error) {
+        console.error('Packages load error:', error);
+        throw error;
+    }
+}
+
+// ============================================================================
+// UI RENDERING
+// ============================================================================
+function applyBranding() {
+    if (!BRANDING) return;
+    
+    if (BRANDING.primary_color) {
+        document.documentElement.style.setProperty('--primary-color', BRANDING.primary_color);
+    }
+    if (BRANDING.secondary_color) {
+        document.documentElement.style.setProperty('--secondary-color', BRANDING.secondary_color);
+    }
+    
+    if (BRANDING.logo_url) {
+        const logo = document.getElementById('logo');
+        logo.src = BRANDING.logo_url;
+        logo.classList.remove('hidden');
+    }
+    
+    if (BRANDING.company_name) {
+        document.getElementById('company-name').textContent = BRANDING.company_name;
+    }
+    
+    if (CONFIG.location) {
+        document.getElementById('location').textContent = CONFIG.location;
+    }
+    
+    if (CONFIG.support && CONFIG.support.phone) {
+        const supportLink = document.getElementById('support-phone');
+        supportLink.href = `tel:${CONFIG.support.phone}`;
+        supportLink.textContent = CONFIG.support.phone;
+    }
+    
+    if (CONFIG.router_name) {
+        document.getElementById('router-info').textContent = CONFIG.router_name;
+    }
+}
+
+function renderPackages() {
+    const container = document.getElementById('packages-container');
+    container.innerHTML = '';
+    
+    PACKAGES.forEach((pkg, index) => {
+        const packageEl = document.createElement('div');
+        packageEl.className = 'package';
+        packageEl.onclick = () => selectPackage(index);
+        
+        packageEl.innerHTML = `
+            <div class="package-header">
+                <div class="package-name">${pkg.name}</div>
+                <div class="package-price">${pkg.currency} ${pkg.price}</div>
+            </div>
+            <div class="package-details">
+                ${pkg.duration_display} • ${pkg.bandwidth.display}
+            </div>
+            <div class="package-features">
+                ${pkg.features.map(f => `<span class="feature-tag">${f}</span>`).join('')}
+            </div>
+        `;
+        
+        container.appendChild(packageEl);
+    });
+}
+
+function selectPackage(index) {
+    document.querySelectorAll('.package').forEach(el => el.classList.remove('selected'));
+    
+    const packages = document.querySelectorAll('.package');
+    packages[index].classList.add('selected');
+    SELECTED_PACKAGE = PACKAGES[index];
+    
+    const buyBtn = document.getElementById('buy-btn');
+    buyBtn.disabled = false;
+    buyBtn.innerHTML = `Pay ${SELECTED_PACKAGE.currency} ${SELECTED_PACKAGE.price} - ${SELECTED_PACKAGE.name}`;
+}
+
+// ============================================================================
+// TAB SWITCHING
+// ============================================================================
+function switchTab(tabName, event) {
+    document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
+    event.target.classList.add('active');
+    
+    document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+    document.getElementById(`${tabName}-tab`).classList.add('active');
+}
+
+// ============================================================================
+// PURCHASE FLOW
+// ============================================================================
+async function initiatePurchase() {
+    if (!SELECTED_PACKAGE) {
+        alert('Please select a package first');
+        return;
+    }
+    
+    const phoneInput = document.getElementById('phone-number');
+    const phoneNumber = phoneInput.value.trim();
+    
+    if (!phoneNumber) {
+        alert('Please enter your phone number');
+        phoneInput.focus();
+        return;
+    }
+    
+    if (!validatePhoneNumber(phoneNumber)) {
+        alert('Invalid phone number. Use format: 0712345678 or 254712345678');
+        phoneInput.focus();
+        return;
+    }
+    
+    const buyBtn = document.getElementById('buy-btn');
+    buyBtn.disabled = true;
+    buyBtn.innerHTML = '<span class="loading"></span> Initiating payment...';
+    
+    try {
+        const macAddress = '$(mac)';
+        const url = `${CONFIG.api.base_url}${CONFIG.api.endpoints.purchase}`;
+        
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                router_id: CONFIG.router_id,
+                package_id: SELECTED_PACKAGE.id,
+                phone_number: phoneNumber,
+                mac_address: macAddress
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            showPaymentStatus(data);
+            pollPaymentStatus(data.checkout.checkout_request_id);
+        } else {
+            throw new Error(data.message || 'Purchase failed');
+        }
+        
+    } catch (error) {
+        console.error('Purchase error:', error);
+        buyBtn.disabled = false;
+        buyBtn.innerHTML = `Pay ${SELECTED_PACKAGE.currency} ${SELECTED_PACKAGE.price} - ${SELECTED_PACKAGE.name}`;
+        alert('Unable to initiate payment. Please try again.');
+    }
+}
+
+function showPaymentStatus(data) {
+    const statusDiv = document.getElementById('payment-status');
+    statusDiv.className = 'alert alert-info';
+    statusDiv.innerHTML = `
+        <strong>${data.checkout.customer_message}</strong>
+        <ol style="margin: 12px 0 0 20px; font-size: 13px;">
+            <li>${data.instructions.step_1}</li>
+            <li>${data.instructions.step_2}</li>
+            <li>${data.instructions.step_3}</li>
+        </ol>
+        <div id="status-message" style="margin-top: 12px;"></div>
+    `;
+    statusDiv.classList.remove('hidden');
+    statusDiv.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+async function pollPaymentStatus(checkoutId) {
+    const startTime = Date.now();
+    const timeout = 60000;
+    const interval = 3000;
+    
+    const updateStatus = (message, isError = false) => {
+        const statusMsg = document.getElementById('status-message');
+        if (statusMsg) {
+            statusMsg.textContent = message;
+            statusMsg.style.color = isError ? 'var(--error-color)' : 'var(--text-dark)';
+        }
+    };
+    
+    while (Date.now() - startTime < timeout) {
+        try {
+            const url = `${CONFIG.api.base_url}${CONFIG.api.endpoints.payment_status}?checkout_id=${checkoutId}&router_id=${CONFIG.router_id}`;
+            const response = await fetch(url);
+            const data = await response.json();
+            
+            if (data.status === 'completed') {
+                updateStatus('✓ Payment successful! Logging you in...');
+                setTimeout(() => {
+                    autoLogin(data.voucher.code, data.voucher.password);
+                }, 1000);
+                return;
+            }
+            
+            if (data.status === 'failed' || data.status === 'cancelled') {
+                updateStatus(`✗ ${data.message}`, true);
+                resetPurchaseButton();
+                return;
+            }
+            
+            if (data.status === 'pending') {
+                const elapsed = data.elapsed_time || 0;
+                updateStatus(`⏳ Waiting for payment confirmation... (${elapsed}s)`);
+            }
+            
+        } catch (error) {
+            console.error('Polling error:', error);
+        }
+        
+        await new Promise(resolve => setTimeout(resolve, interval));
+    }
+    
+    updateStatus('⏱ Payment is taking longer than expected. Check your M-Pesa messages.', true);
+    showTimeoutInstructions();
+}
+
+function showTimeoutInstructions() {
+    const statusDiv = document.getElementById('payment-status');
+    statusDiv.className = 'alert alert-info';
+    statusDiv.innerHTML += `
+        <div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid rgba(0,0,0,0.1);">
+            <strong>What to do:</strong>
+            <ul style="margin: 8px 0 0 20px; font-size: 13px;">
+                <li>Check your M-Pesa messages for a transaction code (e.g., RBK123456)</li>
+                <li>If you received a code, use the "I Paid M-Pesa" tab to verify it</li>
+                <li>If money was deducted but you got no code, contact support</li>
+            </ul>
+        </div>
+    `;
+    resetPurchaseButton();
+}
+
+function resetPurchaseButton() {
+    const buyBtn = document.getElementById('buy-btn');
+    if (SELECTED_PACKAGE) {
+        buyBtn.disabled = false;
+        buyBtn.innerHTML = `Pay ${SELECTED_PACKAGE.currency} ${SELECTED_PACKAGE.price} - ${SELECTED_PACKAGE.name}`;
+    }
+}
+
+// ============================================================================
+// VOUCHER LOGIN
+// ============================================================================
+function loginWithVoucher() {
+    const voucherInput = document.getElementById('voucher-code');
+    const voucherCode = voucherInput.value.trim().toUpperCase();
+    
+    if (!voucherCode) {
+        alert('Please enter your voucher code');
+        voucherInput.focus();
+        return;
+    }
+    
+    if (voucherCode.length < 6) {
+        alert('Invalid voucher code');
+        return;
+    }
+    
+    autoLogin(voucherCode, voucherCode);
+}
+
+// ============================================================================
+// M-PESA CODE VERIFICATION
+// ============================================================================
+async function verifyMpesaCode() {
+    const mpesaInput = document.getElementById('mpesa-code');
+    const mpesaCode = mpesaInput.value.trim().toUpperCase();
+    
+    if (!mpesaCode) {
+        alert('Please enter your M-Pesa transaction code');
+        mpesaInput.focus();
+        return;
+    }
+    
+    if (mpesaCode.length < 8) {
+        alert('Invalid M-Pesa code');
+        return;
+    }
+    
+    const statusDiv = document.getElementById('verify-status');
+    statusDiv.className = 'alert alert-info';
+    statusDiv.innerHTML = '<span class="loading" style="border-top-color: var(--primary-color); border-color: var(--border-color);"></span> Verifying transaction...';
+    statusDiv.classList.remove('hidden');
+    
+    try {
+        const macAddress = '$(mac)';
+        const url = `${CONFIG.api.base_url}${CONFIG.api.endpoints.verify_mpesa}`;
+        
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                transaction_code: mpesaCode,
+                router_id: CONFIG.router_id,
+                mac_address: macAddress
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (data.valid && data.voucher) {
+            statusDiv.className = 'alert alert-success';
+            statusDiv.innerHTML = `
+                <strong>✓ Transaction verified!</strong>
+                <p style="margin: 8px 0;">Package: ${data.voucher.package_name}</p>
+                <p style="margin: 8px 0;">Voucher Code: <strong>${data.voucher.code}</strong></p>
+                <p style="margin: 8px 0; font-size: 13px;">Logging you in...</p>
+            `;
+            
+            setTimeout(() => {
+                autoLogin(data.voucher.code, data.voucher.password);
+            }, 2000);
+            
+        } else {
+            statusDiv.className = 'alert alert-error';
+            statusDiv.innerHTML = `
+                <strong>✗ ${data.message}</strong>
+                <p style="margin-top: 8px; font-size: 13px;">Please check your M-Pesa code and try again.</p>
+            `;
+        }
+        
+    } catch (error) {
+        console.error('Verification error:', error);
+        statusDiv.className = 'alert alert-error';
+        statusDiv.innerHTML = `
+            <strong>✗ Verification failed</strong>
+            <p style="margin-top: 8px; font-size: 13px;">Unable to verify transaction. Please try again.</p>
+        `;
+    }
+}
+
+// ============================================================================
+// MIKROTIK AUTO-LOGIN
+// ============================================================================
+function autoLogin(username, password) {
+    $(if chap-id)
+    document.sendin.username.value = username;
+    document.sendin.password.value = hexMD5('$(chap-id)' + password + '$(chap-challenge)');
+    document.sendin.submit();
+    $(else)
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = '$(link-login-only)';
+    
+    const usernameInput = document.createElement('input');
+    usernameInput.type = 'hidden';
+    usernameInput.name = 'username';
+    usernameInput.value = username;
+    form.appendChild(usernameInput);
+    
+    const passwordInput = document.createElement('input');
+    passwordInput.type = 'hidden';
+    passwordInput.name = 'password';
+    passwordInput.value = password;
+    form.appendChild(passwordInput);
+    
+    const dstInput = document.createElement('input');
+    dstInput.type = 'hidden';
+    dstInput.name = 'dst';
+    dstInput.value = '$(link-orig)';
+    form.appendChild(dstInput);
+    
+    const popupInput = document.createElement('input');
+    popupInput.type = 'hidden';
+    popupInput.name = 'popup';
+    popupInput.value = 'true';
+    form.appendChild(popupInput);
+    
+    document.body.appendChild(form);
+    form.submit();
+    $(endif)
+}
+
+// ============================================================================
+// UTILITY FUNCTIONS
+// ============================================================================
+function validatePhoneNumber(phone) {
+    const cleaned = phone.replace(/\D/g, '');
+    
+    if (cleaned.length === 10 && cleaned.startsWith('0')) {
+        return true;
+    }
+    if (cleaned.length === 9 && (cleaned.startsWith('7') || cleaned.startsWith('1'))) {
+        return true;
+    }
+    if (cleaned.length === 12 && cleaned.startsWith('254')) {
+        return true;
+    }
+    
+    return false;
+}
+
+function showError(message) {
+    document.getElementById('loading-state').classList.add('hidden');
+    document.getElementById('error-state').classList.remove('hidden');
+    document.getElementById('error-message').textContent = message;
+}
+
+// ============================================================================
+// ERROR DISPLAY FOR MIKROTIK ERRORS
+// ============================================================================
+$(if error)
+window.addEventListener('DOMContentLoaded', () => {
+    const errorMessage = '$(error)';
+    if (errorMessage) {
+        const alertDiv = document.createElement('div');
+        alertDiv.className = 'alert alert-error';
+        alertDiv.innerHTML = `<strong>Login Error:</strong><br>${errorMessage}`;
+        
+        const content = document.querySelector('.content');
+        if (content) {
+            content.insertBefore(alertDiv, content.firstChild);
+        }
+    }
+});
+$(endif)
+
+// ============================================================================
+// KEYBOARD SHORTCUTS
+// ============================================================================
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+        const activeTab = document.querySelector('.tab-content.active');
+        
+        if (activeTab && activeTab.id === 'voucher-tab') {
+            loginWithVoucher();
+        } else if (activeTab && activeTab.id === 'mpesa-tab') {
+            verifyMpesaCode();
+        } else if (activeTab && activeTab.id === 'buy-tab') {
+            const phoneInput = document.getElementById('phone-number');
+            if (document.activeElement === phoneInput && !document.getElementById('buy-btn').disabled) {
+                initiatePurchase();
+            }
+        }
+    }
+});
+
+// ============================================================================
+// AUTO-UPPERCASE FOR CODE INPUTS
+// ============================================================================
+const voucherInput = document.getElementById('voucher-code');
+if (voucherInput) {
+    voucherInput.addEventListener('input', (e) => {
+        e.target.value = e.target.value.toUpperCase();
+    });
+}
+
+const mpesaInput = document.getElementById('mpesa-code');
+if (mpesaInput) {
+    mpesaInput.addEventListener('input', (e) => {
+        e.target.value = e.target.value.toUpperCase();
+    });
+}
+
+// ============================================================================
+// CONSOLE DEBUGGING INFO
+// ============================================================================
+console.log('%c🔧 MikroTik Captive Portal', 'font-size: 16px; font-weight: bold; color: #3B82F6;');
+console.log('Router ID:', '$(identity)');
+console.log('Client IP:', '$(ip)');
+console.log('Client MAC:', '$(mac)');
+console.log('Link Login:', '$(link-login-only)');
+console.log('Link Original:', '$(link-orig)');
+
+</script>
+
+</body>
+</html>

@@ -1,0 +1,48 @@
+{
+  "router_id": "68ef98d796709d7032e5ddec",
+  "customer_id": "68da743d8cd791f02663c327",
+  "router_name": "Minimall Router - Kisumu",
+  "location": "Minimall, Kisumu",
+  "api": {
+    "base_url": "http://192.168.100.5:3000",
+    "endpoints": {
+      "branding": "/api/captive/branding",
+      "packages": "/api/captive/packages",
+      "verify_mpesa": "/api/captive/verify-mpesa",
+      "purchase": "/api/captive/purchase",
+      "payment_status": "/api/captive/payment-status"
+    },
+    "version": "1.0"
+  },
+  "support": {
+    "name": "Minimall WiFi Support",
+    "phone": "+254712345678",
+    "email": "support@minimall.co.ke",
+    "hours": "24/7",
+    "whatsapp": "+254712345678"
+  },
+  "branding": {
+    "company_name": "Minimall WiFi",
+    "primary_color": "#3B82F6",
+    "secondary_color": "#10B981",
+    "logo_url": "https://yourdomain.com/logos/minimall.png"
+  },
+  "features": {
+    "voucher_login": true,
+    "username_password_login": true,
+    "mpesa_code_login": true,
+    "package_purchase": true,
+    "mpesa_payment": true,
+    "show_pricing": true
+  },
+  "payment": {
+    "currency": "KSh",
+    "tax_rate": 0,
+    "payment_methods": ["mpesa"]
+  },
+  "metadata": {
+    "generated_at": "2025-10-18T12:00:00Z",
+    "version": "1.0.0",
+    "environment": "production"
+  }
+}

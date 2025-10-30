@@ -1,0 +1,613 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="pragma" content="no-cache">
+    <meta http-equiv="expires" content="-1">
+    $(if refresh-timeout)
+    <meta http-equiv="refresh" content="$(refresh-timeout-secs)">
+    $(endif)
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>WiFi Session Status</title>
+    
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        :root {
+            --primary-color: #3B82F6;
+            --secondary-color: #10B981;
+            --success-color: #10B981;
+            --warning-color: #F59E0B;
+            --danger-color: #EF4444;
+            --text-dark: #1F2937;
+            --text-light: #6B7280;
+            --border-color: #E5E7EB;
+            --bg-light: #F9FAFB;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            color: var(--text-dark);
+        }
+        
+        .container {
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            width: 100%;
+            max-width: 480px;
+            overflow: hidden;
+            animation: fadeIn 0.3s ease-in;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .header {
+            background: linear-gradient(135deg, var(--success-color), var(--primary-color));
+            color: white;
+            padding: 30px 24px;
+            text-align: center;
+        }
+        
+        .status-icon {
+            font-size: 48px;
+            margin-bottom: 12px;
+        }
+        
+        .header h1 {
+            font-size: 24px;
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
+        
+        .header p {
+            font-size: 14px;
+            opacity: 0.9;
+        }
+        
+        .content {
+            padding: 24px;
+        }
+        
+        .session-card {
+            background: var(--bg-light);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        
+        .session-card h2 {
+            font-size: 16px;
+            font-weight: 700;
+            color: var(--text-dark);
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .stat-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+        }
+        
+        .stat-item {
+            background: white;
+            border-radius: 8px;
+            padding: 12px;
+            border: 1px solid var(--border-color);
+        }
+        
+        .stat-label {
+            font-size: 12px;
+            color: var(--text-light);
+            margin-bottom: 4px;
+        }
+        
+        .stat-value {
+            font-size: 20px;
+            font-weight: 700;
+            color: var(--text-dark);
+        }
+        
+        .stat-value.success {
+            color: var(--success-color);
+        }
+        
+        .stat-value.warning {
+            color: var(--warning-color);
+        }
+        
+        .stat-value.danger {
+            color: var(--danger-color);
+        }
+        
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 0;
+            border-bottom: 1px solid var(--border-color);
+        }
+        
+        .info-row:last-child {
+            border-bottom: none;
+        }
+        
+        .info-label {
+            font-size: 14px;
+            color: var(--text-light);
+        }
+        
+        .info-value {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-dark);
+        }
+        
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background: var(--border-color);
+            border-radius: 4px;
+            overflow: hidden;
+            margin-top: 8px;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background: var(--success-color);
+            border-radius: 4px;
+            transition: width 0.3s ease;
+        }
+        
+        .progress-fill.warning {
+            background: var(--warning-color);
+        }
+        
+        .progress-fill.danger {
+            background: var(--danger-color);
+        }
+        
+        .alert {
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin-bottom: 16px;
+            font-size: 14px;
+        }
+        
+        .alert-warning {
+            background: #FEF3C7;
+            color: #92400E;
+            border: 1px solid #FCD34D;
+        }
+        
+        .alert-info {
+            background: #DBEAFE;
+            color: #1E40AF;
+            border: 1px solid #93C5FD;
+        }
+        
+        .btn {
+            width: 100%;
+            padding: 16px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+        
+        .btn-primary {
+            background: var(--primary-color);
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background: #2563EB;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+        }
+        
+        .btn-danger {
+            background: var(--danger-color);
+            color: white;
+        }
+        
+        .btn-danger:hover {
+            background: #DC2626;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
+        }
+        
+        .btn-secondary {
+            background: white;
+            color: var(--primary-color);
+            border: 2px solid var(--primary-color);
+        }
+        
+        .btn-secondary:hover {
+            background: var(--primary-color);
+            color: white;
+        }
+        
+        .footer {
+            padding: 20px 24px;
+            background: var(--bg-light);
+            border-top: 1px solid var(--border-color);
+            text-align: center;
+        }
+        
+        .footer-text {
+            font-size: 12px;
+            color: var(--text-light);
+        }
+        
+        .countdown {
+            font-size: 32px;
+            font-weight: 700;
+            text-align: center;
+            margin: 20px 0;
+        }
+        
+        .countdown.warning {
+            color: var(--warning-color);
+        }
+        
+        .countdown.danger {
+            color: var(--danger-color);
+        }
+        
+        /* Mobile optimizations */
+        @media (max-width: 480px) {
+            body {
+                padding: 0;
+            }
+            
+            .container {
+                border-radius: 0;
+                max-width: 100%;
+                min-height: 100vh;
+            }
+            
+            .stat-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+
+<!-- Main container -->
+<div class="container">
+    <!-- Header -->
+    <div class="header">
+        <div class="status-icon">✓</div>
+        $(if login-by == 'trial')
+        <h1>Trial Session Active</h1>
+        $(elif login-by != 'mac')
+        <h1>Welcome, $(username)!</h1>
+        $(else)
+        <h1>Session Active</h1>
+        $(endif)
+        <p>You are connected to WiFi</p>
+    </div>
+    
+    <!-- Content -->
+    <div class="content">
+        <!-- Low time warning -->
+        $(if session-time-left)
+        <div id="time-warning" class="hidden">
+            <div class="alert alert-warning">
+                <strong>⚠ Low Session Time</strong>
+                <p style="margin-top: 4px;">Your session will expire soon. Consider extending your time.</p>
+            </div>
+        </div>
+        $(endif)
+        
+        <!-- Session Time Card -->
+        $(if session-time-left)
+        <div class="session-card">
+            <h2>⏱ Time Remaining</h2>
+            <div id="countdown" class="countdown">$(session-time-left)</div>
+            <div class="progress-bar">
+                <div id="time-progress" class="progress-fill" style="width: 100%;"></div>
+            </div>
+        </div>
+        $(endif)
+        
+        <!-- Usage Statistics Card -->
+        <div class="session-card">
+            <h2>📊 Usage Statistics</h2>
+            <div class="stat-grid">
+                <div class="stat-item">
+                    <div class="stat-label">Session Time</div>
+                    <div class="stat-value">$(uptime)</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-label">Downloaded</div>
+                    <div class="stat-value success">$(bytes-out-nice)</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-label">Uploaded</div>
+                    <div class="stat-value success">$(bytes-in-nice)</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-label">IP Address</div>
+                    <div class="stat-value" style="font-size: 16px;">$(ip)</div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Session Details Card -->
+        <div class="session-card">
+            <h2>ℹ️ Session Details</h2>
+            <div class="info-row">
+                <span class="info-label">MAC Address</span>
+                <span class="info-value">$(mac)</span>
+            </div>
+            $(if login-by != 'mac')
+            <div class="info-row">
+                <span class="info-label">Username</span>
+                <span class="info-value">$(username)</span>
+            </div>
+            $(endif)
+            $(if session-time-left)
+            <div class="info-row">
+                <span class="info-label">Time Remaining</span>
+                <span class="info-value">$(session-time-left)</span>
+            </div>
+            $(endif)
+            <div class="info-row">
+                <span class="info-label">Connected For</span>
+                <span class="info-value">$(uptime)</span>
+            </div>
+        </div>
+        
+        <!-- Action Buttons -->
+        <div id="action-buttons">
+            <!-- Extend session button (shown when time is low) -->
+            $(if session-time-left)
+            <button id="extend-btn" class="btn btn-primary hidden" onclick="extendSession()">
+                ⏰ Extend Session Time
+            </button>
+            $(endif)
+            
+            <!-- Logout button -->
+            $(if login-by-mac != 'yes')
+            <form action="$(link-logout)" name="logout" onSubmit="return openLogout()" style="margin: 0;">
+                <button type="submit" class="btn btn-danger">
+                    🚪 Logout
+                </button>
+            </form>
+            $(endif)
+            
+            <!-- Reload button -->
+            <button class="btn btn-secondary" onclick="location.reload()">
+                🔄 Refresh Status
+            </button>
+        </div>
+    </div>
+    
+    <!-- Footer -->
+    <div class="footer">
+        <div class="footer-text">Session will auto-refresh every $(if refresh-timeout)$(refresh-timeout)$(else)60 seconds$(endif)</div>
+    </div>
+</div>
+
+<script>
+// ============================================================================
+// GLOBAL STATE
+// ============================================================================
+let CONFIG = null;
+$(if session-time-left)
+let SESSION_TIME_SECONDS = parseTimeToSeconds('$(session-time-left)');
+let TOTAL_SESSION_TIME = parseTimeToSeconds('$(uptime)') + SESSION_TIME_SECONDS;
+$(endif)
+
+// ============================================================================
+// INITIALIZATION
+// ============================================================================
+window.addEventListener('DOMContentLoaded', async () => {
+    try {
+        await loadConfiguration();
+        $(if session-time-left)
+        startCountdown();
+        updateTimeWarning();
+        $(endif)
+    } catch (error) {
+        console.error('Initialization error:', error);
+    }
+});
+
+// ============================================================================
+// CONFIGURATION LOADING
+// ============================================================================
+async function loadConfiguration() {
+    try {
+        const response = await fetch('/api.json?v=' + Date.now());
+        if (!response.ok) throw new Error('Failed to load configuration');
+        CONFIG = await response.json();
+        console.log('Configuration loaded:', CONFIG);
+    } catch (error) {
+        console.error('Config load error:', error);
+        CONFIG = {
+            router_id: 'unknown',
+            api: {
+                base_url: 'http://localhost:3000'
+            }
+        };
+    }
+}
+
+// ============================================================================
+// COUNTDOWN TIMER
+// ============================================================================
+$(if session-time-left)
+function parseTimeToSeconds(timeStr) {
+    // Parse MikroTik time format (e.g., "1h30m", "45m", "2d3h")
+    let seconds = 0;
+    
+    const dayMatch = timeStr.match(/(\d+)d/);
+    if (dayMatch) seconds += parseInt(dayMatch[1]) * 86400;
+    
+    const hourMatch = timeStr.match(/(\d+)h/);
+    if (hourMatch) seconds += parseInt(hourMatch[1]) * 3600;
+    
+    const minMatch = timeStr.match(/(\d+)m/);
+    if (minMatch) seconds += parseInt(minMatch[1]) * 60;
+    
+    const secMatch = timeStr.match(/(\d+)s/);
+    if (secMatch) seconds += parseInt(secMatch[1]);
+    
+    return seconds;
+}
+
+function formatTime(seconds) {
+    if (seconds <= 0) return '00:00:00';
+    
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const secs = seconds % 60;
+    
+    return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+}
+
+function startCountdown() {
+    const countdownEl = document.getElementById('countdown');
+    const progressEl = document.getElementById('time-progress');
+    
+    setInterval(() => {
+        SESSION_TIME_SECONDS--;
+        
+        if (SESSION_TIME_SECONDS <= 0) {
+            countdownEl.textContent = 'Session Expired';
+            countdownEl.className = 'countdown danger';
+            progressEl.style.width = '0%';
+            return;
+        }
+        
+        // Update countdown display
+        countdownEl.textContent = formatTime(SESSION_TIME_SECONDS);
+        
+        // Update progress bar
+        const percentage = (SESSION_TIME_SECONDS / TOTAL_SESSION_TIME) * 100;
+        progressEl.style.width = percentage + '%';
+        
+        // Update color based on remaining time
+        if (SESSION_TIME_SECONDS <= 300) { // 5 minutes
+            countdownEl.className = 'countdown danger';
+            progressEl.className = 'progress-fill danger';
+        } else if (SESSION_TIME_SECONDS <= 600) { // 10 minutes
+            countdownEl.className = 'countdown warning';
+            progressEl.className = 'progress-fill warning';
+        } else {
+            countdownEl.className = 'countdown';
+            progressEl.className = 'progress-fill';
+        }
+        
+        // Show warning and extend button
+        updateTimeWarning();
+        
+    }, 1000);
+}
+
+function updateTimeWarning() {
+    const warningEl = document.getElementById('time-warning');
+    const extendBtn = document.getElementById('extend-btn');
+    
+    // Show warning if less than 10 minutes remaining
+    if (SESSION_TIME_SECONDS <= 600 && SESSION_TIME_SECONDS > 0) {
+        if (warningEl) warningEl.classList.remove('hidden');
+        if (extendBtn) extendBtn.classList.remove('hidden');
+    } else {
+        if (warningEl) warningEl.classList.add('hidden');
+        if (extendBtn) extendBtn.classList.add('hidden');
+    }
+}
+$(endif)
+
+// ============================================================================
+// EXTEND SESSION
+// ============================================================================
+function extendSession() {
+    if (!CONFIG || !CONFIG.router_id) {
+        alert('Unable to load session extension. Please refresh the page.');
+        return;
+    }
+    
+    // Redirect to login page with purchase option
+    const loginUrl = '/login.html?action=extend&router_id=' + CONFIG.router_id;
+    window.location.href = loginUrl;
+}
+
+// ============================================================================
+// LOGOUT HANDLING
+// ============================================================================
+function openLogout() {
+    if (window.name != 'hotspot_status') return true;
+    
+    window.open('$(link-logout)', 'hotspot_logout', 'toolbar=0,location=0,directories=0,status=0,menubars=0,resizable=1,width=320,height=400');
+    window.close();
+    return false;
+}
+
+// ============================================================================
+// ADVERTISEMENT HANDLING (if enabled)
+// ============================================================================
+$(if advert-pending == 'yes')
+let popup = null;
+
+function focusAdvert() {
+    if (window.focus && popup) popup.focus();
+}
+
+function openAdvert() {
+    popup = window.open('$(link-advert)', 'hotspot_advert', '');
+    setTimeout(focusAdvert, 1000);
+}
+
+// Auto-open advertisement if pending
+window.addEventListener('DOMContentLoaded', () => {
+    openAdvert();
+});
+$(endif)
+
+// ============================================================================
+// CONSOLE DEBUGGING INFO
+// ============================================================================
+console.log('%c✓ Session Active', 'font-size: 16px; font-weight: bold; color: #10B981;');
+console.log('Username:', '$(username)');
+console.log('IP Address:', '$(ip)');
+console.log('MAC Address:', '$(mac)');
+console.log('Session Time:', '$(uptime)');
+$(if session-time-left)
+console.log('Time Remaining:', '$(session-time-left)');
+$(endif)
+console.log('Downloaded:', '$(bytes-out-nice)');
+console.log('Uploaded:', '$(bytes-in-nice)');
+
+</script>
+
+</body>
+</html>

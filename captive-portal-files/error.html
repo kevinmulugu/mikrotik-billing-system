@@ -1,0 +1,544 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="pragma" content="no-cache">
+    <meta http-equiv="expires" content="-1">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Error - WiFi Login</title>
+    
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        :root {
+            --primary-color: #3B82F6;
+            --secondary-color: #10B981;
+            --error-color: #EF4444;
+            --warning-color: #F59E0B;
+            --text-dark: #1F2937;
+            --text-light: #6B7280;
+            --border-color: #E5E7EB;
+            --bg-light: #F9FAFB;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, var(--error-color) 0%, #DC2626 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            color: var(--text-dark);
+        }
+        
+        .container {
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            width: 100%;
+            max-width: 480px;
+            overflow: hidden;
+            animation: shake 0.5s ease-in-out;
+        }
+        
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            10%, 30%, 50%, 70%, 90% { transform: translateX(-5px); }
+            20%, 40%, 60%, 80% { transform: translateX(5px); }
+        }
+        
+        .header {
+            background: linear-gradient(135deg, var(--error-color), #DC2626);
+            color: white;
+            padding: 40px 24px;
+            text-align: center;
+        }
+        
+        .error-icon {
+            font-size: 64px;
+            margin-bottom: 16px;
+        }
+        
+        .header h1 {
+            font-size: 28px;
+            font-weight: 700;
+            margin-bottom: 12px;
+        }
+        
+        .header p {
+            font-size: 15px;
+            opacity: 0.95;
+            line-height: 1.5;
+        }
+        
+        .content {
+            padding: 24px;
+        }
+        
+        .error-box {
+            background: #FEE2E2;
+            border: 2px solid #FCA5A5;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 24px;
+        }
+        
+        .error-title {
+            font-size: 16px;
+            font-weight: 700;
+            color: #991B1B;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .error-message {
+            font-size: 14px;
+            color: #7F1D1D;
+            line-height: 1.6;
+        }
+        
+        .error-code {
+            font-family: 'Courier New', monospace;
+            background: white;
+            padding: 12px;
+            border-radius: 6px;
+            margin-top: 12px;
+            font-size: 13px;
+            color: var(--text-dark);
+            border: 1px solid #FCA5A5;
+        }
+        
+        .troubleshooting {
+            background: var(--bg-light);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 24px;
+        }
+        
+        .troubleshooting h2 {
+            font-size: 16px;
+            font-weight: 700;
+            color: var(--text-dark);
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .troubleshooting ul {
+            list-style: none;
+            padding: 0;
+        }
+        
+        .troubleshooting li {
+            padding: 10px 0;
+            padding-left: 28px;
+            position: relative;
+            font-size: 14px;
+            color: var(--text-dark);
+            line-height: 1.5;
+        }
+        
+        .troubleshooting li:before {
+            content: "→";
+            position: absolute;
+            left: 8px;
+            color: var(--primary-color);
+            font-weight: 700;
+        }
+        
+        .support-box {
+            background: #DBEAFE;
+            border: 1px solid #93C5FD;
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 24px;
+        }
+        
+        .support-box h3 {
+            font-size: 14px;
+            font-weight: 700;
+            color: #1E40AF;
+            margin-bottom: 8px;
+        }
+        
+        .support-box p {
+            font-size: 13px;
+            color: #1E3A8A;
+            line-height: 1.5;
+        }
+        
+        .support-box a {
+            color: #1E40AF;
+            font-weight: 600;
+            text-decoration: none;
+        }
+        
+        .btn {
+            width: 100%;
+            padding: 16px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+        
+        .btn-primary {
+            background: var(--primary-color);
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background: #2563EB;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+        }
+        
+        .btn-secondary {
+            background: white;
+            color: var(--text-dark);
+            border: 2px solid var(--border-color);
+        }
+        
+        .btn-secondary:hover {
+            border-color: var(--primary-color);
+            color: var(--primary-color);
+        }
+        
+        .footer {
+            padding: 20px 24px;
+            background: var(--bg-light);
+            border-top: 1px solid var(--border-color);
+            text-align: center;
+        }
+        
+        .footer-text {
+            font-size: 12px;
+            color: var(--text-light);
+        }
+        
+        .details-toggle {
+            margin-top: 12px;
+            font-size: 13px;
+            color: var(--primary-color);
+            cursor: pointer;
+            text-decoration: underline;
+        }
+        
+        .technical-details {
+            display: none;
+            margin-top: 12px;
+            padding: 12px;
+            background: white;
+            border-radius: 6px;
+            font-size: 12px;
+            color: var(--text-light);
+            border: 1px solid var(--border-color);
+        }
+        
+        .technical-details.show {
+            display: block;
+        }
+        
+        /* Mobile optimizations */
+        @media (max-width: 480px) {
+            body {
+                padding: 0;
+            }
+            
+            .container {
+                border-radius: 0;
+                max-width: 100%;
+                min-height: 100vh;
+            }
+        }
+    </style>
+</head>
+<body>
+
+<!-- Main container -->
+<div class="container">
+    <!-- Header -->
+    <div class="header">
+        <div class="error-icon">⚠️</div>
+        <h1>Oops! Something Went Wrong</h1>
+        <p>We encountered an error while processing your request</p>
+    </div>
+    
+    <!-- Content -->
+    <div class="content">
+        <!-- Error Message Box -->
+        <div class="error-box">
+            <div class="error-title">
+                ❌ Error
+            </div>
+            <div class="error-message" id="error-message">
+                $(error)
+            </div>
+            
+            <!-- Error Code (if available) -->
+            <div class="error-code" id="error-code-box" style="display: none;">
+                Error Code: <span id="error-code"></span>
+            </div>
+            
+            <!-- Technical Details Toggle -->
+            <div class="details-toggle" onclick="toggleDetails()">
+                Show technical details
+            </div>
+            <div class="technical-details" id="technical-details">
+                <strong>Technical Information:</strong><br>
+                IP Address: $(ip)<br>
+                MAC Address: $(mac)<br>
+                $(if error-orig)
+                Original Error: $(error-orig)<br>
+                $(endif)
+                Time: <span id="error-time"></span>
+            </div>
+        </div>
+        
+        <!-- Troubleshooting Steps -->
+        <div class="troubleshooting">
+            <h2>💡 What You Can Try</h2>
+            <ul id="troubleshooting-list">
+                <li>Double-check your voucher code or password</li>
+                <li>Ensure you have an active internet package</li>
+                <li>Try refreshing the page and logging in again</li>
+                <li>Clear your browser cache and cookies</li>
+                <li>Try using a different web browser</li>
+            </ul>
+        </div>
+        
+        <!-- Support Information -->
+        <div class="support-box">
+            <h3>📞 Need Help?</h3>
+            <p>If the problem persists, please contact our support team:</p>
+            <p style="margin-top: 8px;">
+                <span id="support-contact">Support: +254700000000</span>
+            </p>
+            <p style="margin-top: 4px; font-size: 12px;">
+                Please mention the error code when contacting support
+            </p>
+        </div>
+        
+        <!-- Action Buttons -->
+        <a href="$(link-login)" style="text-decoration: none;">
+            <button class="btn btn-primary">
+                🔄 Try Again
+            </button>
+        </a>
+        
+        <button class="btn btn-secondary" onclick="location.reload()">
+            🔃 Refresh Page
+        </button>
+    </div>
+    
+    <!-- Footer -->
+    <div class="footer">
+        <div class="footer-text">If you believe this is a system error, please contact support</div>
+    </div>
+</div>
+
+<script>
+// ============================================================================
+// GLOBAL STATE
+// ============================================================================
+let CONFIG = null;
+
+// ============================================================================
+// INITIALIZATION
+// ============================================================================
+window.addEventListener('DOMContentLoaded', async () => {
+    try {
+        await loadConfiguration();
+        enhanceErrorMessage();
+        updateSupportInfo();
+        setErrorTime();
+        categorizeError();
+    } catch (error) {
+        console.error('Initialization error:', error);
+    }
+});
+
+// ============================================================================
+// CONFIGURATION LOADING
+// ============================================================================
+async function loadConfiguration() {
+    try {
+        const response = await fetch('/api.json?v=' + Date.now());
+        if (!response.ok) throw new Error('Failed to load configuration');
+        CONFIG = await response.json();
+        console.log('Configuration loaded:', CONFIG);
+    } catch (error) {
+        console.error('Config load error:', error);
+        CONFIG = null;
+    }
+}
+
+function updateSupportInfo() {
+    if (!CONFIG || !CONFIG.support) return;
+    
+    const supportEl = document.getElementById('support-contact');
+    if (supportEl && CONFIG.support.phone) {
+        supportEl.innerHTML = `
+            Phone: <a href="tel:${CONFIG.support.phone}">${CONFIG.support.phone}</a><br>
+            ${CONFIG.support.email ? `Email: <a href="mailto:${CONFIG.support.email}">${CONFIG.support.email}</a>` : ''}
+        `;
+    }
+}
+
+// ============================================================================
+// ERROR MESSAGE ENHANCEMENT
+// ============================================================================
+function enhanceErrorMessage() {
+    const errorMsg = '$(error)'.trim();
+    const errorMsgEl = document.getElementById('error-message');
+    
+    // Enhanced error messages with better explanations
+    const errorEnhancements = {
+        'invalid username or password': {
+            message: 'The voucher code or password you entered is incorrect. Please check and try again.',
+            code: 'AUTH_001',
+            tips: [
+                'Verify your voucher code is entered correctly (check for typos)',
+                'Ensure your voucher has not expired',
+                'Check if your voucher has already been used',
+                'Confirm you purchased the voucher for this specific WiFi network'
+            ]
+        },
+        'ippool-empty': {
+            message: 'The WiFi router has reached its maximum capacity. No more connections can be accepted at this time.',
+            code: 'NETWORK_001',
+            tips: [
+                'Wait a few minutes and try again',
+                'Some users may disconnect soon, freeing up space',
+                'Contact support if this persists for more than 10 minutes'
+            ]
+        },
+        'user-session-limit': {
+            message: 'This voucher is already in use on another device. Each voucher can only be used on one device at a time.',
+            code: 'SESSION_001',
+            tips: [
+                'Logout from the other device first',
+                'Wait a few minutes for the previous session to expire',
+                'Purchase a new voucher if you need multiple devices connected'
+            ]
+        },
+        'shutting-down': {
+            message: 'The WiFi service is currently undergoing maintenance and is not accepting new connections.',
+            code: 'SYSTEM_001',
+            tips: [
+                'Wait 5-10 minutes for maintenance to complete',
+                'Check with venue staff for estimated completion time',
+                'Your voucher will still be valid after maintenance'
+            ]
+        },
+        'wrong-mac-username': {
+            message: 'This voucher is registered to a different device and cannot be used on this device.',
+            code: 'AUTH_002',
+            tips: [
+                'Ensure you are using the correct voucher for this device',
+                'Purchase a new voucher if needed',
+                'Contact support if you believe this is an error'
+            ]
+        },
+        'radius-timeout': {
+            message: 'The authentication server is not responding. This is a temporary issue.',
+            code: 'SERVER_001',
+            tips: [
+                'Wait 30 seconds and try again',
+                'Refresh the page',
+                'Contact support if this error persists'
+            ]
+        }
+    };
+    
+    // Check if we have an enhancement for this error
+    for (const [key, value] of Object.entries(errorEnhancements)) {
+        if (errorMsg.toLowerCase().includes(key)) {
+            errorMsgEl.textContent = value.message;
+            
+            // Show error code
+            const errorCodeBox = document.getElementById('error-code-box');
+            const errorCodeEl = document.getElementById('error-code');
+            if (errorCodeBox && errorCodeEl) {
+                errorCodeEl.textContent = value.code;
+                errorCodeBox.style.display = 'block';
+            }
+            
+            // Update troubleshooting tips
+            const tipsList = document.getElementById('troubleshooting-list');
+            if (tipsList && value.tips) {
+                tipsList.innerHTML = value.tips.map(tip => `<li>${tip}</li>`).join('');
+            }
+            
+            break;
+        }
+    }
+}
+
+function categorizeError() {
+    const errorMsg = '$(error)'.toLowerCase();
+    
+    // Categorize error for analytics
+    let errorCategory = 'unknown';
+    
+    if (errorMsg.includes('invalid') || errorMsg.includes('wrong')) {
+        errorCategory = 'authentication';
+    } else if (errorMsg.includes('pool') || errorMsg.includes('limit') || errorMsg.includes('capacity')) {
+        errorCategory = 'capacity';
+    } else if (errorMsg.includes('timeout') || errorMsg.includes('server')) {
+        errorCategory = 'server';
+    } else if (errorMsg.includes('maintenance') || errorMsg.includes('shutting')) {
+        errorCategory = 'maintenance';
+    }
+    
+    console.log('Error Category:', errorCategory);
+}
+
+// ============================================================================
+// UTILITY FUNCTIONS
+// ============================================================================
+function toggleDetails() {
+    const detailsEl = document.getElementById('technical-details');
+    if (detailsEl) {
+        detailsEl.classList.toggle('show');
+    }
+}
+
+function setErrorTime() {
+    const timeEl = document.getElementById('error-time');
+    if (timeEl) {
+        timeEl.textContent = new Date().toLocaleString();
+    }
+}
+
+// ============================================================================
+// CONSOLE DEBUGGING INFO
+// ============================================================================
+console.log('%c⚠️ Error Occurred', 'font-size: 16px; font-weight: bold; color: #EF4444;');
+console.log('Error Message:', '$(error)');
+$(if error-orig)
+console.log('Original Error:', '$(error-orig)');
+$(endif)
+console.log('Client IP:', '$(ip)');
+console.log('Client MAC:', '$(mac)');
+console.log('Login Link:', '$(link-login)');
+
+</script>
+
+</body>
+</html>
