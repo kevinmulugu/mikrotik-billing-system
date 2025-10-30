@@ -243,11 +243,15 @@ export async function POST(
         }
       }
 
+      // Generate unique payment reference (separate from voucher code for security)
+      const paymentReference = `VCH${Date.now().toString(36).toUpperCase()}${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
+
       // Create voucher document with mikrotikUserId
       const voucher = {
         _id: new ObjectId(),
         routerId: new ObjectId(routerId),
         customerId: customerId,
+        reference: paymentReference, // Public reference for M-Pesa payments (NOT the password)
         voucherInfo: {
           code: code,
           password: code, // Same as code for simplicity
@@ -366,6 +370,7 @@ export async function POST(
     // Return generated vouchers (including mikrotikUserId in response)
     const response = vouchers.map((v) => ({
       id: v._id.toString(),
+      reference: v.reference, // Payment reference for M-Pesa (public, NOT the password)
       code: v.voucherInfo.code,
       password: v.voucherInfo.password,
       packageName: v.voucherInfo.packageType,

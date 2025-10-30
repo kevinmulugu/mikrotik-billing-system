@@ -48,6 +48,7 @@ export function VoucherGenerator({ routerId }: VoucherGeneratorProps) {
   const [expiryDays, setExpiryDays] = useState<string>('30');
   const [usageTimedOnPurchase, setUsageTimedOnPurchase] = useState<boolean>(false);
   const [purchaseExpiryDays, setPurchaseExpiryDays] = useState<string>('7');
+  const [autoTerminateOnPurchase, setAutoTerminateOnPurchase] = useState<boolean>(false);
   const [syncToRouter, setSyncToRouter] = useState<boolean>(true);
 
   // Result state
@@ -169,6 +170,7 @@ export function VoucherGenerator({ routerId }: VoucherGeneratorProps) {
           expiryDays: autoExpire ? parseInt(expiryDays) : null,
           usageTimedOnPurchase,
           purchaseExpiryDays: usageTimedOnPurchase ? parseInt(purchaseExpiryDays) : null,
+          autoTerminateOnPurchase,
           syncToRouter,
         }),
       });
@@ -202,8 +204,9 @@ export function VoucherGenerator({ routerId }: VoucherGeneratorProps) {
     if (!generationResult?.vouchers) return;
 
     const csvContent = [
-      ['Code', 'Password', 'Package', 'Duration', 'Price', 'Expires'],
+      ['Payment Reference', 'Code', 'Password', 'Package', 'Duration', 'Price', 'Expires'],
       ...generationResult.vouchers.map((v: any) => [
+        v.reference,
         v.code,
         v.password,
         v.packageDisplayName,
@@ -384,6 +387,23 @@ export function VoucherGenerator({ routerId }: VoucherGeneratorProps) {
             />
           </div>
 
+          {/* Auto Terminate Vouchers */}
+          <div className="flex items-center justify-between space-x-2 rounded-lg border p-4">
+            <div className="flex-1">
+              <Label htmlFor="autoTerminateOnPurchase" className="font-medium">
+                Auto Terminate Vouchers
+              </Label>
+              <p className="text-sm text-muted-foreground mt-1">
+                Automatically retire the voucher in the database and remove it from MikroTik when the package uptime elapses since purchase.
+              </p>
+            </div>
+            <Switch
+              id="autoTerminateOnPurchase"
+              checked={autoTerminateOnPurchase}
+              onCheckedChange={setAutoTerminateOnPurchase}
+            />
+          </div>
+
           {usageTimedOnPurchase && (
             <div className="space-y-2">
               <Label htmlFor="purchaseExpiryDays">Purchase Expiry Window (Days)</Label>
@@ -544,14 +564,36 @@ export function VoucherGenerator({ routerId }: VoucherGeneratorProps) {
               </Button>
             </div>
 
+            {/* Payment Reference Info */}
+            <Alert>
+              <AlertDescription className="text-sm">
+                <p className="font-medium mb-1">📱 Payment Reference</p>
+                <p className="text-muted-foreground">
+                  The <span className="font-mono text-blue-600">Payment Reference</span> is used for M-Pesa payments
+                  (as BillRefNumber). After payment confirmation, share the actual voucher code
+                  (username/password) with your customer.
+                </p>
+              </AlertDescription>
+            </Alert>
+
             {/* Preview vouchers (first 5) */}
             <div className="rounded-lg border p-4 space-y-2">
               <p className="font-medium text-sm">Sample Vouchers (first 5):</p>
-              <div className="space-y-1 font-mono text-xs">
+              <div className="space-y-2 text-xs">
                 {generationResult.vouchers.slice(0, 5).map((v: any) => (
-                  <div key={v.code} className="flex justify-between py-1 border-b last:border-0">
-                    <span>{v.code}</span>
-                    <span className="text-muted-foreground">{v.packageDisplayName}</span>
+                  <div key={v.code} className="space-y-1 py-2 border-b last:border-0">
+                    <div className="flex justify-between font-mono">
+                      <span className="text-muted-foreground">Payment Ref:</span>
+                      <span className="font-semibold text-blue-600">{v.reference}</span>
+                    </div>
+                    <div className="flex justify-between font-mono">
+                      <span className="text-muted-foreground">Code:</span>
+                      <span>{v.code}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Package:</span>
+                      <span>{v.packageDisplayName}</span>
+                    </div>
                   </div>
                 ))}
               </div>
