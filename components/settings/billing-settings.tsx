@@ -18,6 +18,9 @@ import {
   FileText,
   X,
   Plus,
+  Zap,
+  Check,
+  ArrowUp,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -73,16 +76,30 @@ interface CommissionPayout {
   transactionId?: string;
 }
 
+interface CustomerBillingData {
+  plan: string;
+  status: string;
+  monthlyFee: number;
+  commissionRate: number;
+  trialEndDate: Date | null;
+  totalRouters: number;
+}
+
 export const BillingSettings: React.FC = () => {
   const [isSaving, setIsSaving] = useState(false);
   const [showAddPaybill, setShowAddPaybill] = useState(false);
+  const [showUpgradeDialog, setShowUpgradeDialog] = useState(false);
+  const [selectedUpgradePlan, setSelectedUpgradePlan] = useState<string | null>(null);
+  const [isUpgrading, setIsUpgrading] = useState(false);
   const [autoPayoutEnabled, setAutoPayoutEnabled] = useState(true);
   const [minPayoutAmount, setMinPayoutAmount] = useState("1000");
 
   // Dynamic billing config from server
   const [commissionRate, setCommissionRate] = useState<number | null>(null);
   const [subscriptionFees, setSubscriptionFees] = useState<any | null>(null);
+  const [customerData, setCustomerData] = useState<CustomerBillingData | null>(null);
   const [billingLoading, setBillingLoading] = useState(true);
+
   // Fetch the billing settings from the server
   React.useEffect(() => {
     let mounted = true;
@@ -95,8 +112,17 @@ export const BillingSettings: React.FC = () => {
         if (!mounted) return;
         setCommissionRate(data?.customer?.commissionRate ?? null);
         setSubscriptionFees(data?.subscriptionFees ?? null);
+        setCustomerData({
+          plan: data?.customer?.plan || 'none',
+          status: data?.customer?.status || 'pending',
+          monthlyFee: data?.customer?.monthlyFee || 0,
+          commissionRate: data?.customer?.commissionRate || 20,
+          trialEndDate: data?.customer?.trialEndDate ? new Date(data.customer.trialEndDate) : null,
+          totalRouters: data?.customer?.totalRouters || 0,
+        });
       } catch (err) {
         console.warn('Failed to fetch billing settings', err);
+        toast.error('Failed to load billing information');
       } finally {
         if (mounted) setBillingLoading(false);
       }
@@ -112,6 +138,95 @@ export const BillingSettings: React.FC = () => {
     paybillNumber: "",
     accountNumber: "",
   });
+
+  // Define plan details
+  const planDetails = {
+    individual: {
+      name: 'Individual Plan',
+      monthlyFee: 0,
+      commissionRate: 20,
+      maxRouters: 1,
+      features: ['Up to 1 router', '20% commission', 'Basic support', 'Free forever']
+    },
+    isp: {
+      name: 'ISP Basic Plan',
+      monthlyFee: 2500,
+      commissionRate: 0,
+      maxRouters: 5,
+      features: ['Up to 5 routers', '0% commission', 'Priority support', 'Advanced analytics']
+    },
+    isp_pro: {
+      name: 'ISP Pro Plan',
+      monthlyFee: 3900,
+      commissionRate: 0,
+      maxRouters: Infinity,
+      features: ['Unlimited routers', '0% commission', 'Premium support', 'Advanced analytics', 'Custom branding']
+    }
+  };
+
+  // Get available upgrade options
+  const getUpgradeOptions = () => {
+    if (!customerData) return [];
+
+    const currentPlan = customerData.plan;
+    const allPlans = ['individual', 'isp', 'isp_pro'];
+
+    // Define upgrade paths
+    const upgradePaths: Record<string, string[]> = {
+      'none': ['individual', 'isp', 'isp_pro'],
+      'pending': ['individual', 'isp', 'isp_pro'],
+      'individual': ['isp', 'isp_pro'],
+      'isp': ['isp_pro'],
+      'isp_pro': []
+    };
+
+    const availablePlans = upgradePaths[currentPlan] || [];
+    return availablePlans.map(planKey => ({
+      key: planKey,
+      ...planDetails[planKey as keyof typeof planDetails]
+    }));
+  };
+
+  const handleUpgradePlan = async (plan: string) => {
+    setIsUpgrading(true);
+    try {
+      const res = await fetch('/api/settings/billing', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'upgrade_plan', plan })
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to upgrade plan');
+      }
+
+      toast.success(data.message || 'Plan upgraded successfully!');
+      setShowUpgradeDialog(false);
+      setSelectedUpgradePlan(null);
+
+      // Refresh billing data
+      const billingRes = await fetch('/api/settings/billing');
+      if (billingRes.ok) {
+        const billingData = await billingRes.json();
+        setCustomerData({
+          plan: billingData?.customer?.plan || 'none',
+          status: billingData?.customer?.status || 'pending',
+          monthlyFee: billingData?.customer?.monthlyFee || 0,
+          commissionRate: billingData?.customer?.commissionRate || 20,
+          trialEndDate: billingData?.customer?.trialEndDate ? new Date(billingData.customer.trialEndDate) : null,
+          totalRouters: billingData?.customer?.totalRouters || 0,
+        });
+        setCommissionRate(billingData?.customer?.commissionRate ?? null);
+      }
+    } catch (error: any) {
+      console.error('Upgrade error:', error);
+      toast.error(error.message || 'Failed to upgrade plan');
+    } finally {
+      setIsUpgrading(false);
+    }
+  };
 
   // Sample data - replace with API calls
   const paymentMethods: PaymentMethod[] = [
@@ -295,6 +410,176 @@ export const BillingSettings: React.FC = () => {
           Manage your payment methods, invoices, and commission payouts
         </p>
       </div>
+
+      {/* Current Plan Section */}
+      {!billingLoading && customerData && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  <Zap className="h-5 w-5" />
+                  Current Plan
+                </CardTitle>
+                <CardDescription>
+                  {customerData.plan === 'none' || customerData.plan === 'pending'
+                    ? 'No active plan. Add a router to select a plan.'
+                    : 'Your subscription details and upgrade options'}
+                </CardDescription>
+              </div>
+              {customerData.plan !== 'none' && customerData.plan !== 'pending' && getUpgradeOptions().length > 0 && (
+                <Dialog open={showUpgradeDialog} onOpenChange={setShowUpgradeDialog}>
+                  <DialogTrigger asChild>
+                    <Button variant="default">
+                      <ArrowUp className="h-4 w-4 mr-2" />
+                      Upgrade Plan
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="max-w-3xl">
+                    <DialogHeader>
+                      <DialogTitle>Upgrade Your Plan</DialogTitle>
+                      <DialogDescription>
+                        Choose a plan that fits your needs. You can upgrade anytime.
+                      </DialogDescription>
+                    </DialogHeader>
+                    <div className="grid gap-4 md:grid-cols-2">
+                      {getUpgradeOptions().map((plan) => (
+                        <Card
+                          key={plan.key}
+                          className={`cursor-pointer transition-all ${selectedUpgradePlan === plan.key
+                              ? 'ring-2 ring-primary'
+                              : 'hover:border-primary'
+                            }`}
+                          onClick={() => setSelectedUpgradePlan(plan.key)}
+                        >
+                          <CardHeader>
+                            <CardTitle className="flex items-center justify-between">
+                              {plan.name}
+                              {selectedUpgradePlan === plan.key && (
+                                <CheckCircle2 className="h-5 w-5 text-primary" />
+                              )}
+                            </CardTitle>
+                            <CardDescription>
+                              <span className="text-2xl font-bold text-foreground">
+                                {plan.monthlyFee === 0
+                                  ? 'Free'
+                                  : `KES ${plan.monthlyFee.toLocaleString()}`}
+                              </span>
+                              {plan.monthlyFee > 0 && (
+                                <span className="text-muted-foreground">/month</span>
+                              )}
+                            </CardDescription>
+                          </CardHeader>
+                          <CardContent>
+                            <ul className="space-y-2">
+                              {plan.features.map((feature, idx) => (
+                                <li key={idx} className="flex items-center gap-2 text-sm">
+                                  <Check className="h-4 w-4 text-green-500" />
+                                  {feature}
+                                </li>
+                              ))}
+                            </ul>
+                          </CardContent>
+                        </Card>
+                      ))}
+                    </div>
+                    <DialogFooter>
+                      <Button
+                        variant="outline"
+                        onClick={() => {
+                          setShowUpgradeDialog(false);
+                          setSelectedUpgradePlan(null);
+                        }}
+                        disabled={isUpgrading}
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        onClick={() => selectedUpgradePlan && handleUpgradePlan(selectedUpgradePlan)}
+                        disabled={!selectedUpgradePlan || isUpgrading}
+                      >
+                        {isUpgrading ? (
+                          <>
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            Upgrading...
+                          </>
+                        ) : (
+                          'Confirm Upgrade'
+                        )}
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
+              )}
+            </div>
+          </CardHeader>
+          <CardContent>
+            {customerData.plan === 'none' || customerData.plan === 'pending' ? (
+              <Alert>
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>
+                  You haven't selected a plan yet. Add your first router to choose a plan and start your 15-day free trial.
+                </AlertDescription>
+              </Alert>
+            ) : (
+              <div className="space-y-4">
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-1">
+                    <p className="text-sm text-muted-foreground">Plan Name</p>
+                    <p className="text-lg font-semibold">
+                      {planDetails[customerData.plan as keyof typeof planDetails]?.name || customerData.plan}
+                    </p>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-sm text-muted-foreground">Monthly Fee</p>
+                    <p className="text-lg font-semibold">
+                      {customerData.monthlyFee === 0
+                        ? 'Free'
+                        : `KES ${customerData.monthlyFee.toLocaleString()}`}
+                    </p>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-sm text-muted-foreground">Commission Rate</p>
+                    <p className="text-lg font-semibold">{customerData.commissionRate}%</p>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-sm text-muted-foreground">Status</p>
+                    <Badge variant={customerData.status === 'trial' ? 'secondary' : 'default'}>
+                      {customerData.status}
+                    </Badge>
+                  </div>
+                </div>
+
+                {customerData.status === 'trial' && customerData.trialEndDate && (
+                  <Alert>
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertDescription>
+                      Your free trial ends on{' '}
+                      <strong>{customerData.trialEndDate.toLocaleDateString()}</strong>
+                      {customerData.monthlyFee > 0 &&
+                        `. After that, you'll be charged KES ${customerData.monthlyFee.toLocaleString()}/month.`}
+                    </AlertDescription>
+                  </Alert>
+                )}
+
+                {customerData.plan && planDetails[customerData.plan as keyof typeof planDetails] && (
+                  <div className="space-y-2">
+                    <p className="text-sm font-medium">Plan Features</p>
+                    <ul className="space-y-1">
+                      {planDetails[customerData.plan as keyof typeof planDetails].features.map((feature, idx) => (
+                        <li key={idx} className="flex items-center gap-2 text-sm text-muted-foreground">
+                          <Check className="h-4 w-4 text-green-500" />
+                          {feature}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Revenue Overview */}
       <div className="grid gap-4 md:grid-cols-4">

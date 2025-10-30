@@ -1,3 +1,4 @@
+// src/app/api/settings/billing/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
@@ -20,7 +21,7 @@ export async function GET(req: NextRequest) {
     const db = client.db(process.env.MONGODB_DB_NAME || 'mikrotik_billing');
 
     // Read global system config values
-    const systemConfig = await db.collection('system_config').findOne({}) || {};
+    const systemConfig = await db.collection('system_config').findOne({}) as any || {};
     const commissionRates = systemConfig.commission_rates || {};
     const subscriptionFees = systemConfig.subscription_fees || {};
 
@@ -43,8 +44,12 @@ export async function GET(req: NextRequest) {
         id: customer._id.toString(),
         name: customer.businessInfo?.name || null,
         type: customer.businessInfo?.type || null,
-        plan: customer.subscription?.plan || null,
+        plan: customer.subscription?.plan || 'none',
+        status: customer.subscription?.status || 'pending',
+        monthlyFee: customer.subscription?.monthlyFee || 0,
         commissionRate: customerCommission,
+        trialEndDate: customer.subscription?.endDate || null,
+        totalRouters: customer.statistics?.totalRouters || 0,
       },
     };
 
@@ -52,5 +57,140 @@ export async function GET(req: NextRequest) {
   } catch (error) {
     console.error('Billing settings API error:', error);
     return NextResponse.json({ error: 'Failed to fetch billing settings' }, { status: 500 });
+  }
+}
+
+export async function POST(req: NextRequest) {
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session || !session.user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const customerId = session.user.id;
+    if (!customerId) {
+      return NextResponse.json({ error: 'Customer profile not found' }, { status: 404 });
+    }
+
+    const body = await req.json();
+    const { action, plan } = body;
+
+    if (action !== 'upgrade_plan') {
+      return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
+    }
+
+    if (!plan || !['individual', 'isp', 'isp_pro'].includes(plan)) {
+      return NextResponse.json({ error: 'Invalid plan selected' }, { status: 400 });
+    }
+
+    const client = await clientPromise;
+    const db = client.db(process.env.MONGODB_DB_NAME || 'mikrotik_billing');
+
+    // Get customer
+    const customer = await db
+      .collection('customers')
+      .findOne({ userId: new ObjectId(customerId) });
+
+    if (!customer) {
+      return NextResponse.json({ error: 'Customer not found' }, { status: 404 });
+    }
+
+    const currentPlan = customer.subscription?.plan || 'none';
+    const currentStatus = customer.subscription?.status || 'pending';
+
+    // Plan settings
+    const planSettings = {
+      individual: {
+        commissionRate: 20,
+        monthlyFee: 0,
+        maxRouters: 1,
+        name: 'Individual Plan',
+        features: ['Up to 1 router', '20% commission', 'Basic support', 'Free forever']
+      },
+      isp: {
+        commissionRate: 0,
+        monthlyFee: 2500,
+        maxRouters: 5,
+        name: 'ISP Basic Plan',
+        features: ['Up to 5 routers', '0% commission', 'Priority support', 'Advanced analytics']
+      },
+      isp_pro: {
+        commissionRate: 0,
+        monthlyFee: 3900,
+        maxRouters: Infinity,
+        name: 'ISP Pro Plan',
+        features: ['Unlimited routers', '0% commission', 'Premium support', 'Advanced analytics', 'Custom branding']
+      }
+    };
+
+    // Validate upgrade path
+    const upgradePaths: Record<string, string[]> = {
+      'none': ['individual', 'isp', 'isp_pro'],
+      'pending': ['individual', 'isp', 'isp_pro'],
+      'individual': ['isp', 'isp_pro'],
+      'isp': ['isp_pro'],
+      'isp_pro': []
+    };
+
+    const validUpgradePath = upgradePaths[currentPlan as string];
+    if (!validUpgradePath || !validUpgradePath.includes(plan)) {
+      return NextResponse.json({
+        error: currentPlan === 'isp_pro'
+          ? 'You are already on the highest plan'
+          : 'Invalid upgrade path'
+      }, { status: 400 });
+    } const selectedPlanSettings = planSettings[plan as keyof typeof planSettings];
+    const now = new Date();
+
+    // Calculate new end date (keep trial end if currently on trial)
+    let newEndDate: Date | null = null;
+    let newStatus = 'active';
+
+    if (currentStatus === 'trial' && customer.subscription?.endDate) {
+      // If upgrading during trial, keep the trial end date
+      newEndDate = new Date(customer.subscription.endDate);
+      newStatus = 'trial';
+    } else if (selectedPlanSettings.monthlyFee === 0) {
+      // Free plan (individual) - no end date
+      newEndDate = null;
+      newStatus = 'active';
+    } else {
+      // Paid plan - set monthly billing cycle
+      newEndDate = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+      newStatus = 'active';
+    }
+
+    // Update customer subscription
+    await db.collection('customers').updateOne(
+      { userId: new ObjectId(customerId) },
+      {
+        $set: {
+          'subscription.plan': plan,
+          'subscription.status': newStatus,
+          'subscription.monthlyFee': selectedPlanSettings.monthlyFee,
+          'subscription.features': selectedPlanSettings.features,
+          'subscription.endDate': newEndDate,
+          'subscription.updatedAt': now,
+          'paymentSettings.commissionRate': selectedPlanSettings.commissionRate,
+        }
+      }
+    );
+
+    return NextResponse.json({
+      success: true,
+      message: `Successfully upgraded to ${selectedPlanSettings.name}`,
+      subscription: {
+        plan,
+        status: newStatus,
+        monthlyFee: selectedPlanSettings.monthlyFee,
+        commissionRate: selectedPlanSettings.commissionRate,
+        features: selectedPlanSettings.features,
+        endDate: newEndDate,
+      }
+    });
+
+  } catch (error) {
+    console.error('Plan upgrade API error:', error);
+    return NextResponse.json({ error: 'Failed to upgrade plan' }, { status: 500 });
   }
 }

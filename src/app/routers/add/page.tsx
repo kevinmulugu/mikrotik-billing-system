@@ -4,13 +4,23 @@ import { getServerSession } from 'next-auth/next';
 import { redirect } from 'next/navigation';
 import { authOptions } from '@/lib/auth';
 import { AddRouterWizard } from '@/components/routers/add-router-wizard';
-import { ArrowLeft, Info, Shield, Zap, Smartphone } from 'lucide-react';
+import { ArrowLeft, Info, Shield, Zap, Smartphone, AlertTriangle } from 'lucide-react';
 import Link from 'next/link';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import clientPromise from '@/lib/mongodb';
+import { ObjectId } from 'mongodb';
 
 export const metadata: Metadata = {
   title: 'Add Router - MikroTik Billing',
   description: 'Connect a new MikroTik router to start earning money from your WiFi',
+};
+
+const planLimits: Record<string, { maxRouters: number; name: string }> = {
+  individual: { maxRouters: 1, name: 'Individual Plan' },
+  isp: { maxRouters: 5, name: 'ISP Basic Plan' },
+  isp_pro: { maxRouters: Infinity, name: 'ISP Pro Plan' },
 };
 
 export default async function AddRouterPage() {
@@ -18,6 +28,134 @@ export default async function AddRouterPage() {
 
   if (!session) {
     redirect('/signin');
+  }
+
+  // Check customer's router limit
+  const client = await clientPromise;
+  const db = client.db(process.env.MONGODB_DB_NAME || 'mikrotik_billing');
+
+  const customer = await db.collection('customers').findOne({
+    userId: new ObjectId(session.user.id)
+  });
+
+  if (!customer) {
+    redirect('/dashboard');
+  }
+
+  const currentPlan = customer.subscription?.plan || 'none';
+  const currentRouters = customer.statistics?.totalRouters || 0;
+  const planLimit = planLimits[currentPlan];
+
+  // Check if user has reached router limit
+  const hasReachedLimit = planLimit && currentRouters >= planLimit.maxRouters;
+
+  // If limit reached, show upgrade page instead
+  if (hasReachedLimit) {
+    return (
+      <div className="container max-w-4xl mx-auto py-8 px-4">
+        <div className="flex items-center gap-4 mb-6">
+          <Link
+            href="/routers"
+            className="p-2 hover:bg-accent rounded-lg transition-colors"
+          >
+            <ArrowLeft className="h-5 w-5" />
+          </Link>
+          <div>
+            <h1 className="text-3xl font-bold">Router Limit Reached</h1>
+            <p className="text-muted-foreground mt-1">
+              Upgrade your plan to add more routers
+            </p>
+          </div>
+        </div>
+
+        <Card className="border-orange-200 bg-orange-50 dark:bg-orange-950">
+          <CardHeader>
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="h-6 w-6 text-orange-600 dark:text-orange-400 mt-1" />
+              <div>
+                <CardTitle className="text-orange-900 dark:text-orange-100">
+                  You've reached your plan limit
+                </CardTitle>
+                <CardDescription className="text-orange-800 dark:text-orange-200 mt-2">
+                  Your <strong>{planLimit?.name}</strong> allows up to {planLimit?.maxRouters} router{planLimit?.maxRouters > 1 ? 's' : ''}.
+                  You currently have <strong>{currentRouters} router{currentRouters > 1 ? 's' : ''}</strong>.
+                </CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="bg-white dark:bg-gray-900 p-4 rounded-lg">
+              <h3 className="font-semibold mb-3">Upgrade Options:</h3>
+              <div className="space-y-3">
+                {currentPlan === 'individual' && (
+                  <>
+                    <div className="flex justify-between items-center p-3 border rounded-lg">
+                      <div>
+                        <p className="font-medium">ISP Basic Plan</p>
+                        <p className="text-sm text-muted-foreground">Up to 5 routers</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-bold">KES 2,500/month</p>
+                        <p className="text-xs text-muted-foreground">0% commission</p>
+                      </div>
+                    </div>
+                    <div className="flex justify-between items-center p-3 border rounded-lg">
+                      <div>
+                        <p className="font-medium">ISP Pro Plan</p>
+                        <p className="text-sm text-muted-foreground">Unlimited routers</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-bold">KES 3,900/month</p>
+                        <p className="text-xs text-muted-foreground">0% commission</p>
+                      </div>
+                    </div>
+                  </>
+                )}
+                {currentPlan === 'isp' && (
+                  <div className="flex justify-between items-center p-3 border rounded-lg">
+                    <div>
+                      <p className="font-medium">ISP Pro Plan</p>
+                      <p className="text-sm text-muted-foreground">Unlimited routers</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-bold">KES 3,900/month</p>
+                      <p className="text-xs text-muted-foreground">Only KES 1,400 more/month</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="flex gap-3">
+              <Button asChild size="lg" className="flex-1">
+                <Link href="/settings/billing">
+                  Upgrade Plan
+                </Link>
+              </Button>
+              <Button asChild variant="outline" size="lg">
+                <Link href="/routers">
+                  Back to Routers
+                </Link>
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Alert className="mt-6">
+          <Info className="h-4 w-4" />
+          <AlertTitle>Need help choosing a plan?</AlertTitle>
+          <AlertDescription>
+            <p className="text-sm">
+              Contact our support team or check our{' '}
+              <Link href="/pricing" className="text-primary hover:underline">
+                pricing page
+              </Link>
+              {' '}for detailed plan comparisons.
+            </p>
+          </AlertDescription>
+        </Alert>
+      </div>
+    );
   }
 
   return (
@@ -44,7 +182,7 @@ export default async function AddRouterPage() {
         <AlertTitle>Secure VPN-Based Setup</AlertTitle>
         <AlertDescription>
           <p className="text-sm mb-3">
-            Your router will connect to our management system through a secure VPN tunnel. 
+            Your router will connect to our management system through a secure VPN tunnel.
             You don't need to be on the same network as your router.
           </p>
           <ul className="list-disc list-inside space-y-1 text-sm">
@@ -97,7 +235,7 @@ export default async function AddRouterPage() {
         <AlertTitle className="text-blue-900 dark:text-blue-100">Coming Soon: Mobile App</AlertTitle>
         <AlertDescription className="text-blue-800 dark:text-blue-200">
           <p className="text-sm">
-            We're developing a mobile app that will make router setup even easier. 
+            We're developing a mobile app that will make router setup even easier.
             The app will automatically configure your router without needing to paste scripts manually.
           </p>
         </AlertDescription>
@@ -121,7 +259,7 @@ export default async function AddRouterPage() {
                 <li>Release button and wait for router to reboot</li>
               </ol>
             </div>
-            
+
             <div className="mt-3">
               <p className="font-medium">Method 2: Via Terminal (if you have access)</p>
               <p className="ml-2 mt-1">
@@ -132,7 +270,7 @@ export default async function AddRouterPage() {
             </div>
 
             <p className="mt-3 text-xs">
-              ⚠️ <strong>Important:</strong> Factory reset will erase all current configuration. 
+              ⚠️ <strong>Important:</strong> Factory reset will erase all current configuration.
               Make sure this is what you want before proceeding.
             </p>
           </div>
@@ -155,7 +293,7 @@ export default async function AddRouterPage() {
               <p className="text-xs">We create a unique WireGuard VPN configuration for your router</p>
             </div>
           </div>
-          
+
           <div className="flex gap-3">
             <div className="flex-shrink-0 w-6 h-6 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-xs font-bold">
               2
@@ -165,7 +303,7 @@ export default async function AddRouterPage() {
               <p className="text-xs">Copy and paste the script into your router's terminal</p>
             </div>
           </div>
-          
+
           <div className="flex gap-3">
             <div className="flex-shrink-0 w-6 h-6 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-xs font-bold">
               3
@@ -175,7 +313,7 @@ export default async function AddRouterPage() {
               <p className="text-xs">Router connects to our VPN server and can be managed remotely</p>
             </div>
           </div>
-          
+
           <div className="flex gap-3">
             <div className="flex-shrink-0 w-6 h-6 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-xs font-bold">
               4
