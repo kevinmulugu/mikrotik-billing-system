@@ -1,3 +1,4 @@
+// components/support/create-ticket-form.tsx
 "use client"
 
 import { useState, useEffect } from "react"
@@ -60,10 +61,16 @@ const ticketSchema = z.object({
 type TicketFormValues = z.infer<typeof ticketSchema>
 
 interface Router {
-  _id: string
+  id: string
   name: string
+  status: string
   health: {
-    status: string
+    lastSeen?: string
+    uptime: number
+    cpuUsage: number
+    memoryUsage: number
+    temperature: number
+    connectedUsers: number
   }
 }
 
@@ -164,7 +171,8 @@ export function CreateTicketForm() {
       formData.append('priority', values.priority)
       formData.append('type', values.type)
       
-      if (values.routerId) {
+      // Only append routerId if it exists and is not "none"
+      if (values.routerId && values.routerId !== 'none') {
         formData.append('routerId', values.routerId)
       }
 
@@ -327,8 +335,11 @@ export function CreateTicketForm() {
                 <FormItem>
                   <FormLabel>Related Router (Optional)</FormLabel>
                   <Select
-                    onValueChange={field.onChange}
-                    defaultValue={field.value ?? ""}
+                    onValueChange={(value) => {
+                      // Set to undefined if "none" is selected
+                      field.onChange(value === "none" ? undefined : value)
+                    }}
+                    value={field.value || "none"}
                     disabled={loadingRouters}
                   >
                     <FormControl>
@@ -345,13 +356,13 @@ export function CreateTicketForm() {
                     <SelectContent>
                       <SelectItem value="none">None</SelectItem>
                       {routers.map((router) => (
-                        <SelectItem key={router._id} value={router._id}>
+                        <SelectItem key={router.id} value={router.id}>
                           {router.name}
                           <Badge 
-                            variant={router.health.status === 'online' ? 'default' : 'destructive'}
+                            variant={router.status === 'online' ? 'default' : 'destructive'}
                             className="ml-2"
                           >
-                            {router.health.status}
+                            {router.status}
                           </Badge>
                         </SelectItem>
                       ))}

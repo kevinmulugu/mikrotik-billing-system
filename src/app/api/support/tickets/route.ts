@@ -12,7 +12,7 @@ const createTicketSchema = z.object({
   category: z.enum(['technical', 'billing', 'general', 'feature_request']),
   priority: z.enum(['low', 'medium', 'high', 'urgent']),
   type: z.enum(['router_issue', 'payment_issue', 'user_management', 'other']),
-  routerId: z.string().optional(),
+  routerId: z.string().optional().nullable().transform(val => val || undefined),
 })
 
 // GET: Fetch user's tickets
@@ -141,14 +141,15 @@ export async function POST(request: NextRequest) {
     // Parse form data
     const formData = await request.formData()
     
-    // Extract ticket data
+    // Extract ticket data - convert empty/null to undefined
+    const routerIdValue = formData.get('routerId')
     const ticketData = {
       title: formData.get('title') as string,
       description: formData.get('description') as string,
       category: formData.get('category') as string,
       priority: formData.get('priority') as string,
       type: formData.get('type') as string,
-      routerId: formData.get('routerId') as string | null,
+      routerId: routerIdValue && routerIdValue !== 'none' ? (routerIdValue as string) : undefined,
     }
 
     // Validate ticket data
