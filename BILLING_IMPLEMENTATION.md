@@ -225,6 +225,39 @@ Response: { success, message }
 
 ### Commission Tracking
 
+**Important: Commission Aggregation Dependency**
+
+The commission payout system relies on a cron job to aggregate transaction data:
+
+1. **Voucher Sales** → Recorded in `transactions` collection (webhook: `/api/webhooks/mpesa`)
+2. **Aggregation Script** → Runs periodically: `pnpm aggregate:commissions`
+3. **Commissions Collection** → Aggregated data by user and period (month/year)
+4. **Balance API** → Reads from `commissions` collection: `/api/payouts/balance`
+
+**Flow:**
+
+```
+Customer purchases voucher
+    ↓
+M-Pesa webhook creates transaction record
+    ↓ (commission calculated but not yet aggregated)
+Cron job runs hourly/daily
+    ↓
+Aggregates transactions → commissions collection
+    ↓
+Balance API now shows updated available balance
+```
+
+**Setup Cron Job:**
+
+```bash
+# Run hourly (recommended for active systems)
+0 * * * * cd /path/to/app && pnpm aggregate:commissions
+
+# Or run daily at 2 AM (lower volume systems)
+0 2 * * * cd /path/to/app && pnpm aggregate:commissions
+```
+
 - Existing `commissions` collection tracks earnings per period
 - New `commission_payouts` collection tracks actual disbursements
 - Balance = Total Earned - Total Paid Out
