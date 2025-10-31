@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import clientPromise from '@/lib/mongodb';
 import { ObjectId } from 'mongodb';
 import crypto from 'crypto';
+import { mpesaService } from '@/lib/services/mpesa';
 
 // Helper function: Validate and normalize Kenyan phone number
 function validateAndNormalizePhoneNumber(phone: string): string | null {
@@ -80,98 +81,6 @@ async function generateUniqueVoucherCode(db: any): Promise<string> {
   // Fallback: use timestamp-based code if collision after 3 attempts
   const timestamp = Date.now().toString(36).toUpperCase();
   return `V${timestamp}`;
-}
-
-// Helper function: Get M-Pesa access token
-async function getMpesaAccessToken(
-  consumerKey: string,
-  consumerSecret: string
-): Promise<string> {
-  const auth = Buffer.from(`${consumerKey}:${consumerSecret}`).toString('base64');
-  
-  const response = await fetch(
-    'https://sandbox.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials',
-    {
-      method: 'GET',
-      headers: {
-        Authorization: `Basic ${auth}`,
-      },
-    }
-  );
-  
-  if (!response.ok) {
-    throw new Error('Failed to get M-Pesa access token');
-  }
-  
-  const data = await response.json();
-  return data.access_token;
-}
-
-// Helper function: Initiate STK Push
-async function initiateSTKPush(params: {
-  phoneNumber: string;
-  amount: number;
-  accountReference: string;
-  transactionDesc: string;
-  paybillNumber: string;
-  passkey: string;
-  consumerKey: string;
-  consumerSecret: string;
-  callbackUrl: string;
-}): Promise<any> {
-  // Get access token
-  const accessToken = await getMpesaAccessToken(
-    params.consumerKey,
-    params.consumerSecret
-  );
-  
-  // Generate timestamp
-  const timestamp = new Date()
-    .toISOString()
-    .replace(/[^0-9]/g, '')
-    .slice(0, 14);
-  
-  // Generate password
-  const password = Buffer.from(
-    `${params.paybillNumber}${params.passkey}${timestamp}`
-  ).toString('base64');
-  
-  // Prepare request body
-  const requestBody = {
-    BusinessShortCode: params.paybillNumber,
-    Password: password,
-    Timestamp: timestamp,
-    TransactionType: 'CustomerPayBillOnline',
-    Amount: Math.round(params.amount), // Ensure integer
-    PartyA: params.phoneNumber,
-    PartyB: params.paybillNumber,
-    PhoneNumber: params.phoneNumber,
-    CallBackURL: params.callbackUrl,
-    AccountReference: params.accountReference,
-    TransactionDesc: params.transactionDesc,
-  };
-  
-  // Make STK Push request
-  const response = await fetch(
-    'https://sandbox.safaricom.co.ke/mpesa/stkpush/v1/processrequest',
-    {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(requestBody),
-    }
-  );
-  
-  const data = await response.json();
-  
-  // Check response
-  if (data.ResponseCode !== '0') {
-    throw new Error(data.ResponseDescription || data.errorMessage || 'STK Push failed');
-  }
-  
-  return data;
 }
 
 // CORS headers for captive portal access
@@ -405,57 +314,75 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Determine payment method (company vs ISP paybill)
-    let paybillNumber: string;
-    let paybillPasskey: string;
-    let consumerKey: string;
-    let consumerSecret: string;
-    let accountReference: string;
-    let paymentType: string;
-
-    if (routerOwner.paymentSettings?.preferredMethod === 'customer_paybill' &&
-        routerOwner.paymentSettings?.paybillNumber) {
-      // Use ISP's own paybill
-      paybillNumber = routerOwner.paymentSettings.paybillNumber;
-      paybillPasskey = routerOwner.paymentSettings.passkey || process.env.MPESA_PASSKEY!;
-      consumerKey = routerOwner.paymentSettings.consumerKey || process.env.MPESA_CONSUMER_KEY!;
-      consumerSecret = routerOwner.paymentSettings.consumerSecret || process.env.MPESA_CONSUMER_SECRET!;
-      accountReference = `ROUTER_${router._id.toString()}`;
-      paymentType = 'customer_paybill';
-    } else {
-      // Use company paybill (default)
-      paybillNumber = process.env.COMPANY_PAYBILL_NUMBER || process.env.MPESA_SHORTCODE!;
-      paybillPasskey = process.env.COMPANY_PAYBILL_PASSKEY || process.env.MPESA_PASSKEY!;
-      consumerKey = process.env.MPESA_CONSUMER_KEY!;
-      consumerSecret = process.env.MPESA_CONSUMER_SECRET!;
-      // Create short account reference from router ID and MAC
-      const shortRouterId = router._id.toString().slice(-8);
-      const shortMac = normalizedMac.replace(/:/g, '').slice(-6);
-      accountReference = `${shortRouterId}_${shortMac}`;
-      paymentType = 'company_paybill';
-    }
-
-    // Generate unique voucher code
+    // Generate unique voucher code that will be used as AccountReference
     const voucherCode = await generateUniqueVoucherCode(db);
     const voucherPassword = voucherCode; // Password same as code for vouchers
+    const accountReference = voucherCode; // Use voucher code as account reference
 
-    // Prepare STK Push parameters
-    const stkPushParams = {
-      phoneNumber: normalizedPhone,
-      amount: selectedPackage.price,
-      accountReference: accountReference.slice(0, 13), // M-Pesa limit
-      transactionDesc: `${selectedPackage.displayName}`,
-      paybillNumber: paybillNumber,
-      passkey: paybillPasskey,
-      consumerKey: consumerKey,
-      consumerSecret: consumerSecret,
-      callbackUrl: `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000'}/api/webhooks/mpesa`,
-    };
+    // Get router owner's paybill from paymentSettings
+    let paybillNumber: string | null = null;
+    
+    if (routerOwner.paymentSettings?.paybillNumber) {
+      paybillNumber = routerOwner.paymentSettings.paybillNumber;
+    }
 
-    // Initiate STK Push
+    // If no paybill configured, return error
+    if (!paybillNumber) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'payment_not_configured',
+          message: 'Payment method not configured. Please contact the WiFi provider.',
+          support: {
+            phone: routerOwner.businessInfo?.contact?.phone || '+254700000000',
+            email: routerOwner.businessInfo?.contact?.email || 'support@example.com',
+          },
+        },
+        {
+          status: 500,
+          headers: corsHeaders,
+        }
+      );
+    }
+
+    // Verify paybill exists in database
+    const paybill = await db.collection('paybills').findOne({
+      'paybillInfo.number': paybillNumber,
+      status: 'active',
+    });
+
+    if (!paybill) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'paybill_not_found',
+          message: 'Payment configuration not found or inactive. Please contact support.',
+        },
+        {
+          status: 500,
+          headers: corsHeaders,
+        }
+      );
+    }
+
+    // Prepare STK Push parameters using mpesaService
+    const callbackUrl = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000'}/api/webhooks/mpesa/callback`;
+
+    // Initiate STK Push using mpesaService
     let stkPushResponse;
     try {
-      stkPushResponse = await initiateSTKPush(stkPushParams);
+      stkPushResponse = await mpesaService.initiateSTKPush({
+        paybillNumber: paybillNumber,
+        phoneNumber: normalizedPhone,
+        amount: selectedPackage.price,
+        accountReference: accountReference, // Use voucher code
+        transactionDesc: `${selectedPackage.displayName}`,
+        callbackUrl: callbackUrl,
+      });
+
+      if (!stkPushResponse.success) {
+        throw new Error(stkPushResponse.error || 'STK Push failed');
+      }
     } catch (stkError) {
       console.error('STK Push failed:', stkError);
       
@@ -490,8 +417,8 @@ export async function POST(request: NextRequest) {
       },
       mpesa: {
         phoneNumber: normalizedPhone,
-        merchantRequestId: stkPushResponse.MerchantRequestID,
-        checkoutRequestId: stkPushResponse.CheckoutRequestID,
+        merchantRequestId: stkPushResponse.merchantRequestId || '',
+        checkoutRequestId: stkPushResponse.checkoutRequestId || '',
         transactionId: null as string | null,
         resultCode: null as number | null,
         resultDesc: null as string | null,
@@ -499,7 +426,7 @@ export async function POST(request: NextRequest) {
       paybill: {
         paybillNumber: paybillNumber,
         accountNumber: accountReference,
-        type: paymentType,
+        type: paybill.paybillInfo.type || 'paybill',
       },
       reconciliation: {
         isReconciled: false,
@@ -653,6 +580,21 @@ export async function POST(request: NextRequest) {
       }
     );
 
+    // Save STK initiation data for callback matching
+    await db.collection('stk_initiations').insertOne({
+      CheckoutRequestID: stkPushResponse.checkoutRequestId || '',
+      MerchantRequestID: stkPushResponse.merchantRequestId || '',
+      AccountReference: accountReference, // Voucher code
+      PhoneNumber: normalizedPhone, // Raw phone number
+      Amount: selectedPackage.price,
+      paybillNumber: paybillNumber,
+      routerId: router._id,
+      voucherId: voucherId,
+      paymentId: paymentId,
+      status: 'initiated',
+      createdAt: new Date(),
+    });
+
     // Log purchase attempt
     await db.collection('purchase_attempts').insertOne({
       mac_address: normalizedMac,
@@ -663,7 +605,7 @@ export async function POST(request: NextRequest) {
       amount: selectedPackage.price,
       payment_id: paymentId,
       voucher_id: voucherId,
-      checkout_request_id: stkPushResponse.CheckoutRequestID,
+      checkout_request_id: stkPushResponse.checkoutRequestId,
       timestamp: new Date(),
     });
 
@@ -671,11 +613,11 @@ export async function POST(request: NextRequest) {
     const response = {
       success: true,
       checkout: {
-        checkout_request_id: stkPushResponse.CheckoutRequestID,
-        merchant_request_id: stkPushResponse.MerchantRequestID,
-        response_code: stkPushResponse.ResponseCode,
-        response_description: stkPushResponse.ResponseDescription,
-        customer_message: 'Please enter your M-Pesa PIN on your phone to complete payment',
+        checkout_request_id: stkPushResponse.checkoutRequestId,
+        merchant_request_id: stkPushResponse.merchantRequestId,
+        response_code: stkPushResponse.responseCode,
+        response_description: stkPushResponse.responseDescription,
+        customer_message: stkPushResponse.customerMessage || 'Please enter your M-Pesa PIN on your phone to complete payment',
       },
       payment: {
         payment_id: paymentId.toString(),
@@ -690,7 +632,7 @@ export async function POST(request: NextRequest) {
       },
       polling: {
         url: '/api/captive/payment-status',
-        checkout_id: stkPushResponse.CheckoutRequestID,
+        checkout_id: stkPushResponse.checkoutRequestId,
         interval: 3000, // Poll every 3 seconds
         timeout: 60000, // Timeout after 60 seconds
       },

@@ -681,21 +681,25 @@ async function seedDatabase() {
     if (!paybillExists) {
       await db.collection('paybills').insertOne({
         _id: new ObjectId(),
-        customerId: null, // Company paybill
+        userId: null, // Company paybill (not associated with a router owner)
         paybillInfo: {
           number: '123456',
           name: 'MikroTik Billing Company Paybill',
-          type: 'company',
+          type: 'paybill', // 'paybill' or 'till'
           provider: 'safaricom',
-          isActive: true,
         },
-        apiConfig: {
+        credentials: {
           consumerKey: 'your_consumer_key_here',
           consumerSecret: 'your_consumer_secret_here',
-          shortcode: '123456',
-          passkey: 'your_passkey_here',
-          environment: 'sandbox',
-          webhookUrl: 'https://yourdomain.com/api/webhooks/mpesa',
+          passKey: 'your_passkey_here',
+          accessToken: null,
+          tokenExpiresAt: null,
+          lastTokenRefresh: null,
+        },
+        config: {
+          environment: 'sandbox', // 'sandbox' or 'production'
+          webhookUrl: 'https://yourdomain.com/api/webhooks/mpesa/callback',
+          confirmationUrl: 'https://yourdomain.com/api/webhooks/mpesa',
         },
         statistics: {
           totalTransactions: 5,
@@ -710,6 +714,7 @@ async function seedDatabase() {
 
       console.log('  ✓ Company paybill created');
       console.log('    Number: 123456');
+      console.log('    Type: paybill');
     } else {
       console.log('  ⊙ Company paybill already exists');
     }

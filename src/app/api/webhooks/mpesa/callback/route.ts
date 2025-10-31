@@ -99,13 +99,16 @@ export async function POST(request: NextRequest) {
       
       // Log the callback even if payment not found
       await db.collection('webhook_logs').insertOne({
-        type: 'mpesa_stk_callback',
+        source: 'mpesa_stk_callback',
+        type: 'stk_callback',
         status: 'payment_not_found',
         payload: body,
-        checkoutRequestId: CheckoutRequestID,
-        merchantRequestId: MerchantRequestID,
-        resultCode: ResultCode,
-        resultDesc: ResultDesc,
+        metadata: {
+          CheckoutRequestID,
+          MerchantRequestID,
+          ResultCode,
+          ResultDesc,
+        },
         timestamp: new Date(),
         processingTime: Date.now() - startTime,
       });
@@ -116,6 +119,20 @@ export async function POST(request: NextRequest) {
         ResultDesc: 'Accepted',
       });
     }
+
+    // Update STK initiation status
+    await db.collection('stk_initiations').updateOne(
+      { CheckoutRequestID: CheckoutRequestID },
+      {
+        $set: {
+          status: ResultCode === 0 ? 'completed' : 'failed',
+          ResultCode: ResultCode,
+          ResultDesc: ResultDesc,
+          CallbackMetadata: CallbackMetadata,
+          updatedAt: new Date(),
+        },
+      }
+    );
 
     // Extract metadata if payment was successful
     let mpesaReceiptNumber: string | null = null;

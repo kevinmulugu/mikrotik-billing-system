@@ -68,30 +68,59 @@ export async function POST(request: NextRequest) {
 
     const db = await getDatabase();
     const purchaseTime = new Date();
-    const paymentReference = BillRefNumber; // Payment reference (NOT voucher code/password)
 
-    // Find voucher by payment reference (NOT by code for security)
-    const voucher = await db.collection('vouchers').findOne({
-      reference: paymentReference,
-      status: { $in: ['active', 'pending'] }, // Allow pending vouchers to be purchased
+    // Try to find STK initiation first using AccountReference (voucher code)
+    const stkInitiation = await db.collection('stk_initiations').findOne({
+      AccountReference: BillRefNumber,
     });
 
+    let voucher = null;
+    let phoneNumber = MSISDN ? String(MSISDN) : null;
+
+    if (stkInitiation) {
+      // Found STK initiation - we have all the context including raw phone
+      console.log('[M-Pesa Webhook] Found STK initiation:', {
+        AccountReference: stkInitiation.AccountReference,
+        PhoneNumber: stkInitiation.PhoneNumber,
+        CheckoutRequestID: stkInitiation.CheckoutRequestID,
+      });
+
+      phoneNumber = stkInitiation.PhoneNumber; // Use raw phone from STK
+      
+      // Find voucher by ID from STK initiation
+      voucher = await db.collection('vouchers').findOne({
+        _id: stkInitiation.voucherId,
+      });
+    } else {
+      // No STK initiation found - try direct voucher lookup (legacy/manual payments)
+      console.log('[M-Pesa Webhook] No STK initiation found, trying direct voucher lookup');
+      voucher = await db.collection('vouchers').findOne({
+        'voucherInfo.code': BillRefNumber,
+        status: { $in: ['pending_payment', 'active'] },
+      });
+    }
+
     if (!voucher) {
-      console.error(`[M-Pesa Webhook] Voucher not found for reference: ${paymentReference}`);
+      console.error(`[M-Pesa Webhook] Voucher not found for reference: ${BillRefNumber}`);
 
       // Log failed webhook attempt
       await db.collection('webhook_logs').insertOne({
-        type: 'mpesa_confirmation',
+        source: 'mpesa_confirmation',
+        type: 'c2b_confirmation',
         status: 'failed',
         reason: 'voucher_not_found',
         payload: body,
-        paymentReference: paymentReference,
+        metadata: {
+          BillRefNumber: BillRefNumber,
+          TransID: TransID,
+          MSISDN: MSISDN,
+        },
         timestamp: purchaseTime,
       });
 
       return NextResponse.json({
         ResultCode: 1,
-        ResultDesc: `Voucher not found for reference: ${paymentReference}`,
+        ResultDesc: `Voucher not found for reference: ${BillRefNumber}`,
       });
     }
 
@@ -100,15 +129,19 @@ export async function POST(request: NextRequest) {
 
     // Check if voucher already purchased
     if (voucher.payment?.transactionId) {
-      console.warn(`[M-Pesa Webhook] Voucher already purchased. Reference: ${paymentReference}`);
+      console.warn(`[M-Pesa Webhook] Voucher already purchased. Reference: ${BillRefNumber}`);
 
       // Log duplicate webhook
       await db.collection('webhook_logs').insertOne({
-        type: 'mpesa_confirmation',
+        source: 'mpesa_confirmation',
+        type: 'c2b_confirmation',
         status: 'duplicate',
         payload: body,
-        voucherId: voucher._id,
-        paymentReference: paymentReference,
+        metadata: {
+          voucherId: voucher._id,
+          BillRefNumber: BillRefNumber,
+          TransID: TransID,
+        },
         timestamp: purchaseTime,
       });
 
@@ -127,14 +160,18 @@ export async function POST(request: NextRequest) {
       console.error(`[M-Pesa Webhook] Amount mismatch. Expected: ${expectedAmount}, Paid: ${paidAmount}`);
 
       await db.collection('webhook_logs').insertOne({
-        type: 'mpesa_confirmation',
+        source: 'mpesa_confirmation',
+        type: 'c2b_confirmation',
         status: 'failed',
         reason: 'amount_mismatch',
         payload: body,
-        voucherId: voucher._id,
-        paymentReference: paymentReference,
-        expectedAmount,
-        paidAmount,
+        metadata: {
+          voucherId: voucher._id,
+          BillRefNumber: BillRefNumber,
+          expectedAmount,
+          paidAmount,
+          TransID: TransID,
+        },
         timestamp: purchaseTime,
       });
 
@@ -251,7 +288,7 @@ export async function POST(request: NextRequest) {
       throw new Error('Failed to update voucher');
     }
 
-    console.log(`[M-Pesa Webhook] Voucher purchased successfully. Reference: ${paymentReference}, Commission: KES ${commissionAmount.toFixed(2)}`);
+    console.log(`[M-Pesa Webhook] Voucher purchased successfully. Reference: ${BillRefNumber}, Commission: KES ${commissionAmount.toFixed(2)}`);
 
     // Record commission in transactions
     await db.collection('transactions').insertOne({
@@ -264,10 +301,10 @@ export async function POST(request: NextRequest) {
       commissionRate: commissionRate,
       paymentMethod: 'mpesa',
       transactionId: TransID,
-      phoneNumber: MSISDN,
+      phoneNumber: phoneNumber || MSISDN,
       status: 'completed',
       metadata: {
-        paymentReference: paymentReference,
+        BillRefNumber: BillRefNumber,
         packageType: voucher.voucherInfo.packageType,
         purchaseExpiresAt: purchaseExpiresAt?.toISOString() || null,
         webhookProcessingTime: Date.now() - startTime,
@@ -282,11 +319,11 @@ export async function POST(request: NextRequest) {
       resourceType: 'voucher',
       resourceId: voucher._id,
       details: {
-        paymentReference,
+        BillRefNumber: BillRefNumber,
         transactionId: TransID,
         amount: paidAmount,
         commission: commissionAmount,
-        phoneNumber: MSISDN,
+        phoneNumber: phoneNumber || MSISDN,
         purchaseExpiresAt: purchaseExpiresAt?.toISOString() || null,
         processingTime: Date.now() - startTime,
       },
@@ -297,20 +334,23 @@ export async function POST(request: NextRequest) {
 
     // Log successful webhook
     await db.collection('webhook_logs').insertOne({
-      type: 'mpesa_confirmation',
+      source: 'mpesa_confirmation',
+      type: 'c2b_confirmation',
       status: 'success',
       payload: body,
-      voucherId: voucher._id,
-      paymentReference: paymentReference,
-      transactionId: TransID,
-      amount: paidAmount,
-      commission: commissionAmount,
+      metadata: {
+        voucherId: voucher._id,
+        BillRefNumber: BillRefNumber,
+        TransID: TransID,
+        amount: paidAmount,
+        commission: commissionAmount,
+      },
       timestamp: purchaseTime,
       processingTime: Date.now() - startTime,
     });
 
     // TODO: Send confirmation SMS/email to customer
-    // - Payment reference (NOT voucher code for security)
+    // - BillRefNumber (voucher code)
     // - Package details
     // - Expiry information
     // - Instructions to contact merchant for voucher code
@@ -330,10 +370,14 @@ export async function POST(request: NextRequest) {
 
     // Log error
     await db.collection('webhook_logs').insertOne({
-      type: 'mpesa_confirmation',
+      source: 'mpesa_confirmation',
+      type: 'c2b_confirmation',
       status: 'error',
-      error: errorMessage,
-      paymentReference: voucherCode, // May be null if error before finding voucher
+      payload: {},
+      metadata: {
+        error: errorMessage,
+        voucherCode: voucherCode, // May be null if error before finding voucher
+      },
       timestamp: new Date(),
       processingTime: Date.now() - startTime,
     }).catch(err => {

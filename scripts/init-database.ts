@@ -181,6 +181,8 @@ async function initializeDatabase() {
       'usage_analytics',
       'revenue_analytics',
       'system_config',
+      'webhook_logs',
+      'stk_initiations',
     ];
 
     for (const collectionName of coreCollections) {
@@ -561,6 +563,39 @@ async function initializeDatabase() {
       'period.month': 1,
     });
     console.log('    ✓ period.year + period.month');
+
+    // Webhook logs collection indexes
+    console.log('\n  Webhook Logs indexes:');
+    await db.collection('webhook_logs').createIndex({ source: 1 });
+    console.log('    ✓ source (mpesa, etc)');
+    await db.collection('webhook_logs').createIndex({ timestamp: -1 });
+    console.log('    ✓ timestamp (desc)');
+    await db.collection('webhook_logs').createIndex({ 'metadata.TransID': 1 });
+    console.log('    ✓ metadata.TransID');
+    await db.collection('webhook_logs').createIndex({ 'metadata.BillRefNumber': 1 });
+    console.log('    ✓ metadata.BillRefNumber');
+    await db.collection('webhook_logs').createIndex(
+      { timestamp: 1 },
+      { expireAfterSeconds: 7776000 } // 90 days
+    );
+    console.log('    ✓ timestamp (TTL - 90 days)');
+
+    // STK initiations collection indexes
+    console.log('\n  STK Initiations indexes:');
+    await db.collection('stk_initiations').createIndex({ CheckoutRequestID: 1 }, { unique: true });
+    console.log('    ✓ CheckoutRequestID (unique)');
+    await db.collection('stk_initiations').createIndex({ MerchantRequestID: 1 });
+    console.log('    ✓ MerchantRequestID');
+    await db.collection('stk_initiations').createIndex({ AccountReference: 1 });
+    console.log('    ✓ AccountReference (voucher reference)');
+    await db.collection('stk_initiations').createIndex({ PhoneNumber: 1 });
+    console.log('    ✓ PhoneNumber (raw customer phone)');
+    await db.collection('stk_initiations').createIndex({ paybillNumber: 1 });
+    console.log('    ✓ paybillNumber');
+    await db.collection('stk_initiations').createIndex({ status: 1 });
+    console.log('    ✓ status');
+    await db.collection('stk_initiations').createIndex({ createdAt: -1 });
+    console.log('    ✓ createdAt (desc)');
 
     // System config collection indexes
     console.log('\n  System Config indexes:');
