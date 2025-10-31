@@ -130,27 +130,13 @@ const getStatusVariant = (status: string): BadgeProps["variant"] => {
   }
 }
 
-// Package type display mapping
-const getPackageDisplay = (packageType: string): string => {
-  const packageMap: Record<string, string> = {
-    "1hour": "1 Hour",
-    "3hours": "3 Hours", 
-    "5hours": "5 Hours",
-    "12hours": "12 Hours",
-    "1day": "1 Day",
-    "3days": "3 Days",
-    "1week": "1 Week",
-    "1month": "1 Month"
-  }
-  return packageMap[packageType] || packageType
-}
-
 export function VoucherHistory({ routerId }: VoucherHistoryProps) {
   const { data: session } = useSession()
   const [vouchers, setVouchers] = useState<VoucherHistory[]>([])
   const [filteredVouchers, setFilteredVouchers] = useState<VoucherHistory[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedVoucher, setSelectedVoucher] = useState<VoucherHistory | null>(null)
+  const [packages, setPackages] = useState<Array<{ name: string; displayName: string }>>([])
   const [filters, setFilters] = useState<FilterOptions>({
     status: "all",
     packageType: "all",
@@ -169,6 +155,48 @@ export function VoucherHistory({ routerId }: VoucherHistoryProps) {
     totalRevenue: 0,
     totalCommission: 0
   })
+
+  // Get package display name from fetched packages or fallback to packageType
+  const getPackageDisplay = (packageType: string): string => {
+    const pkg = packages.find(p => p.name === packageType)
+    if (pkg) {
+      return pkg.displayName
+    }
+    
+    // Fallback to hardcoded map for backwards compatibility
+    const packageMap: Record<string, string> = {
+      "1hour": "1 Hour",
+      "3hours": "3 Hours", 
+      "5hours": "5 Hours",
+      "12hours": "12 Hours",
+      "1day": "1 Day",
+      "3days": "3 Days",
+      "1week": "1 Week",
+      "1month": "1 Month"
+    }
+    return packageMap[packageType] || packageType
+  }
+
+  // Fetch packages from router
+  const fetchPackages = async () => {
+    try {
+      const response = await fetch(`/api/routers/${routerId}/packages`, {
+        headers: {
+          'Authorization': `Bearer ${session?.user?.id}`,
+        },
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch packages')
+      }
+
+      const data = await response.json()
+      setPackages(data.packages || [])
+    } catch (error) {
+      console.error('Error fetching packages:', error)
+      // Don't show error toast for packages, just use empty array
+    }
+  }
 
   // Fetch voucher history
   const fetchVoucherHistory = async () => {
@@ -306,6 +334,7 @@ export function VoucherHistory({ routerId }: VoucherHistoryProps) {
   // Effects
   useEffect(() => {
     if (session && routerId) {
+      fetchPackages()
       fetchVoucherHistory()
     }
   }, [session, routerId, filters])
@@ -460,14 +489,11 @@ export function VoucherHistory({ routerId }: VoucherHistoryProps) {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Packages</SelectItem>
-                <SelectItem value="1hour">1 Hour</SelectItem>
-                <SelectItem value="3hours">3 Hours</SelectItem>
-                <SelectItem value="5hours">5 Hours</SelectItem>
-                <SelectItem value="12hours">12 Hours</SelectItem>
-                <SelectItem value="1day">1 Day</SelectItem>
-                <SelectItem value="3days">3 Days</SelectItem>
-                <SelectItem value="1week">1 Week</SelectItem>
-                <SelectItem value="1month">1 Month</SelectItem>
+                {packages.map((pkg) => (
+                  <SelectItem key={pkg.name} value={pkg.name}>
+                    {pkg.displayName}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
 
