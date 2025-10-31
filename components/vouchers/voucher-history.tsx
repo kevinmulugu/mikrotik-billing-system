@@ -1,3 +1,4 @@
+// components/vouchers/voucher-history.tsx
 "use client"
 
 import { useState, useEffect } from "react"
@@ -78,6 +79,10 @@ interface VoucherHistory {
     endTime?: Date
     dataUsed?: number
     timeUsed?: number
+    maxDurationMinutes?: number
+    expectedEndTime?: Date
+    timedOnPurchase?: boolean
+    purchaseExpiresAt?: Date
   }
   payment: {
     method: string
@@ -91,7 +96,7 @@ interface VoucherHistory {
     batchId: string
     batchSize: number
   }
-  status: "active" | "used" | "expired" | "cancelled"
+  status: "active" | "paid" | "used" | "expired" | "cancelled"
   createdAt: Date
   updatedAt: Date
 }
@@ -112,6 +117,8 @@ const getStatusVariant = (status: string): BadgeProps["variant"] => {
   switch (status) {
     case "active":
       return "default"
+    case "paid":
+      return "default" // Blue for paid
     case "used":
       return "secondary"
     case "expired":
@@ -154,9 +161,11 @@ export function VoucherHistory({ routerId }: VoucherHistoryProps) {
   // Statistics
   const [stats, setStats] = useState({
     total: 0,
-    used: 0,
     active: 0,
+    paid: 0,
+    used: 0,
     expired: 0,
+    cancelled: 0,
     totalRevenue: 0,
     totalCommission: 0
   })
@@ -247,33 +256,40 @@ export function VoucherHistory({ routerId }: VoucherHistoryProps) {
   // Export voucher history
   const exportHistory = async () => {
     try {
-      const response = await fetch(`/api/routers/${routerId}/vouchers/export`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session?.user?.id}`,
-        },
-        body: JSON.stringify({ filters })
-      })
+      // Build query params from filters
+      const params = new URLSearchParams();
+      if (filters.status !== 'all') params.append('status', filters.status);
+      if (filters.packageType !== 'all') params.append('packageType', filters.packageType);
+      params.append('format', 'csv');
+
+      const response = await fetch(
+        `/api/routers/${routerId}/vouchers/export?${params.toString()}`,
+        {
+          headers: {
+            'Authorization': `Bearer ${session?.user?.id}`,
+          },
+        }
+      );
 
       if (!response.ok) {
-        throw new Error('Failed to export data')
+        throw new Error('Failed to export data');
       }
 
-      const blob = await response.blob()
-      const url = window.URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.style.display = 'none'
-      a.href = url
-      a.download = `voucher-history-${new Date().toISOString().split('T')[0]}.csv`
-      document.body.appendChild(a)
-      a.click()
-      window.URL.revokeObjectURL(url)
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.style.display = 'none';
+      a.href = url;
+      a.download = `voucher-history-${new Date().toISOString().split('T')[0]}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
       
-      toast.success('Voucher history exported successfully')
+      toast.success('Voucher history exported successfully');
     } catch (error) {
-      console.error('Error exporting history:', error)
-      toast.error('Failed to export voucher history')
+      console.error('Error exporting history:', error);
+      toast.error('Failed to export voucher history');
     }
   }
 
@@ -422,6 +438,7 @@ export function VoucherHistory({ routerId }: VoucherHistoryProps) {
               <SelectContent>
                 <SelectItem value="all">All Status</SelectItem>
                 <SelectItem value="active">Active</SelectItem>
+                <SelectItem value="paid">Paid</SelectItem>
                 <SelectItem value="used">Used</SelectItem>
                 <SelectItem value="expired">Expired</SelectItem>
                 <SelectItem value="cancelled">Cancelled</SelectItem>
