@@ -174,7 +174,17 @@ export function VoucherHistory({ routerId }: VoucherHistoryProps) {
   const fetchVoucherHistory = async () => {
     try {
       setLoading(true)
-      const response = await fetch(`/api/routers/${routerId}/vouchers/history`, {
+      
+      // Build query parameters from filters
+      const params = new URLSearchParams()
+      if (filters.status !== 'all') params.append('status', filters.status)
+      if (filters.packageType !== 'all') params.append('packageType', filters.packageType)
+      if (filters.dateRange !== 'all') params.append('dateRange', filters.dateRange)
+      if (filters.search) params.append('search', filters.search)
+      
+      const url = `/api/routers/${routerId}/vouchers/history${params.toString() ? `?${params.toString()}` : ''}`
+      
+      const response = await fetch(url, {
         headers: {
           'Authorization': `Bearer ${session?.user?.id}`,
         },
@@ -186,6 +196,7 @@ export function VoucherHistory({ routerId }: VoucherHistoryProps) {
 
       const data = await response.json()
       setVouchers(data.vouchers || [])
+      setFilteredVouchers(data.vouchers || [])
       setStats(data.stats || stats)
     } catch (error) {
       console.error('Error fetching voucher history:', error)
@@ -195,7 +206,8 @@ export function VoucherHistory({ routerId }: VoucherHistoryProps) {
     }
   }
 
-  // Filter vouchers based on criteria
+  // Filter vouchers based on criteria (kept for potential client-side enhancements)
+  // Server-side filtering is now primary, this is backup/fallback
   const filterVouchers = () => {
     let filtered = [...vouchers]
 
@@ -229,9 +241,7 @@ export function VoucherHistory({ routerId }: VoucherHistoryProps) {
           break
       }
       
-      if (filters.dateRange !== "all") {
-        filtered = filtered.filter(v => new Date(v.createdAt) >= filterDate)
-      }
+      filtered = filtered.filter(v => new Date(v.createdAt) >= filterDate)
     }
 
     // Search filter
@@ -298,11 +308,7 @@ export function VoucherHistory({ routerId }: VoucherHistoryProps) {
     if (session && routerId) {
       fetchVoucherHistory()
     }
-  }, [session, routerId])
-
-  useEffect(() => {
-    filterVouchers()
-  }, [vouchers, filters])
+  }, [session, routerId, filters])
 
   if (loading) {
     return (
@@ -732,7 +738,10 @@ export function VoucherHistory({ routerId }: VoucherHistoryProps) {
           {filteredVouchers.length > 0 && (
             <div className="flex items-center justify-between text-sm text-muted-foreground">
               <div>
-                Showing {filteredVouchers.length} of {vouchers.length} vouchers
+                Showing {filteredVouchers.length} voucher{filteredVouchers.length !== 1 ? 's' : ''}
+                {(filters.status !== 'all' || filters.packageType !== 'all' || filters.dateRange !== 'all' || filters.search) && 
+                  ` (filtered from ${stats.total} total)`
+                }
               </div>
               <div>
                 Total Value: {formatCurrency(
