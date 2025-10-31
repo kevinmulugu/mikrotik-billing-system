@@ -21,6 +21,9 @@ const planLimits: Record<string, { maxRouters: number; name: string }> = {
   individual: { maxRouters: 1, name: 'Individual Plan' },
   isp: { maxRouters: 5, name: 'ISP Basic Plan' },
   isp_pro: { maxRouters: Infinity, name: 'ISP Pro Plan' },
+  // Legacy/backward compatibility
+  basic: { maxRouters: 1, name: 'Individual Plan' },
+  isp_5_routers: { maxRouters: 5, name: 'ISP Basic Plan' },
 };
 
 export default async function AddRouterPage() {
@@ -49,10 +52,16 @@ export default async function AddRouterPage() {
     userId: new ObjectId(session.user.id)
   });
   
-  const planLimit = planLimits[currentPlan];
-
-  // Check if user has reached router limit
-  const hasReachedLimit = planLimit && currentRouters >= planLimit.maxRouters;
+  // Get plan limit with guaranteed fallback to individual
+  const planLimit = planLimits[currentPlan] ? planLimits[currentPlan] : planLimits['individual'];
+  
+  // Ensure planLimit is defined (TypeScript safety)
+  if (!planLimit) {
+    throw new Error('Invalid plan configuration');
+  }
+  
+  // Check if user has reached router limit (Infinity check for ISP Pro)
+  const hasReachedLimit = planLimit.maxRouters !== Infinity && currentRouters >= planLimit.maxRouters;
 
   // If limit reached, show upgrade page instead
   if (hasReachedLimit) {
@@ -82,8 +91,8 @@ export default async function AddRouterPage() {
                   You've reached your plan limit
                 </CardTitle>
                 <CardDescription className="text-muted-foreground mt-2">
-                  Your <strong>{planLimit?.name}</strong> allows up to {planLimit?.maxRouters} router{planLimit?.maxRouters > 1 ? 's' : ''}.
-                  You currently have <strong>{currentRouters} router{currentRouters > 1 ? 's' : ''}</strong>.
+                  Your <strong>{planLimit.name}</strong> allows up to {planLimit.maxRouters === Infinity ? 'unlimited' : planLimit.maxRouters} router{planLimit.maxRouters === 1 ? '' : 's'}.
+                  You currently have <strong>{currentRouters} router{currentRouters === 1 ? '' : 's'}</strong>.
                 </CardDescription>
               </div>
             </div>

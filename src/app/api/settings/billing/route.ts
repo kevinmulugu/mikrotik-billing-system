@@ -37,14 +37,19 @@ export async function GET(req: NextRequest) {
     const userCommission =
       user.paymentSettings?.commissionRate ?? commissionRates.personal ?? commissionRates.homeowner ?? 20;
 
+    // Normalize legacy plan names
+    let userPlan = user.subscription?.plan || 'none';
+    if (userPlan === 'basic') userPlan = 'individual';
+    if (userPlan === 'isp_5_routers') userPlan = 'isp';
+
     const result = {
       commissionRates,
       subscriptionFees,
-      user: {
+      customer: {
         id: user._id.toString(),
         name: user.businessInfo?.name || null,
         type: user.businessInfo?.type || null,
-        plan: user.subscription?.plan || 'none',
+        plan: userPlan,
         status: user.subscription?.status || 'pending',
         monthlyFee: user.subscription?.monthlyFee || 0,
         commissionRate: userCommission,

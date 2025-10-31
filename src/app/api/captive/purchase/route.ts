@@ -575,6 +575,70 @@ export async function POST(request: NextRequest) {
     const voucherResult = await db.collection('vouchers').insertOne(voucherDoc);
     const voucherId = voucherResult.insertedId;
 
+    // Create or update WiFi customer record
+    // This is where we have the plain phone number from captive portal
+    // We save both plain phone and SHA-256 hash for M-Pesa webhook matching
+    const sha256Phone = crypto.createHash('sha256').update(normalizedPhone).digest('hex');
+
+    let wifiCustomer = await db.collection('customers').findOne({
+      $or: [
+        { phone: normalizedPhone },
+        { sha256Phone: sha256Phone }
+      ]
+    });
+
+    if (!wifiCustomer) {
+      // Create new WiFi customer with both plain and hashed phone
+      const customerResult = await db.collection('customers').insertOne({
+        routerId: router._id,
+        phone: normalizedPhone, // Plain phone number
+        sha256Phone: sha256Phone, // SHA-256 hash for M-Pesa webhook matching
+        name: null, // Will be collected later if needed
+        email: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        lastPurchaseDate: new Date(),
+        totalPurchases: 1,
+        totalSpent: selectedPackage.price,
+      });
+      wifiCustomer = { _id: customerResult.insertedId };
+      console.log(`[Captive Purchase] Created new WiFi customer: ${normalizedPhone} for router: ${router._id}`);
+    } else {
+      // Update existing customer with plain phone if missing
+      const updateFields: any = {
+        lastPurchaseDate: new Date(),
+        updatedAt: new Date(),
+      };
+      
+      // If we don't have plain phone yet (customer was created via webhook), add it now
+      if (!wifiCustomer.phone) {
+        updateFields.phone = normalizedPhone;
+        console.log(`[Captive Purchase] Updated customer with plain phone number`);
+      }
+
+      await db.collection('customers').updateOne(
+        { _id: wifiCustomer._id },
+        {
+          $set: updateFields,
+          $inc: {
+            totalPurchases: 1,
+            totalSpent: selectedPackage.price,
+          }
+        }
+      );
+      console.log(`[Captive Purchase] Updated existing WiFi customer: ${normalizedPhone}`);
+    }
+
+    // Link voucher to customer
+    await db.collection('vouchers').updateOne(
+      { _id: voucherId },
+      {
+        $set: {
+          customerId: wifiCustomer._id,
+        }
+      }
+    );
+
     // Link voucher to payment
     await db.collection('payments').updateOne(
       { _id: paymentId },

@@ -173,6 +173,8 @@ async function initializeDatabase() {
       'commissions',
       'paybills',
       'tickets',
+      'messages',
+      'message_templates',
       'audit_logs',
       'notifications',
       'router_health',
@@ -338,12 +340,14 @@ async function initializeDatabase() {
 
     // Customers collection indexes (WiFi voucher purchasers - no authentication)
     console.log('\n  Customers indexes:');
-    await db.collection('customers').createIndex({ phone: 1 }, { unique: true });
-    console.log('    ✓ phone (unique)');
+    await db.collection('customers').createIndex({ phone: 1 }, { unique: true, sparse: true });
+    console.log('    ✓ phone (unique, sparse) - null when created via webhook');
     await db.collection('customers').createIndex({ sha256Phone: 1 }, { unique: true });
     console.log('    ✓ sha256Phone (unique) - for M-Pesa webhook matching');
     await db.collection('customers').createIndex({ email: 1 }, { sparse: true });
     console.log('    ✓ email (sparse)');
+    await db.collection('customers').createIndex({ routerId: 1 });
+    console.log('    ✓ routerId - for router owner to query their customers');
     await db.collection('customers').createIndex({ lastPurchaseDate: -1 });
     console.log('    ✓ lastPurchaseDate (desc)');
 
@@ -459,6 +463,34 @@ async function initializeDatabase() {
     // Create ticket indexes using helper function
     console.log('\n');
     await createTicketIndexes(db);
+
+    // Messages collection indexes
+    console.log('\n  Messages indexes:');
+    await db.collection('messages').createIndex({ userId: 1 });
+    console.log('    ✓ userId (router owner who sent message)');
+    await db.collection('messages').createIndex({ routerId: 1 });
+    console.log('    ✓ routerId (specific router if targeted)');
+    await db.collection('messages').createIndex({ recipientType: 1 });
+    console.log('    ✓ recipientType (all or router)');
+    await db.collection('messages').createIndex({ status: 1 });
+    console.log('    ✓ status');
+    await db.collection('messages').createIndex({ sentAt: -1 });
+    console.log('    ✓ sentAt (desc)');
+    await db.collection('messages').createIndex({ createdAt: -1 });
+    console.log('    ✓ createdAt (desc)');
+    await db.collection('messages').createIndex({ templateId: 1 });
+    console.log('    ✓ templateId (if template was used)');
+
+    // Message templates collection indexes
+    console.log('\n  Message Templates indexes:');
+    await db.collection('message_templates').createIndex({ userId: 1 });
+    console.log('    ✓ userId (null for system templates)');
+    await db.collection('message_templates').createIndex({ category: 1 });
+    console.log('    ✓ category');
+    await db.collection('message_templates').createIndex({ isActive: 1 });
+    console.log('    ✓ isActive');
+    await db.collection('message_templates').createIndex({ isSystem: 1 });
+    console.log('    ✓ isSystem');
 
     // Audit logs collection indexes
     console.log('\n  Audit Logs indexes:');
@@ -761,6 +793,154 @@ async function initializeDatabase() {
     console.log('\n');
 
     // ==========================================
+    // 6. INSERT DEFAULT MESSAGE TEMPLATES
+    // ==========================================
+    console.log('💬 Inserting default message templates...\n');
+
+    const templatesExist = await db.collection('message_templates').countDocuments();
+
+    if (templatesExist === 0) {
+      await db.collection('message_templates').insertMany([
+        {
+          name: 'Service Disruption',
+          category: 'service',
+          message: 'Dear customer, we are experiencing a temporary service disruption. Our team is working to restore services. We apologize for the inconvenience.',
+          variables: [],
+          isSystem: true,
+          isActive: true,
+          userId: null,
+          usageCount: 0,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+        {
+          name: 'Voucher Purchase Confirmation',
+          category: 'sales',
+          message: 'Thank you for your purchase! Your voucher code is {{CODE}}. Valid for {{DURATION}}. Enjoy your internet!',
+          variables: ['CODE', 'DURATION'],
+          isSystem: true,
+          isActive: true,
+          userId: null,
+          usageCount: 0,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+        {
+          name: 'Discounted Package Offer',
+          category: 'promotion',
+          message: 'Special offer! Get {{DISCOUNT}}% off on {{PACKAGE}} vouchers. Valid until {{EXPIRY}}. Buy now and save!',
+          variables: ['DISCOUNT', 'PACKAGE', 'EXPIRY'],
+          isSystem: true,
+          isActive: true,
+          userId: null,
+          usageCount: 0,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+        {
+          name: 'Service Restoration',
+          category: 'service',
+          message: 'Good news! Internet services have been fully restored. Thank you for your patience. Contact us if you need assistance.',
+          variables: [],
+          isSystem: true,
+          isActive: true,
+          userId: null,
+          usageCount: 0,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+        {
+          name: 'Maintenance Notice',
+          category: 'service',
+          message: 'Scheduled maintenance on {{DATE}} from {{START_TIME}} to {{END_TIME}}. Service may be briefly interrupted. Thank you for understanding.',
+          variables: ['DATE', 'START_TIME', 'END_TIME'],
+          isSystem: true,
+          isActive: true,
+          userId: null,
+          usageCount: 0,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+        {
+          name: 'New Package Available',
+          category: 'promotion',
+          message: 'Introducing our new {{PACKAGE}} package! {{DURATION}} of internet for only KES {{PRICE}}. Get yours today!',
+          variables: ['PACKAGE', 'DURATION', 'PRICE'],
+          isSystem: true,
+          isActive: true,
+          userId: null,
+          usageCount: 0,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+        {
+          name: 'Payment Reminder',
+          category: 'billing',
+          message: 'Reminder: Your subscription expires on {{EXPIRY_DATE}}. Renew now to continue enjoying uninterrupted service.',
+          variables: ['EXPIRY_DATE'],
+          isSystem: true,
+          isActive: true,
+          userId: null,
+          usageCount: 0,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+        {
+          name: 'Welcome Message',
+          category: 'general',
+          message: 'Welcome to {{BUSINESS_NAME}}! Thank you for choosing us for your internet needs. Contact us anytime for support.',
+          variables: ['BUSINESS_NAME'],
+          isSystem: true,
+          isActive: true,
+          userId: null,
+          usageCount: 0,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+        {
+          name: 'Network Upgrade',
+          category: 'service',
+          message: 'We have upgraded our network! Enjoy faster speeds and better connectivity. Thank you for being a valued customer.',
+          variables: [],
+          isSystem: true,
+          isActive: true,
+          userId: null,
+          usageCount: 0,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+        {
+          name: 'Happy Holidays',
+          category: 'general',
+          message: 'Wishing you and your family a wonderful holiday season! Special offer: {{DISCOUNT}}% off all packages until {{DATE}}.',
+          variables: ['DISCOUNT', 'DATE'],
+          isSystem: true,
+          isActive: true,
+          userId: null,
+          usageCount: 0,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      ]);
+
+      console.log('  ✓ Service Disruption template');
+      console.log('  ✓ Voucher Purchase Confirmation template');
+      console.log('  ✓ Discounted Package Offer template');
+      console.log('  ✓ Service Restoration template');
+      console.log('  ✓ Maintenance Notice template');
+      console.log('  ✓ New Package Available template');
+      console.log('  ✓ Payment Reminder template');
+      console.log('  ✓ Welcome Message template');
+      console.log('  ✓ Network Upgrade template');
+      console.log('  ✓ Happy Holidays template');
+      console.log('  Total: 10 system templates');
+    } else {
+      console.log('  ⊙ Message templates already exist');
+    }
+
+    console.log('\n');
+
+    // ==========================================
     // 6. VALIDATION RULES
     // ==========================================
     console.log('✔️  Setting up validation rules...\n');
@@ -865,7 +1045,7 @@ async function initializeDatabase() {
     console.log('\n✅ Database initialization completed successfully!\n');
 
     // ==========================================
-    // 7. SHOW SUMMARY
+    // 7. VALIDATION RULES
     // ==========================================
     console.log('📊 Summary:');
     console.log(`  Database: ${MONGODB_DB_NAME}`);
@@ -875,6 +1055,7 @@ async function initializeDatabase() {
     console.log(`  Indexes: Created with TTL where applicable`);
     console.log(`  Configuration: Default settings + VPN config inserted`);
     console.log(`  Ticket System: Full-text search enabled`);
+    console.log(`  Messaging System: 10 system templates seeded`);
     console.log(`  VPN Infrastructure: WireGuard ready`);
 
     console.log('\n� Pricing Configuration:');
@@ -893,7 +1074,7 @@ async function initializeDatabase() {
     console.log('\n🎉 Your MikroTik Billing database is fully initialized!\n');
 
     // ==========================================
-    // 8. HELPER FUNCTIONS FOR LATER USE
+    // 9. HELPER FUNCTIONS FOR LATER USE
     // ==========================================
     console.log('💡 Available helper functions in mongodb-helpers.ts:');
     console.log('  - TicketHelpers.getStatistics(customerId)');

@@ -110,7 +110,7 @@ async function seedDatabase() {
           autoPayouts: true,
         },
         subscription: {
-          plan: 'basic',
+          plan: 'individual',
           status: 'active',
           startDate: new Date(),
           endDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000), // 1 year
@@ -480,7 +480,7 @@ async function seedDatabase() {
           autoPayouts: false,
         },
         subscription: {
-          plan: 'isp_5_routers',  // Up to 5 routers
+          plan: 'isp',  // Up to 5 routers
           status: 'active',
           monthlyFee: 2500,  // KES 2,500/month
           startDate: new Date(),
@@ -753,6 +753,7 @@ async function seedDatabase() {
 
         await db.collection('customers').insertOne({
           _id: new ObjectId(),
+          routerId: routerId, // Associate with the demo router
           phone: customer.phone,
           sha256Phone,
           name: customer.name,

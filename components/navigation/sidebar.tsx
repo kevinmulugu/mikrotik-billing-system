@@ -9,7 +9,8 @@ import {
   LayoutDashboard,
   Wifi,
   Users,
-  CreditCard,
+  DollarSign,
+  MessageSquare,
   HelpCircle,
   Settings,
   Building2
@@ -21,20 +22,25 @@ const navigation = [
     href: '/dashboard', 
     icon: LayoutDashboard,
   },
-  { 
-    name: 'Routers', 
-    href: '/routers', 
+  {
+    name: 'Routers',
+    href: '/routers',
     icon: Wifi,
   },
-  { 
-    name: 'Users', 
-    href: '/users', 
+  {
+    name: 'Customers',
+    href: '/customers',
     icon: Users,
   },
-  { 
-    name: 'Payments', 
+  {
+    name: 'Messages',
+    href: '/messages',
+    icon: MessageSquare,
+  },
+  {
+    name: 'Payments',
     href: '/payments', 
-    icon: CreditCard,
+    icon: DollarSign,
   },
   { 
     name: 'Support', 

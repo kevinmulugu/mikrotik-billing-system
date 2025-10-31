@@ -164,6 +164,52 @@ export async function POST(request: NextRequest) {
     const commissionRate = routerOwner?.paymentSettings?.commissionRate ?? commissionRates[userType] ?? 20.0;
     const commissionAmount = paidAmount * (commissionRate / 100);
 
+    // Create or update WiFi customer record (person who purchased the voucher)
+    // IMPORTANT: M-Pesa webhook MSISDN is already SHA-256 hashed in C2B callbacks
+    // We don't need to hash it again - it's already in hashed format
+    const sha256Phone = MSISDN; // MSISDN is already SHA-256 hashed from M-Pesa
+
+    let wifiCustomer = await db.collection('customers').findOne({
+      sha256Phone: sha256Phone
+    });
+
+    if (!wifiCustomer) {
+      // Create new WiFi customer associated with this router
+      // Note: We don't have the plain phone number from webhook, only the hash
+      const customerResult = await db.collection('customers').insertOne({
+        routerId: voucher.routerId,
+        phone: null, // Will be updated when we get plain phone from captive portal
+        sha256Phone: sha256Phone,
+        name: null, // Will be updated when customer provides name
+        email: null,
+        createdAt: purchaseTime,
+        updatedAt: purchaseTime,
+        lastPurchaseDate: purchaseTime,
+        totalPurchases: 1,
+        totalSpent: paidAmount,
+      });
+      wifiCustomer = { _id: customerResult.insertedId };
+      console.log(`[M-Pesa Webhook] Created new WiFi customer with hashed phone for router: ${voucher.routerId}`);
+    } else {
+      // Update existing customer's last purchase date and stats
+      await db.collection('customers').updateOne(
+        { _id: wifiCustomer._id },
+        {
+          $set: {
+            lastPurchaseDate: purchaseTime,
+            updatedAt: purchaseTime,
+          },
+          $inc: {
+            totalPurchases: 1,
+            totalSpent: paidAmount,
+          }
+        }
+      );
+      console.log(`[M-Pesa Webhook] Updated existing WiFi customer with hashed phone`);
+    }
+
+    // Calculate expiry timestamps based on voucher configuration
+
     // Calculate expiry timestamps based on voucher configuration
     let purchaseExpiresAt: Date | null = null;
     let expectedEndTime: Date | null = null;
@@ -187,6 +233,7 @@ export async function POST(request: NextRequest) {
       { _id: voucher._id },
       {
         $set: {
+          customerId: wifiCustomer._id, // Link voucher to WiFi customer
           'payment.method': 'mpesa',
           'payment.transactionId': TransID,
           'payment.phoneNumber': MSISDN,
