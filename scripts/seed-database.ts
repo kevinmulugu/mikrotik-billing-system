@@ -109,6 +109,18 @@ async function seedDatabase() {
           commissionRate: 20.0,
           autoPayouts: true,
         },
+        payoutSettings: {
+          minAmount: 1000, // Minimum KES 1000 for payout
+          autoPayouts: true,
+          schedule: 'monthly', // monthly, weekly, manual
+          bankAccount: {
+            accountName: null,
+            accountNumber: null,
+            bankName: null,
+            branchCode: null,
+          },
+          mpesaNumber: null,
+        },
         subscription: {
           plan: 'individual',
           status: 'active',
@@ -478,6 +490,18 @@ async function seedDatabase() {
           accountNumber: null,
           commissionRate: 0,  // ISPs pay 0% commission
           autoPayouts: false,
+        },
+        payoutSettings: {
+          minAmount: 5000, // Higher minimum for ISP
+          autoPayouts: false, // Manual payouts for ISP
+          schedule: 'manual',
+          bankAccount: {
+            accountName: 'Demo ISP Networks Ltd',
+            accountNumber: '1234567890',
+            bankName: 'Kenya Commercial Bank',
+            branchCode: '001',
+          },
+          mpesaNumber: '+254722334455',
         },
         subscription: {
           plan: 'isp',  // Up to 5 routers

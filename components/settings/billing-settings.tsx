@@ -93,12 +93,28 @@ export const BillingSettings: React.FC = () => {
   const [isUpgrading, setIsUpgrading] = useState(false);
   const [autoPayoutEnabled, setAutoPayoutEnabled] = useState(true);
   const [minPayoutAmount, setMinPayoutAmount] = useState("1000");
+  const [payoutSchedule, setPayoutSchedule] = useState("monthly");
+  const [mpesaNumber, setMpesaNumber] = useState("");
+  
+  // Real data from API
+  const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
+  const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [commissionPayouts, setCommissionPayouts] = useState<CommissionPayout[]>([]);
+  const [availableBalance, setAvailableBalance] = useState(0);
+  const [revenueStats, setRevenueStats] = useState({
+    thisMonth: 0,
+    lastMonth: 0,
+    growth: 0,
+    commission: 0,
+    pending: 0,
+  });
 
   // Dynamic billing config from server
   const [commissionRate, setCommissionRate] = useState<number | null>(null);
   const [subscriptionFees, setSubscriptionFees] = useState<any | null>(null);
   const [customerData, setCustomerData] = useState<CustomerBillingData | null>(null);
   const [billingLoading, setBillingLoading] = useState(true);
+  const [dataLoading, setDataLoading] = useState(true);
 
   // Fetch the billing settings from the server
   React.useEffect(() => {
@@ -129,6 +145,96 @@ export const BillingSettings: React.FC = () => {
     };
 
     fetchBilling();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  // Fetch all billing data (paybills, payout settings, invoices, payouts)
+  React.useEffect(() => {
+    let mounted = true;
+    
+    const fetchAllData = async () => {
+      setDataLoading(true);
+      try {
+        // Fetch paybills
+        const paybillsRes = await fetch('/api/settings/paybills');
+        if (paybillsRes.ok) {
+          const paybillsData = await paybillsRes.json();
+          if (mounted) {
+            setPaymentMethods(paybillsData.paybills.map((p: any) => ({
+              id: p.id,
+              type: p.userId ? 'customer_paybill' : 'company_paybill',
+              paybillNumber: p.paybillNumber,
+              isDefault: p.isDefault,
+              status: p.status,
+            })));
+          }
+        }
+
+        // Fetch payout settings
+        const payoutRes = await fetch('/api/settings/payouts');
+        if (payoutRes.ok) {
+          const payoutData = await payoutRes.json();
+          if (mounted && payoutData.payoutSettings) {
+            setAutoPayoutEnabled(payoutData.payoutSettings.autoPayouts);
+            setMinPayoutAmount(payoutData.payoutSettings.minAmount?.toString() || "1000");
+            setPayoutSchedule(payoutData.payoutSettings.schedule || "monthly");
+            setMpesaNumber(payoutData.payoutSettings.mpesaNumber || "");
+          }
+        }
+
+        // Fetch invoices
+        const invoicesRes = await fetch('/api/invoices');
+        if (invoicesRes.ok) {
+          const invoicesData = await invoicesRes.json();
+          if (mounted) {
+            setInvoices(invoicesData.invoices.map((inv: any) => ({
+              id: inv._id,
+              invoiceNumber: inv.invoiceNumber,
+              amount: inv.amount,
+              status: inv.status,
+              dueDate: new Date(inv.dueDate),
+              paidDate: inv.payment?.paidAt ? new Date(inv.payment.paidAt) : undefined,
+              description: inv.description,
+            })));
+          }
+        }
+
+        // Fetch commission payouts
+        const payoutsRes = await fetch('/api/payouts');
+        if (payoutsRes.ok) {
+          const payoutsData = await payoutsRes.json();
+          if (mounted) {
+            setCommissionPayouts(payoutsData.payouts.map((p: any) => ({
+              id: p._id,
+              amount: p.amount,
+              period: `${new Date(0).setMonth(p.period.month - 1)} ${p.period.year}`,
+              status: p.status,
+              date: new Date(p.createdAt),
+              transactionId: p.payout?.transactionId,
+            })));
+          }
+        }
+
+        // Fetch available balance
+        const balanceRes = await fetch('/api/payouts/balance');
+        if (balanceRes.ok) {
+          const balanceData = await balanceRes.json();
+          if (mounted) {
+            setAvailableBalance(balanceData.withdrawable || 0);
+          }
+        }
+
+      } catch (err) {
+        console.error('Failed to fetch billing data:', err);
+        toast.error('Failed to load billing data');
+      } finally {
+        if (mounted) setDataLoading(false);
+      }
+    };
+
+    fetchAllData();
     return () => {
       mounted = false;
     };
@@ -228,71 +334,6 @@ export const BillingSettings: React.FC = () => {
     }
   };
 
-  // Sample data - replace with API calls
-  const paymentMethods: PaymentMethod[] = [
-    {
-      id: "pm-1",
-      type: "company_paybill",
-      paybillNumber: "123456",
-      isDefault: true,
-      status: "active",
-    },
-  ];
-
-  const revenueStats = {
-    thisMonth: 45670,
-    lastMonth: 38920,
-    growth: 17.3,
-    commission: 6850,
-    pending: 2340,
-  };
-
-  const invoices: Invoice[] = [
-    {
-      id: "inv-1",
-      invoiceNumber: "INV-2025-001",
-      amount: 2500,
-      status: "paid",
-      dueDate: new Date("2025-01-31"),
-      paidDate: new Date("2025-01-28"),
-      description: "Platform subscription - January 2025",
-    },
-    {
-      id: "inv-2",
-      invoiceNumber: "INV-2025-002",
-      amount: 2500,
-      status: "pending",
-      dueDate: new Date("2025-02-28"),
-      description: "Platform subscription - February 2025",
-    },
-  ];
-
-  const commissionPayouts: CommissionPayout[] = [
-    {
-      id: "payout-1",
-      amount: 6850,
-      period: "January 2025",
-      status: "completed",
-      date: new Date("2025-02-01"),
-      transactionId: "MPESA123456",
-    },
-    {
-      id: "payout-2",
-      amount: 5420,
-      period: "December 2024",
-      status: "completed",
-      date: new Date("2025-01-01"),
-      transactionId: "MPESA123455",
-    },
-    {
-      id: "payout-3",
-      amount: 2340,
-      period: "February 2025",
-      status: "pending",
-      date: new Date("2025-03-01"),
-    },
-  ];
-
   const handleAddPaybill = async () => {
     if (!newPaybill.paybillNumber || !newPaybill.accountNumber) {
       toast.error("Please fill in all fields");
@@ -302,14 +343,45 @@ export const BillingSettings: React.FC = () => {
     setIsSaving(true);
 
     try {
-      // API call to add customer paybill
-      await new Promise((resolve) => setTimeout(resolve, 2000));
+      const response = await fetch('/api/settings/paybills', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          paybillNumber: newPaybill.paybillNumber,
+          paybillName: `Paybill ${newPaybill.paybillNumber}`,
+          type: 'paybill', // or 'till' based on selection
+          consumerKey: '', // These would come from form
+          consumerSecret: '',
+          passKey: '',
+          setAsDefault: true,
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to add paybill');
+      }
+
+      const data = await response.json();
+      
+      // Refresh paybills list
+      const paybillsRes = await fetch('/api/settings/paybills');
+      if (paybillsRes.ok) {
+        const paybillsData = await paybillsRes.json();
+        setPaymentMethods(paybillsData.paybills.map((p: any) => ({
+          id: p.id,
+          type: p.userId ? 'customer_paybill' : 'company_paybill',
+          paybillNumber: p.paybillNumber,
+          isDefault: p.isDefault,
+          status: p.status,
+        })));
+      }
 
       toast.success("Paybill added successfully. Awaiting verification.");
       setShowAddPaybill(false);
       setNewPaybill({ paybillNumber: "", accountNumber: "" });
-    } catch (error) {
-      toast.error("Failed to add paybill");
+    } catch (error: any) {
+      toast.error(error.message || "Failed to add paybill");
     } finally {
       setIsSaving(false);
     }
@@ -317,32 +389,73 @@ export const BillingSettings: React.FC = () => {
 
   const handleSetDefault = async (methodId: string) => {
     try {
-      // API call to set default payment method
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      const response = await fetch('/api/settings/paybills', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          paybillId: methodId,
+          action: 'set_default',
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to set default');
+      }
+
+      // Refresh paybills list
+      const paybillsRes = await fetch('/api/settings/paybills');
+      if (paybillsRes.ok) {
+        const paybillsData = await paybillsRes.json();
+        setPaymentMethods(paybillsData.paybills.map((p: any) => ({
+          id: p.id,
+          type: p.userId ? 'customer_paybill' : 'company_paybill',
+          paybillNumber: p.paybillNumber,
+          isDefault: p.isDefault,
+          status: p.status,
+        })));
+      }
 
       toast.success("Default payment method updated");
-    } catch (error) {
-      toast.error("Failed to update payment method");
+    } catch (error: any) {
+      toast.error(error.message || "Failed to update payment method");
     }
   };
 
   const handleRemovePaybill = async (methodId: string) => {
     try {
-      // API call to remove paybill
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      const response = await fetch(`/api/settings/paybills?id=${methodId}`, {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to remove paybill');
+      }
+
+      // Refresh paybills list
+      const paybillsRes = await fetch('/api/settings/paybills');
+      if (paybillsRes.ok) {
+        const paybillsData = await paybillsRes.json();
+        setPaymentMethods(paybillsData.paybills.map((p: any) => ({
+          id: p.id,
+          type: p.userId ? 'customer_paybill' : 'company_paybill',
+          paybillNumber: p.paybillNumber,
+          isDefault: p.isDefault,
+          status: p.status,
+        })));
+      }
 
       toast.success("Paybill removed successfully");
-    } catch (error) {
-      toast.error("Failed to remove paybill");
+    } catch (error: any) {
+      toast.error(error.message || "Failed to remove paybill");
     }
   };
 
   const handleDownloadInvoice = async (invoiceId: string) => {
     try {
-      // API call to download invoice
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-
-      toast.success("Invoice downloaded");
+      // For now, just show success - implement PDF generation later
+      toast.success("Invoice download feature coming soon");
     } catch (error) {
       toast.error("Failed to download invoice");
     }
@@ -350,12 +463,43 @@ export const BillingSettings: React.FC = () => {
 
   const handleRequestPayout = async () => {
     try {
-      // API call to request payout
-      await new Promise((resolve) => setTimeout(resolve, 1500));
+      const response = await fetch('/api/payouts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          amount: availableBalance,
+          method: mpesaNumber ? 'mpesa' : 'bank',
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to request payout');
+      }
+
+      // Refresh payouts and balance
+      const payoutsRes = await fetch('/api/payouts');
+      if (payoutsRes.ok) {
+        const payoutsData = await payoutsRes.json();
+        setCommissionPayouts(payoutsData.payouts.map((p: any) => ({
+          id: p._id,
+          amount: p.amount,
+          period: `${new Date(0).setMonth(p.period.month - 1)} ${p.period.year}`,
+          status: p.status,
+          date: new Date(p.createdAt),
+          transactionId: p.payout?.transactionId,
+        })));
+      }
+
+      const balanceRes = await fetch('/api/payouts/balance');
+      if (balanceRes.ok) {
+        const balanceData = await balanceRes.json();
+        setAvailableBalance(balanceData.withdrawable || 0);
+      }
 
       toast.success("Payout request submitted successfully");
-    } catch (error) {
-      toast.error("Failed to request payout");
+    } catch (error: any) {
+      toast.error(error.message || "Failed to request payout");
     }
   };
 
@@ -363,12 +507,25 @@ export const BillingSettings: React.FC = () => {
     setIsSaving(true);
 
     try {
-      // API call to save settings
-      await new Promise((resolve) => setTimeout(resolve, 1500));
+      const response = await fetch('/api/settings/payouts', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          minAmount: parseInt(minPayoutAmount),
+          autoPayouts: autoPayoutEnabled,
+          schedule: payoutSchedule,
+          mpesaNumber: mpesaNumber || null,
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to save settings');
+      }
 
       toast.success("Settings saved successfully");
-    } catch (error) {
-      toast.error("Failed to save settings");
+    } catch (error: any) {
+      toast.error(error.message || "Failed to save settings");
     } finally {
       setIsSaving(false);
     }
@@ -397,6 +554,17 @@ export const BillingSettings: React.FC = () => {
       currency: "KES",
       minimumFractionDigits: 0,
     }).format(amount);
+  };
+
+  // Helper functions to determine user type
+  const isIndividualPlan = () => {
+    if (!customerData) return false;
+    return customerData.plan === 'individual' || customerData.commissionRate > 0;
+  };
+
+  const isISPPlan = () => {
+    if (!customerData) return false;
+    return customerData.plan === 'isp' || customerData.plan === 'isp_pro';
   };
 
   const growthPercentage = ((revenueStats.thisMonth - revenueStats.lastMonth) / revenueStats.lastMonth) * 100;
@@ -605,28 +773,63 @@ export const BillingSettings: React.FC = () => {
 
         <Card>
           <CardHeader className="pb-2">
-            <CardDescription>Commission Earned</CardDescription>
-            <CardTitle className="text-2xl">{formatCurrency(revenueStats.commission)}</CardTitle>
+            <CardDescription>
+              {isIndividualPlan() ? "Commission Earned" : "Total Revenue"}
+            </CardDescription>
+            <CardTitle className="text-2xl">
+              {formatCurrency(isIndividualPlan() ? revenueStats.commission : revenueStats.thisMonth)}
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <TrendingUp className="h-4 w-4" />
-              <span>{billingLoading ? 'Commission rate' : `${commissionRate ?? '—'}% commission rate`}</span>
+              <span>
+                {billingLoading 
+                  ? (isIndividualPlan() ? 'Commission rate' : 'Revenue')
+                  : isIndividualPlan() 
+                    ? `${commissionRate ?? '—'}% commission rate`
+                    : '100% retained'
+                }
+              </span>
             </div>
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription>Pending Payout</CardDescription>
-            <CardTitle className="text-2xl">{formatCurrency(revenueStats.pending)}</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <Button variant="outline" size="sm" onClick={handleRequestPayout}>
-              Request Payout
-            </Button>
-          </CardContent>
-        </Card>
+        {isIndividualPlan() && (
+          <Card>
+            <CardHeader className="pb-2">
+              <CardDescription>Pending Payout</CardDescription>
+              <CardTitle className="text-2xl">{formatCurrency(availableBalance)}</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={handleRequestPayout}
+                disabled={availableBalance < parseInt(minPayoutAmount)}
+              >
+                Request Payout
+              </Button>
+            </CardContent>
+          </Card>
+        )}
+
+        {isISPPlan() && (
+          <Card>
+            <CardHeader className="pb-2">
+              <CardDescription>Monthly Subscription</CardDescription>
+              <CardTitle className="text-2xl">{formatCurrency(customerData?.monthlyFee || 0)}</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Calendar className="h-4 w-4" />
+                <span>
+                  {customerData?.plan === 'isp' ? 'Up to 5 routers' : 'Unlimited routers'}
+                </span>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         <Card>
           <CardHeader className="pb-2">
@@ -787,18 +990,19 @@ export const BillingSettings: React.FC = () => {
         </CardContent>
       </Card>
 
-      {/* Payout Settings */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <DollarSign className="h-5 w-5" />
-            Payout Settings
-          </CardTitle>
-          <CardDescription>
-            Configure automatic commission payouts
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-6">
+      {/* Payout Settings - Only for Individual Plans */}
+      {isIndividualPlan() && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <DollarSign className="h-5 w-5" />
+              Payout Settings
+            </CardTitle>
+            <CardDescription>
+              Configure automatic commission payouts
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
           <div className="flex items-center justify-between">
             <div>
               <p className="font-medium">Automatic Payouts</p>
@@ -865,9 +1069,11 @@ export const BillingSettings: React.FC = () => {
           </Button>
         </CardContent>
       </Card>
+      )}
 
-      {/* Commission Payouts */}
-      <Card>
+      {/* Commission Payouts - Only for Individual Plans */}
+      {isIndividualPlan() && (
+        <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <BarChart3 className="h-5 w-5" />
@@ -904,9 +1110,11 @@ export const BillingSettings: React.FC = () => {
           ))}
         </CardContent>
       </Card>
+      )}
 
-      {/* Invoices */}
-      <Card>
+      {/* Invoices - Only for ISP Plans */}
+      {isISPPlan() && (
+        <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <FileText className="h-5 w-5" />
@@ -947,6 +1155,7 @@ export const BillingSettings: React.FC = () => {
           ))}
         </CardContent>
       </Card>
+      )}
     </div>
   );
 };

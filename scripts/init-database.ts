@@ -171,7 +171,9 @@ async function initializeDatabase() {
       'pppoe_users',
       'payments',
       'commissions',
+      'commission_payouts',
       'paybills',
+      'invoices',
       'tickets',
       'messages',
       'message_templates',
@@ -461,6 +463,34 @@ async function initializeDatabase() {
     console.log('    ✓ paybillInfo.type');
     await db.collection('paybills').createIndex({ status: 1 });
     console.log('    ✓ status');
+
+    // Commission payouts collection indexes
+    console.log('\n  Commission Payouts indexes:');
+    await db.collection('commission_payouts').createIndex({ userId: 1 });
+    console.log('    ✓ userId (router owner receiving payout)');
+    await db.collection('commission_payouts').createIndex({ status: 1 });
+    console.log('    ✓ status');
+    await db.collection('commission_payouts').createIndex({ 'period.month': 1, 'period.year': 1 });
+    console.log('    ✓ period.month + period.year');
+    await db.collection('commission_payouts').createIndex({ createdAt: -1 });
+    console.log('    ✓ createdAt (desc)');
+    await db.collection('commission_payouts').createIndex({ 'payout.transactionId': 1 }, { sparse: true });
+    console.log('    ✓ payout.transactionId (sparse)');
+
+    // Invoices collection indexes
+    console.log('\n  Invoices indexes:');
+    await db.collection('invoices').createIndex({ userId: 1 });
+    console.log('    ✓ userId (customer being invoiced)');
+    await db.collection('invoices').createIndex({ invoiceNumber: 1 }, { unique: true });
+    console.log('    ✓ invoiceNumber (unique)');
+    await db.collection('invoices').createIndex({ status: 1 });
+    console.log('    ✓ status');
+    await db.collection('invoices').createIndex({ dueDate: 1 });
+    console.log('    ✓ dueDate');
+    await db.collection('invoices').createIndex({ createdAt: -1 });
+    console.log('    ✓ createdAt (desc)');
+    await db.collection('invoices').createIndex({ 'payment.transactionId': 1 }, { sparse: true });
+    console.log('    ✓ payment.transactionId (sparse)');
 
     // Create ticket indexes using helper function
     console.log('\n');
