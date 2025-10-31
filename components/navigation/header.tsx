@@ -133,7 +133,7 @@ export function Header({ onMenuClick }: HeaderProps) {
                 </Link>
               </DropdownMenuItem>
               <DropdownMenuItem asChild>
-                <Link href="/payments" className="cursor-pointer">
+                <Link href="/settings/billing" className="cursor-pointer">
                   <CreditCard className="mr-2 h-4 w-4" />
                   <span>Billing</span>
                 </Link>
