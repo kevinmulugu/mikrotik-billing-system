@@ -576,7 +576,7 @@ export async function POST(req: NextRequest) {
             customerId: userId,  // This is passed as customerId parameter to the captive portal files
             routerName: body.name,
             location: body.location.name || body.location.county,
-            baseUrl: process.env.NEXT_PUBLIC_BASE_URL || process.env.BASE_URL || 'http://localhost:3000',
+            baseUrl: process.env.NEXT_PUBLIC_APP_URL || process.env.BASE_URL || 'http://localhost:3000',
             // ftpUser and ftpPassword omitted to default to API user
             remotePath: '/hotspot',
           }
