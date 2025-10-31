@@ -43,24 +43,12 @@ export async function POST(
     const client = await clientPromise;
     const db = client.db(process.env.MONGODB_DB_NAME || 'mikrotik_billing');
 
-    // Get customer
-    const customer = await db
-      .collection('customers')
-      .findOne({ userId: new ObjectId(userId) });
-
-    if (!customer) {
-      return NextResponse.json(
-        { error: 'Customer not found' },
-        { status: 404 }
-      );
-    }
-
-    // Get router
+    // Get router and verify ownership
     const router = await db
       .collection('routers')
       .findOne({
         _id: new ObjectId(routerId),
-        customerId: customer._id,
+        userId: new ObjectId(userId),
       });
 
     if (!router) {
@@ -76,7 +64,7 @@ export async function POST(
       .findOne({
         _id: new ObjectId(voucherId),
         routerId: new ObjectId(routerId),
-        customerId: customer._id,
+        userId: new ObjectId(userId),
       });
 
     if (!voucher) {

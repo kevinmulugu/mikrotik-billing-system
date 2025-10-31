@@ -360,7 +360,7 @@ export async function POST(request: NextRequest) {
 
     // Check for existing pending payment (prevent duplicate purchases)
     const existingPendingPayment = await db.collection('payments').findOne({
-      customerId: router.customerId,
+      routerId: new ObjectId(router_id),
       'mpesa.phoneNumber': normalizedPhone,
       status: 'pending',
       createdAt: { $gte: fiveMinutesAgo },
@@ -386,17 +386,17 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Get customer for payment settings
-    const customer = await db.collection('customers').findOne({
-      _id: router.customerId,
+    // Get router owner (ISP) for payment settings
+    const routerOwner = await db.collection('users').findOne({
+      _id: router.userId,
     });
 
-    if (!customer) {
+    if (!routerOwner) {
       return NextResponse.json(
         {
           success: false,
-          error: 'customer_not_found',
-          message: 'Customer configuration not found. Please contact support.',
+          error: 'owner_not_found',
+          message: 'Router owner configuration not found. Please contact support.',
         },
         {
           status: 500,
@@ -405,7 +405,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Determine payment method (company vs customer paybill)
+    // Determine payment method (company vs ISP paybill)
     let paybillNumber: string;
     let paybillPasskey: string;
     let consumerKey: string;
@@ -413,13 +413,13 @@ export async function POST(request: NextRequest) {
     let accountReference: string;
     let paymentType: string;
 
-    if (customer.paymentSettings?.preferredMethod === 'customer_paybill' &&
-        customer.paymentSettings?.paybillNumber) {
-      // Use customer's own paybill
-      paybillNumber = customer.paymentSettings.paybillNumber;
-      paybillPasskey = customer.paymentSettings.passkey || process.env.MPESA_PASSKEY!;
-      consumerKey = customer.paymentSettings.consumerKey || process.env.MPESA_CONSUMER_KEY!;
-      consumerSecret = customer.paymentSettings.consumerSecret || process.env.MPESA_CONSUMER_SECRET!;
+    if (routerOwner.paymentSettings?.preferredMethod === 'customer_paybill' &&
+        routerOwner.paymentSettings?.paybillNumber) {
+      // Use ISP's own paybill
+      paybillNumber = routerOwner.paymentSettings.paybillNumber;
+      paybillPasskey = routerOwner.paymentSettings.passkey || process.env.MPESA_PASSKEY!;
+      consumerKey = routerOwner.paymentSettings.consumerKey || process.env.MPESA_CONSUMER_KEY!;
+      consumerSecret = routerOwner.paymentSettings.consumerSecret || process.env.MPESA_CONSUMER_SECRET!;
       accountReference = `ROUTER_${router._id.toString()}`;
       paymentType = 'customer_paybill';
     } else {
@@ -466,8 +466,8 @@ export async function POST(request: NextRequest) {
           message: 'Unable to initiate payment. Please try again or contact support.',
           error_details: stkError instanceof Error ? stkError.message : 'M-Pesa service error',
           support: {
-            phone: customer.businessInfo?.contact?.phone || '+254700000000',
-            email: customer.businessInfo?.contact?.email || 'support@example.com',
+            phone: routerOwner.businessInfo?.contact?.phone || '+254700000000',
+            email: routerOwner.businessInfo?.contact?.email || 'support@example.com',
           },
         },
         {
@@ -479,7 +479,7 @@ export async function POST(request: NextRequest) {
 
     // Create payment record
     const paymentDoc = {
-      customerId: router.customerId,
+      userId: router.userId, // Router owner's user ID
       routerId: router._id,
       transaction: {
         type: 'voucher_purchase' as const,
@@ -525,7 +525,7 @@ export async function POST(request: NextRequest) {
     // Create pending voucher
     const voucherDoc = {
       routerId: router._id,
-      customerId: router.customerId,
+      userId: router.userId, // Router owner's user ID
       voucherInfo: {
         code: voucherCode,
         password: voucherPassword,
@@ -593,7 +593,7 @@ export async function POST(request: NextRequest) {
     await db.collection('purchase_attempts').insertOne({
       mac_address: normalizedMac,
       router_id: router._id,
-      customer_id: router.customerId,
+      owner_user_id: router.userId, // Router owner's user ID
       package_id: selectedPackage.name,
       phone_number: normalizedPhone,
       amount: selectedPackage.price,

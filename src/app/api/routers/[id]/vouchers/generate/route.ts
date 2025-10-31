@@ -130,26 +130,12 @@ export async function POST(
     const client = await clientPromise;
     const db = client.db(process.env.MONGODB_DB_NAME || 'mikrotik_billing');
 
-    // Get customer
-    const customer = await db
-      .collection('customers')
-      .findOne({ userId: new ObjectId(userId) });
-
-    if (!customer) {
-      return NextResponse.json(
-        { error: 'Customer not found' },
-        { status: 404 }
-      );
-    }
-
-    const customerId = customer._id;
-
     // Verify router ownership and get package details
     const router = await db
       .collection('routers')
       .findOne({
         _id: new ObjectId(routerId),
-        customerId: customerId,
+        userId: new ObjectId(userId),
       });
 
     if (!router) {
@@ -157,6 +143,15 @@ export async function POST(
         { error: 'Router not found or access denied' },
         { status: 404 }
       );
+    }
+
+    // Get user for commission rate calculation
+    const user = await db
+      .collection('users')
+      .findOne({ _id: new ObjectId(userId) });
+
+    if (!user) {
+      return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
 
     // Find the package in router's packages
@@ -200,9 +195,9 @@ export async function POST(
     }
 
     // Determine commission rate: default 20% for personal/homeowner, 0% for ISPs if detected
-    const commissionRate = (customer.subscription?.plan === 'isp' || customer.businessInfo?.type === 'isp')
+    const commissionRate = (user.subscription?.plan === 'isp' || user.businessInfo?.type === 'isp')
       ? 0
-      : (customer.paymentSettings?.commissionRate ?? 20);
+      : (user.paymentSettings?.commissionRate ?? 20);
 
     // Generate vouchers
     const vouchers = [];
@@ -269,7 +264,7 @@ export async function POST(
       const voucher = {
         _id: new ObjectId(),
         routerId: new ObjectId(routerId),
-        customerId: customerId,
+        userId: new ObjectId(userId),
         reference: paymentReference, // Public reference for M-Pesa payments (NOT the password)
         voucherInfo: {
           code: code,

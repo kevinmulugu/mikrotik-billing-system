@@ -12,9 +12,9 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const customerId = session.user.id;
-    if (!customerId) {
-      return NextResponse.json({ error: 'Customer profile not found' }, { status: 404 });
+    const userId = session.user.id;
+    if (!userId) {
+      return NextResponse.json({ error: 'User profile not found' }, { status: 404 });
     }
 
     const client = await clientPromise;
@@ -25,31 +25,31 @@ export async function GET(req: NextRequest) {
     const commissionRates = systemConfig.commission_rates || {};
     const subscriptionFees = systemConfig.subscription_fees || {};
 
-    // Read customer-specific data
-    const customer = await db
-      .collection('customers')
-      .findOne({ userId: new ObjectId(customerId) });
+    // Read user-specific data
+    const user = await db
+      .collection('users')
+      .findOne({ _id: new ObjectId(userId) });
 
-    if (!customer) {
-      return NextResponse.json({ error: 'Customer not found' }, { status: 404 });
+    if (!user) {
+      return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
 
-    const customerCommission =
-      customer.paymentSettings?.commissionRate ?? commissionRates.personal ?? commissionRates.homeowner ?? 20;
+    const userCommission =
+      user.paymentSettings?.commissionRate ?? commissionRates.personal ?? commissionRates.homeowner ?? 20;
 
     const result = {
       commissionRates,
       subscriptionFees,
-      customer: {
-        id: customer._id.toString(),
-        name: customer.businessInfo?.name || null,
-        type: customer.businessInfo?.type || null,
-        plan: customer.subscription?.plan || 'none',
-        status: customer.subscription?.status || 'pending',
-        monthlyFee: customer.subscription?.monthlyFee || 0,
-        commissionRate: customerCommission,
-        trialEndDate: customer.subscription?.endDate || null,
-        totalRouters: customer.statistics?.totalRouters || 0,
+      user: {
+        id: user._id.toString(),
+        name: user.businessInfo?.name || null,
+        type: user.businessInfo?.type || null,
+        plan: user.subscription?.plan || 'none',
+        status: user.subscription?.status || 'pending',
+        monthlyFee: user.subscription?.monthlyFee || 0,
+        commissionRate: userCommission,
+        trialEndDate: user.subscription?.endDate || null,
+        totalRouters: user.statistics?.totalRouters || 0,
       },
     };
 
@@ -86,17 +86,17 @@ export async function POST(req: NextRequest) {
     const client = await clientPromise;
     const db = client.db(process.env.MONGODB_DB_NAME || 'mikrotik_billing');
 
-    // Get customer
-    const customer = await db
-      .collection('customers')
-      .findOne({ userId: new ObjectId(customerId) });
+    // Get user
+    const user = await db
+      .collection('users')
+      .findOne({ _id: new ObjectId(customerId) });
 
-    if (!customer) {
-      return NextResponse.json({ error: 'Customer not found' }, { status: 404 });
+    if (!user) {
+      return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
 
-    const currentPlan = customer.subscription?.plan || 'none';
-    const currentStatus = customer.subscription?.status || 'pending';
+    const currentPlan = user.subscription?.plan || 'none';
+    const currentStatus = user.subscription?.status || 'pending';
 
     // Plan settings
     const planSettings = {
@@ -146,9 +146,9 @@ export async function POST(req: NextRequest) {
     let newEndDate: Date | null = null;
     let newStatus = 'active';
 
-    if (currentStatus === 'trial' && customer.subscription?.endDate) {
+    if (currentStatus === 'trial' && user.subscription?.endDate) {
       // If upgrading during trial, keep the trial end date
-      newEndDate = new Date(customer.subscription.endDate);
+      newEndDate = new Date(user.subscription.endDate);
       newStatus = 'trial';
     } else if (selectedPlanSettings.monthlyFee === 0) {
       // Free plan (individual) - no end date
@@ -160,9 +160,9 @@ export async function POST(req: NextRequest) {
       newStatus = 'active';
     }
 
-    // Update customer subscription
-    await db.collection('customers').updateOne(
-      { userId: new ObjectId(customerId) },
+    // Update user subscription
+    await db.collection('users').updateOne(
+      { _id: new ObjectId(customerId) },
       {
         $set: {
           'subscription.plan': plan,

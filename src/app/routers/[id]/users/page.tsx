@@ -31,21 +31,12 @@ async function getRouterUsersData(routerId: string, userId: string) {
     const client = await clientPromise;
     const db = client.db(process.env.MONGODB_DB_NAME || 'mikrotik_billing');
 
-    // Get customer
-    const customer = await db
-      .collection('customers')
-      .findOne({ userId: new ObjectId(userId) });
-
-    if (!customer) {
-      return null;
-    }
-
     // Verify router ownership
     const router = await db
       .collection('routers')
       .findOne({
         _id: new ObjectId(routerId),
-        customerId: customer._id,
+        userId: new ObjectId(userId),
       });
 
     if (!router) {

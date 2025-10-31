@@ -1,3 +1,4 @@
+// src/app/routers/page.tsx
 import { Metadata } from 'next';
 import { getServerSession } from 'next-auth/next';
 import { redirect } from 'next/navigation';
@@ -19,19 +20,19 @@ async function getRoutersData(userId: string) {
     const client = await clientPromise;
     const db = client.db(process.env.MONGODB_DB_NAME || 'mikrotik_billing');
 
-    // Get customer
-    const customer = await db
-      .collection('customers')
-      .findOne({ userId: new ObjectId(userId) });
+    // Get user
+    const user = await db
+      .collection('users')
+      .findOne({ _id: new ObjectId(userId) });
 
-    if (!customer) {
+    if (!user) {
       return null;
     }
 
-    // Get routers
+    // Get routers owned by this user
     const routers = await db
       .collection('routers')
-      .find({ customerId: customer._id })
+      .find({ userId: new ObjectId(userId) })
       .toArray();
 
     // Calculate statistics

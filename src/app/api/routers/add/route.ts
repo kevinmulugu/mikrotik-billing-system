@@ -93,16 +93,13 @@ export async function POST(req: NextRequest) {
     const client = await clientPromise;
     const db = client.db(process.env.MONGODB_DB_NAME || 'mikrotik_billing');
 
-    // Get customer
-    const customer = await db
-      .collection('customers')
-      .findOne({ userId: new ObjectId(userId) });
+    // Get user with business info
+    const user = await db
+      .collection('users')
+      .findOne({ _id: new ObjectId(userId) });
 
-    if (!customer) {
-      return NextResponse.json(
-        { error: 'Customer profile not found. Please complete your profile setup.' },
-        { status: 404 }
-      );
+    if (!user) {
+      return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
 
     // ============================================
@@ -138,17 +135,17 @@ export async function POST(req: NextRequest) {
       }
     };
 
-    // Check if customer has a plan
-    const hasPlan = customer.subscription &&
-      customer.subscription.plan &&
-      customer.subscription.plan !== 'none' &&
-      customer.subscription.status !== 'pending';
+    // Check if user has a plan
+    const hasPlan = user.subscription &&
+      user.subscription.plan &&
+      user.subscription.plan !== 'none' &&
+      user.subscription.status !== 'pending';
 
     let selectedPlan: string;
     let trialEnds: Date | null = null;
 
     if (!hasPlan) {
-      // Customer doesn't have a plan yet - require plan selection
+      // User doesn't have a plan yet - require plan selection
       if (!requestedPlan || !planSettings[requestedPlan]) {
         return NextResponse.json(
           { error: 'Please select a plan (individual, isp, or isp_pro) when adding your first router' },
@@ -157,12 +154,12 @@ export async function POST(req: NextRequest) {
       }
       selectedPlan = requestedPlan;
     } else {
-      // Customer already has a plan
-      selectedPlan = customer.subscription.plan;
+      // User already has a plan
+      selectedPlan = user.subscription.plan;
     }
 
     // Validate router limits for the selected plan
-    const currentRouters = customer.statistics?.totalRouters ?? 0;
+    const currentRouters = user.statistics?.totalRouters ?? 0;
     const settings = planSettings[selectedPlan];
 
     if (!settings) {
@@ -196,25 +193,25 @@ export async function POST(req: NextRequest) {
         'updatedAt': now
       };
 
-      await db.collection('customers').updateOne(
-        { _id: customer._id },
+      await db.collection('users').updateOne(
+        { _id: new ObjectId(userId) },
         { $set: subscriptionUpdate }
       );
 
       console.log(`[Router Add] ✓ Plan '${selectedPlan}' activated with 15-day trial ending ${trialEnds.toISOString()}`);
     } else {
-      // Customer already has a plan, use existing trial end date if in trial
-      if (customer.subscription.status === 'trial' && customer.subscription.endDate) {
-        trialEnds = new Date(customer.subscription.endDate);
+      // User already has a plan, use existing trial end date if in trial
+      if (user.subscription.status === 'trial' && user.subscription.endDate) {
+        trialEnds = new Date(user.subscription.endDate);
       }
     }
 
 
-    // Check if router with same IP already exists for this customer
+    // Check if router with same IP already exists for this user
     const existingRouter = await db
       .collection('routers')
       .findOne({
-        customerId: customer._id,
+        userId: new ObjectId(userId),
         'connection.localIP': body.ipAddress,
       });
 
@@ -295,7 +292,7 @@ export async function POST(req: NextRequest) {
 
     // Create router document
     const routerDocument = {
-      customerId: customer._id,
+      userId: new ObjectId(userId),
       routerInfo: {
         name: body.name,
         model: body.model,
@@ -415,7 +412,7 @@ export async function POST(req: NextRequest) {
         // Insert VPN tunnel with proper BSON types
         await db.collection('vpn_tunnels').insertOne({
           routerId: insertResult.insertedId,
-          customerId: customer._id,
+          userId: new ObjectId(userId),
           vpnConfig: {
             clientPrivateKey: encryptedPrivateKey,
             clientPublicKey: body.vpnPublicKey,
@@ -521,9 +518,9 @@ export async function POST(req: NextRequest) {
       }
     );
 
-    // Update customer statistics
-    await db.collection('customers').updateOne(
-      { _id: customer._id },
+    // Update user statistics
+    await db.collection('users').updateOne(
+      { _id: new ObjectId(userId) },
       {
         $inc: { 'statistics.totalRouters': 1 },
         $set: { updatedAt: new Date() },
@@ -576,7 +573,7 @@ export async function POST(req: NextRequest) {
           },
           {
             routerId: routerId,
-            customerId: customer._id.toString(),
+            customerId: userId,  // This is passed as customerId parameter to the captive portal files
             routerName: body.name,
             location: body.location.name || body.location.county,
             baseUrl: process.env.NEXT_PUBLIC_BASE_URL || process.env.BASE_URL || 'http://localhost:3000',

@@ -102,7 +102,7 @@ export async function GET(_request: NextRequest, { params }: RouteContext) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const ticketId = params.id
+    const { id: ticketId } = await params
     if (!isValidObjectId(ticketId)) {
       return NextResponse.json({ error: 'Invalid ticket id' }, { status: 400 })
     }
@@ -127,7 +127,7 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const ticketId = params.id
+    const { id: ticketId } = await params
     if (!isValidObjectId(ticketId)) {
       return NextResponse.json({ error: 'Invalid ticket id' }, { status: 400 })
     }

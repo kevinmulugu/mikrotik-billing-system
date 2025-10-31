@@ -30,20 +30,25 @@ export default async function AddRouterPage() {
     redirect('/signin');
   }
 
-  // Check customer's router limit
+  // Check user's router limit
   const client = await clientPromise;
   const db = client.db(process.env.MONGODB_DB_NAME || 'mikrotik_billing');
 
-  const customer = await db.collection('customers').findOne({
-    userId: new ObjectId(session.user.id)
+  const user = await db.collection('users').findOne({
+    _id: new ObjectId(session.user.id)
   });
 
-  if (!customer) {
+  if (!user) {
     redirect('/dashboard');
   }
 
-  const currentPlan = customer.subscription?.plan || 'none';
-  const currentRouters = customer.statistics?.totalRouters || 0;
+  const currentPlan = user.subscription?.plan || 'individual';
+  
+  // Count actual routers owned by this user
+  const currentRouters = await db.collection('routers').countDocuments({
+    userId: new ObjectId(session.user.id)
+  });
+  
   const planLimit = planLimits[currentPlan];
 
   // Check if user has reached router limit

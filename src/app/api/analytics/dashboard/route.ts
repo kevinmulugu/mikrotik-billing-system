@@ -17,11 +17,11 @@ export async function GET(req: NextRequest) {
     }
 
     // Extract user and customer IDs
-    const customerId = session.user.id;
+    const userId = session.user.id;
 
-    if (!customerId) {
+    if (!userId) {
       return NextResponse.json(
-        { error: 'Customer profile not found' },
+        { error: 'User profile not found' },
         { status: 404 }
       );
     }
@@ -30,14 +30,14 @@ export async function GET(req: NextRequest) {
     const client = await clientPromise;
     const db = client.db(process.env.MONGODB_DB_NAME || 'mikrotik_billing');
 
-    // Get customer data
-    const customer = await db
-      .collection('customers')
-      .findOne({ userId: new ObjectId(customerId) });
+    // Get user data
+    const user = await db
+      .collection('users')
+      .findOne({ _id: new ObjectId(userId) });
 
-    if (!customer) {
+    if (!user) {
       return NextResponse.json(
-        { error: 'Customer not found ' },
+        { error: 'User not found' },
         { status: 404 }
       );
     }
@@ -50,7 +50,7 @@ export async function GET(req: NextRequest) {
     const totalRouters = await db
       .collection('routers')
       .countDocuments({ 
-        customerId: new ObjectId(customerId),
+        userId: new ObjectId(userId),
         status: 'active'
       });
 
@@ -58,7 +58,7 @@ export async function GET(req: NextRequest) {
     const onlineRouters = await db
       .collection('routers')
       .countDocuments({
-        customerId: new ObjectId(customerId),
+        userId: new ObjectId(userId),
         'health.status': 'online',
         status: 'active'
       });
@@ -67,7 +67,7 @@ export async function GET(req: NextRequest) {
     const activeVouchers = await db
       .collection('vouchers')
       .countDocuments({
-        customerId: new ObjectId(customerId),
+        userId: new ObjectId(userId),
         status: 'used',
         'usage.endTime': { $gte: new Date() }
       });
@@ -75,7 +75,7 @@ export async function GET(req: NextRequest) {
     const activePppoeUsers = await db
       .collection('pppoe_users')
       .countDocuments({
-        customerId: new ObjectId(customerId),
+        userId: new ObjectId(userId),
         status: 'active',
         'connection.isOnline': true
       });
@@ -92,7 +92,7 @@ export async function GET(req: NextRequest) {
       .aggregate([
         {
           $match: {
-            customerId: new ObjectId(customerId),
+            userId: new ObjectId(userId),
             status: 'completed'
           }
         },
@@ -140,7 +140,7 @@ export async function GET(req: NextRequest) {
     const recentPayments = await db
       .collection('payments')
       .find({
-        customerId: new ObjectId(customerId),
+        userId: new ObjectId(userId),
         status: 'completed'
       })
       .sort({ createdAt: -1 })
@@ -162,7 +162,7 @@ export async function GET(req: NextRequest) {
     
     const routers = await db
       .collection('routers')
-      .find({ customerId: new ObjectId(customerId) })
+      .find({ userId: new ObjectId(userId) })
       .project({
         _id: 1,
         'routerInfo.name': 1,
@@ -195,7 +195,7 @@ export async function GET(req: NextRequest) {
       .aggregate([
         {
           $match: {
-            customerId: new ObjectId(customerId),
+            userId: new ObjectId(userId),
             status: 'completed',
             createdAt: { $gte: sevenDaysAgo }
           }
@@ -230,7 +230,7 @@ export async function GET(req: NextRequest) {
       .aggregate([
         {
           $match: {
-            customerId: new ObjectId(customerId)
+            userId: new ObjectId(userId)
           }
         },
         {
@@ -258,7 +258,7 @@ export async function GET(req: NextRequest) {
       .aggregate([
         {
           $match: {
-            customerId: new ObjectId(customerId)
+            userId: new ObjectId(userId)
           }
         },
         {
@@ -286,7 +286,7 @@ export async function GET(req: NextRequest) {
       .aggregate([
         {
           $match: {
-            customerId: new ObjectId(customerId),
+            userId: new ObjectId(userId),
             status: { $in: ['used', 'active'] },
             createdAt: { $gte: thirtyDaysAgo }
           }
@@ -373,12 +373,12 @@ export async function GET(req: NextRequest) {
       pppoeUsers,
       topSellingPackages,
       alerts,
-      customer: {
-        id: customer._id.toString(),
-        name: customer.businessInfo?.name,
-        type: customer.businessInfo?.type,
-        plan: customer.subscription?.plan,
-        commissionRate: customer.paymentSettings?.commissionRate,
+      user: {
+        id: user._id.toString(),
+        name: user.businessInfo?.name,
+        type: user.businessInfo?.type,
+        plan: user.subscription?.plan,
+        commissionRate: user.paymentSettings?.commissionRate,
       },
     };
 

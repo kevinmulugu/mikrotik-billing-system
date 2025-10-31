@@ -145,8 +145,8 @@ export async function POST(request: NextRequest) {
     }
 
     // Calculate commission
-    const customer = await db.collection('customers').findOne({
-      _id: voucher.customerId,
+    const routerOwner = await db.collection('users').findOne({
+      _id: voucher.userId,
     });
 
     const systemConfig = await db.collection('system_config').findOne({
@@ -160,8 +160,8 @@ export async function POST(request: NextRequest) {
       enterprise: 0.0,
     };
 
-    const customerType = customer?.type || 'personal';
-    const commissionRate = commissionRates[customerType] || 20.0;
+    const userType = routerOwner?.businessInfo?.type || 'personal';
+    const commissionRate = routerOwner?.paymentSettings?.commissionRate ?? commissionRates[userType] ?? 20.0;
     const commissionAmount = paidAmount * (commissionRate / 100);
 
     // Calculate expiry timestamps based on voucher configuration
@@ -208,7 +208,7 @@ export async function POST(request: NextRequest) {
 
     // Record commission in transactions
     await db.collection('transactions').insertOne({
-      customerId: voucher.customerId,
+      userId: voucher.userId,
       routerId: voucher.routerId,
       voucherId: voucher._id,
       type: 'voucher_sale',
@@ -230,7 +230,7 @@ export async function POST(request: NextRequest) {
 
     // Create audit log
     await db.collection('audit_logs').insertOne({
-      userId: voucher.customerId,
+      userId: voucher.userId,
       action: 'voucher_purchased',
       resourceType: 'voucher',
       resourceId: voucher._id,

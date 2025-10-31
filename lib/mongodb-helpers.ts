@@ -191,6 +191,14 @@ export const RouterHelpers = {
       _id: toObjectId(routerId),
       customerId: toObjectId(customerId)
     })
+  },
+
+  async findByIdAndUser(routerId: string, userId: string) {
+    const collection = await this.getCollection()
+    return collection.findOne({
+      _id: toObjectId(routerId),
+      userId: toObjectId(userId)
+    })
   }
 }
 

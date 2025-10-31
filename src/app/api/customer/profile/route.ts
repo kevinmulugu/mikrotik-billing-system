@@ -19,28 +19,28 @@ export async function GET(req: NextRequest) {
     const client = await clientPromise;
     const db = client.db(process.env.MONGODB_DB_NAME || 'mikrotik_billing');
 
-    // Get customer profile
-    const customer = await db
-      .collection('customers')
-      .findOne({ userId: new ObjectId(userId) });
+    // Get user profile
+    const user = await db
+      .collection('users')
+      .findOne({ _id: new ObjectId(userId) });
 
-    if (!customer) {
+    if (!user) {
       return NextResponse.json(
-        { error: 'Customer profile not found' },
+        { error: 'User profile not found' },
         { status: 404 }
       );
     }
 
-    // Return customer data
+    // Return user data
     return NextResponse.json({
       success: true,
       customer: {
-        id: customer._id.toString(),
-        businessInfo: customer.businessInfo,
-        subscription: customer.subscription,
-        paymentSettings: customer.paymentSettings,
-        statistics: customer.statistics,
-        status: customer.status,
+        id: user._id.toString(),
+        businessInfo: user.businessInfo,
+        subscription: user.subscription,
+        paymentSettings: user.paymentSettings,
+        statistics: user.statistics,
+        status: user.status,
       },
     });
 

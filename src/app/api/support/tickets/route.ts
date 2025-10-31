@@ -164,16 +164,9 @@ export async function POST(request: NextRequest) {
         )
       }
 
-      if (!session.user.customerId) {
-        return NextResponse.json(
-          { error: 'Customer ID is missing from session' },
-          { status: 400 }
-        )
-      }
-
-      const router = await RouterHelpers.findByIdAndCustomer(
+      const router = await RouterHelpers.findByIdAndUser(
         validated.routerId,
-        session.user.customerId
+        session.user.id
       )
 
       if (!router) {
@@ -214,7 +207,6 @@ export async function POST(request: NextRequest) {
     // Create ticket document
     const ticketDoc = {
       userId: toObjectId(session.user.id),
-      customerId: session.user.customerId ? toObjectId(session.user.customerId) : null,
       routerId: validated.routerId && validated.routerId !== 'none' 
         ? toObjectId(validated.routerId)
         : null,

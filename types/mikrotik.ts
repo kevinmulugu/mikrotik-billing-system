@@ -164,7 +164,7 @@ export interface SyncResult {
 
 export interface RouterDocument {
   _id: any;
-  customerId: any;
+  userId: any;
   routerInfo: {
     name: string;
     model: string;

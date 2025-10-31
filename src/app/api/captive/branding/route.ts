@@ -107,44 +107,44 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Query customer for branding information
-    const customer = await db.collection('customers').findOne({
-      _id: router.customerId,
+    // Query router owner for branding information
+    const routerOwner = await db.collection('users').findOne({
+      _id: router.userId,
     });
 
     // Build branding object
     let branding;
 
-    if (customer && customer.branding) {
-      // Customer has custom branding
+    if (routerOwner && routerOwner.branding) {
+      // Router owner has custom branding
       branding = {
-        logo_url: customer.branding.logo || DEFAULT_BRANDING.logo_url,
-        primary_color: customer.branding.primaryColor || DEFAULT_BRANDING.primary_color,
-        secondary_color: customer.branding.secondaryColor || DEFAULT_BRANDING.secondary_color,
-        company_name: customer.branding.companyName || customer.businessInfo?.name || DEFAULT_BRANDING.company_name,
-        location: router.routerInfo?.location?.name || customer.businessInfo?.address?.city || '',
+        logo_url: routerOwner.branding.logo || DEFAULT_BRANDING.logo_url,
+        primary_color: routerOwner.branding.primaryColor || DEFAULT_BRANDING.primary_color,
+        secondary_color: routerOwner.branding.secondaryColor || DEFAULT_BRANDING.secondary_color,
+        company_name: routerOwner.branding.companyName || routerOwner.businessInfo?.name || DEFAULT_BRANDING.company_name,
+        location: router.routerInfo?.location?.name || routerOwner.businessInfo?.address?.city || '',
         support: {
-          phone: customer.businessInfo?.contact?.phone || DEFAULT_BRANDING.support.phone,
-          email: customer.businessInfo?.contact?.email || DEFAULT_BRANDING.support.email,
+          phone: routerOwner.businessInfo?.contact?.phone || DEFAULT_BRANDING.support.phone,
+          email: routerOwner.businessInfo?.contact?.email || DEFAULT_BRANDING.support.email,
           hours: '24/7',
         },
       };
-    } else if (customer) {
-      // Customer exists but no custom branding - use business info
+    } else if (routerOwner) {
+      // Router owner exists but no custom branding - use business info
       branding = {
         logo_url: DEFAULT_BRANDING.logo_url,
         primary_color: DEFAULT_BRANDING.primary_color,
         secondary_color: DEFAULT_BRANDING.secondary_color,
-        company_name: customer.businessInfo?.name || DEFAULT_BRANDING.company_name,
-        location: router.routerInfo?.location?.name || customer.businessInfo?.address?.city || '',
+        company_name: routerOwner.businessInfo?.name || DEFAULT_BRANDING.company_name,
+        location: router.routerInfo?.location?.name || routerOwner.businessInfo?.address?.city || '',
         support: {
-          phone: customer.businessInfo?.contact?.phone || DEFAULT_BRANDING.support.phone,
-          email: customer.businessInfo?.contact?.email || DEFAULT_BRANDING.support.email,
+          phone: routerOwner.businessInfo?.contact?.phone || DEFAULT_BRANDING.support.phone,
+          email: routerOwner.businessInfo?.contact?.email || DEFAULT_BRANDING.support.email,
           hours: '24/7',
         },
       };
     } else {
-      // Customer not found - use defaults
+      // Router owner not found - use defaults
       branding = {
         ...DEFAULT_BRANDING,
         location: router.routerInfo?.location?.name || '',
@@ -157,7 +157,7 @@ export async function GET(request: NextRequest) {
         await db.collection('analytics').insertOne({
           event: 'captive_portal_view',
           routerId: router._id,
-          customerId: router.customerId,
+          userId: router.userId,
           mac: mac,
           timestamp: new Date(),
           metadata: {

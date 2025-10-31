@@ -75,7 +75,6 @@ export interface TicketRouter {
 
 export interface Ticket {
   _id: string
-  customerId: string
   userId: {
     _id: string
     name: string

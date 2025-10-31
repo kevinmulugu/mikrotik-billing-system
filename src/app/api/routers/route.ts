@@ -23,24 +23,10 @@ export async function GET(req: NextRequest) {
     const client = await clientPromise;
     const db = client.db(process.env.MONGODB_DB_NAME || 'mikrotik_billing');
 
-    // Get customer data using userId
-    const customer = await db
-      .collection('customers')
-      .findOne({ userId: new ObjectId(userId) });
-
-    if (!customer) {
-      return NextResponse.json(
-        { error: 'Customer not found' },
-        { status: 404 }
-      );
-    }
-
-    const customerId = customer._id;
-
-    // Get all routers for this customer
+    // Get all routers for this user
     const routers = await db
       .collection('routers')
-      .find({ customerId: customerId })
+      .find({ userId: new ObjectId(userId) })
       .toArray();
 
     // Get statistics

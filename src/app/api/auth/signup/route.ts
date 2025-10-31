@@ -26,7 +26,6 @@ export async function POST(request: NextRequest) {
     const client = await clientPromise;
     const db = client.db();
     const usersCollection = db.collection('users');
-    const customersCollection = db.collection('customers');
 
     // Check if user already exists
     const existingUser = await usersCollection.findOne({ email: email.toLowerCase() });
@@ -37,37 +36,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Create user document
+    // Create user document with business fields
     const now = new Date();
     const newUser = {
       email: email.toLowerCase(),
       name: name || null,
       emailVerified: null, // Will be set when they click the magic link
       image: null,
-      role: 'homeowner', // Default role, will be updated when user adds a router
+      role: 'homeowner', // Default role
       status: 'pending', // Changed to pending until email verified
-      preferences: {
-        language: 'en',
-        notifications: { email: true, sms: true, push: true },
-        theme: 'system'
-      },
-      metadata: {
-        loginCount: 0,
-        lastLogin: null,
-        ipAddress: null,
-        userAgent: null
-      },
-      createdAt: now,
-      updatedAt: now
-    };
-
-    const userResult = await usersCollection.insertOne(newUser);
-    const userId = userResult.insertedId;
-
-    // Create customer record with default settings
-    // Plan will be set when user adds their first router
-    const newCustomer = {
-      userId: userId,
       businessInfo: {
         name: name ? `${name}'s WiFi` : 'My WiFi Business',
         type: 'homeowner', // Default, will be updated when adding router
@@ -87,7 +64,7 @@ export async function POST(request: NextRequest) {
         preferredMethod: 'company_paybill',
         paybillNumber: null,
         accountNumber: null,
-        commissionRate: 20, // Default 20%, will be updated based on plan selection
+        commissionRate: 20, // Default 20% for homeowners
         autoPayouts: true
       },
       subscription: {
@@ -103,18 +80,23 @@ export async function POST(request: NextRequest) {
         totalRevenue: 0,
         monthlyRevenue: 0
       },
-      status: 'active',
+      preferences: {
+        language: 'en',
+        notifications: { email: true, sms: true, push: true },
+        theme: 'system'
+      },
+      metadata: {
+        loginCount: 0,
+        lastLogin: null,
+        ipAddress: null,
+        userAgent: null
+      },
       createdAt: now,
       updatedAt: now
     };
 
-    const customerResult = await customersCollection.insertOne(newCustomer);
-
-    // Link customer to user
-    await usersCollection.updateOne(
-      { _id: userId },
-      { $set: { customerId: customerResult.insertedId, updatedAt: now } }
-    );
+    const userResult = await usersCollection.insertOne(newUser);
+    const userId = userResult.insertedId;
 
     return NextResponse.json({
       success: true,

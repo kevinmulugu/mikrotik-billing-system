@@ -33,21 +33,12 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const client = await clientPromise;
     const db = client.db(process.env.MONGODB_DB_NAME || 'mikrotik_billing');
 
-    // Get customer
-    const customer = await db
-      .collection('customers')
-      .findOne({ userId: new ObjectId(userId) });
-
-    if (!customer) {
-      return NextResponse.json({ error: 'Customer not found' }, { status: 404 });
-    }
-
-    // Fetch router from database
+    // Fetch router from database and verify ownership
     const routerDoc = await db
       .collection('routers')
       .findOne({
         _id: new ObjectId(routerId),
-        customerId: customer._id,
+        userId: new ObjectId(userId),
       });
 
     if (!routerDoc) {
@@ -239,21 +230,12 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     const client = await clientPromise;
     const db = client.db(process.env.MONGODB_DB_NAME || 'mikrotik_billing');
 
-    // Get customer
-    const customer = await db
-      .collection('customers')
-      .findOne({ userId: new ObjectId(userId) });
-
-    if (!customer) {
-      return NextResponse.json({ error: 'Customer not found' }, { status: 404 });
-    }
-
-    // Get router details before deletion for audit log
+    // Get router details before deletion for audit log and verify ownership
     const router = await db
       .collection('routers')
       .findOne({
         _id: new ObjectId(routerId),
-        customerId: customer._id,
+        userId: new ObjectId(userId),
       });
 
     if (!router) {
@@ -263,16 +245,16 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     // Delete router
     const result = await db.collection('routers').deleteOne({
       _id: new ObjectId(routerId),
-      customerId: customer._id,
+      userId: new ObjectId(userId),
     });
 
     if (result.deletedCount === 0) {
       return NextResponse.json({ error: 'Router not found' }, { status: 404 });
     }
 
-    // Update customer statistics
-    await db.collection('customers').updateOne(
-      { _id: customer._id },
+    // Update user statistics
+    await db.collection('users').updateOne(
+      { _id: new ObjectId(userId) },
       {
         $inc: { 'statistics.totalRouters': -1 },
         $set: { updatedAt: new Date() },

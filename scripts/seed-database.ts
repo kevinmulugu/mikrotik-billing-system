@@ -73,43 +73,20 @@ async function seedDatabase() {
     console.log('\n👥 Creating demo homeowner...');
 
     const homeownerUserId = new ObjectId();
-    const homeownerCustomerId = new ObjectId();
 
     const homeownerExists = await db
       .collection('users')
       .findOne({ email: 'homeowner@demo.com' });
 
     if (!homeownerExists) {
-      // Create user
+      // Create user with business info
       await db.collection('users').insertOne({
         _id: homeownerUserId,
         name: 'John Homeowner',
         email: 'homeowner@demo.com',
         emailVerified: new Date(),
         role: 'homeowner',
-        customerId: homeownerCustomerId,
         status: 'active',
-        preferences: {
-          language: 'en',
-          notifications: {
-            email: true,
-            sms: true,
-            push: true,
-          },
-          theme: 'light',
-        },
-        metadata: {
-          loginCount: 0,
-          lastLogin: null,
-        },
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      });
-
-      // Create customer profile
-      await db.collection('customers').insertOne({
-        _id: homeownerCustomerId,
-        userId: homeownerUserId,
         businessInfo: {
           name: 'John Homeowner WiFi',
           type: 'homeowner',
@@ -145,7 +122,19 @@ async function seedDatabase() {
           totalRevenue: 0,
           monthlyRevenue: 0,
         },
-        status: 'active',
+        preferences: {
+          language: 'en',
+          notifications: {
+            email: true,
+            sms: true,
+            push: true,
+          },
+          theme: 'light',
+        },
+        metadata: {
+          loginCount: 0,
+          lastLogin: null,
+        },
         createdAt: new Date(),
         updatedAt: new Date(),
       });
@@ -170,7 +159,7 @@ async function seedDatabase() {
     if (!routerExists) {
       await db.collection('routers').insertOne({
         _id: routerId,
-        customerId: homeownerCustomerId,
+        userId: homeownerUserId,
         routerInfo: {
           name: 'Main House WiFi',
           model: 'MikroTik hAP ac²',
@@ -454,43 +443,20 @@ async function seedDatabase() {
     console.log('\n🏢 Creating demo ISP customer...');
 
     const ispUserId = new ObjectId();
-    const ispCustomerId = new ObjectId();
 
     const ispExists = await db
       .collection('users')
       .findOne({ email: 'isp@demo.com' });
 
     if (!ispExists) {
-      // Create ISP user
+      // Create ISP user with business info
       await db.collection('users').insertOne({
         _id: ispUserId,
         name: 'Demo ISP Networks',
         email: 'isp@demo.com',
         emailVerified: new Date(),
         role: 'isp',
-        customerId: ispCustomerId,
         status: 'active',
-        preferences: {
-          language: 'en',
-          notifications: {
-            email: true,
-            sms: true,
-            push: true,
-          },
-          theme: 'system',
-        },
-        metadata: {
-          loginCount: 0,
-          lastLogin: null,
-        },
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      });
-
-      // Create ISP customer profile
-      await db.collection('customers').insertOne({
-        _id: ispCustomerId,
-        userId: ispUserId,
         businessInfo: {
           name: 'Demo ISP Networks Ltd',
           type: 'isp',
@@ -528,7 +494,19 @@ async function seedDatabase() {
           totalRevenue: 0,
           monthlyRevenue: 0,
         },
-        status: 'active',
+        preferences: {
+          language: 'en',
+          notifications: {
+            email: true,
+            sms: true,
+            push: true,
+          },
+          theme: 'system',
+        },
+        metadata: {
+          loginCount: 0,
+          lastLogin: null,
+        },
         createdAt: new Date(),
         updatedAt: new Date(),
       });
@@ -564,7 +542,9 @@ async function seedDatabase() {
           vouchers.push({
             _id: new ObjectId(),
             routerId,
-            customerId: homeownerCustomerId,
+            userId: homeownerUserId,  // Router owner
+            customerId: null,  // WiFi customer (null = not purchased yet)
+            reference: `VCH${Date.now()}${i}`,  // Unique payment reference
             voucherInfo: {
               code: `DEMO${String(i + 1).padStart(4, '0')}`,
               password: `DEMO${String(i + 1).padStart(4, '0')}`,
@@ -625,7 +605,7 @@ async function seedDatabase() {
 
     const paymentsExist = await db
       .collection('payments')
-      .countDocuments({ customerId: homeownerCustomerId });
+      .countDocuments({ userId: homeownerUserId });
 
     if (paymentsExist === 0) {
       const payments = [];
@@ -633,7 +613,7 @@ async function seedDatabase() {
       for (let i = 0; i < 5; i++) {
         payments.push({
           _id: new ObjectId(),
-          customerId: homeownerCustomerId,
+          userId: homeownerUserId,
           transaction: {
             type: 'voucher_purchase',
             amount: 100,
@@ -734,12 +714,70 @@ async function seedDatabase() {
       console.log('  ⊙ Company paybill already exists');
     }
 
+    // ==========================================
+    // 7. SEED DEMO WIFI CUSTOMERS (Voucher Purchasers)
+    // ==========================================
+    console.log('\n📱 Creating demo WiFi customers...');
+
+    const wifiCustomers = [
+      {
+        phone: '+254700111222',
+        name: 'Alice Wanjiku',
+        email: 'alice@example.com',
+      },
+      {
+        phone: '+254700333444',
+        name: 'Bob Kamau',
+        email: 'bob@example.com',
+      },
+      {
+        phone: '+254700555666',
+        name: 'Carol Akinyi',
+        email: null,  // Some customers may not provide email
+      },
+    ];
+
+    let customersCreated = 0;
+    for (const customer of wifiCustomers) {
+      const exists = await db
+        .collection('customers')
+        .findOne({ phone: customer.phone });
+
+      if (!exists) {
+        // Calculate SHA-256 hash for phone number (for M-Pesa webhook matching)
+        const crypto = await import('crypto');
+        const sha256Phone = crypto
+          .createHash('sha256')
+          .update(customer.phone)
+          .digest('hex');
+
+        await db.collection('customers').insertOne({
+          _id: new ObjectId(),
+          phone: customer.phone,
+          sha256Phone,
+          name: customer.name,
+          email: customer.email,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          lastPurchaseDate: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000), // 7 days ago
+        });
+        customersCreated++;
+      }
+    }
+
+    if (customersCreated > 0) {
+      console.log(`  ✓ Created ${customersCreated} WiFi customers`);
+      console.log('    (These are people who purchased vouchers)');
+    } else {
+      console.log('  ⊙ WiFi customers already exist');
+    }
+
     console.log('\n✅ Database seeding completed successfully!\n');
 
     // Show summary
     console.log('📊 Seeded Data Summary:');
     console.log('  👤 Users: 3 (1 admin, 1 homeowner, 1 ISP)');
-    console.log('  🏢 Customers: 2 (1 homeowner, 1 ISP)');
+    console.log('  📱 WiFi Customers: 3 (voucher purchasers)');
     console.log('  🔌 Routers: 1 demo router');
     console.log('  🎫 Vouchers: 10 (3 used, 7 active)');
     console.log('  💰 Payments: 5 completed transactions');

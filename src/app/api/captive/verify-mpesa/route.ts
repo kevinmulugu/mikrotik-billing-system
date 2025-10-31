@@ -211,10 +211,10 @@ export async function POST(request: NextRequest) {
     // Find payment by M-Pesa transaction ID
     const payment = await db.collection('payments').findOne({
       'mpesa.transactionId': transactionCode,
-      customerId: router.customerId,
+      userId: router.userId,
     });
 
-    // Payment not found or doesn't belong to this customer
+    // Payment not found or doesn't belong to this router owner
     if (!payment) {
       await db.collection('verification_attempts').updateOne(
         { _id: attemptLogId },

@@ -50,24 +50,12 @@ export async function GET(
     const client = await clientPromise;
     const db = client.db(process.env.MONGODB_DB_NAME || 'mikrotik_billing');
 
-    // Get customer
-    const customer = await db
-      .collection('customers')
-      .findOne({ userId: new ObjectId(userId) });
-
-    if (!customer) {
-      return NextResponse.json(
-        { error: 'Customer not found' },
-        { status: 404 }
-      );
-    }
-
     // Verify router ownership
     const router = await db
       .collection('routers')
       .findOne({
         _id: new ObjectId(routerId),
-        customerId: customer._id,
+        userId: new ObjectId(userId),
       });
 
     if (!router) {
@@ -80,7 +68,7 @@ export async function GET(
     // Build query filters
     const query: any = {
       routerId: new ObjectId(routerId),
-      customerId: customer._id,
+      userId: new ObjectId(userId),
     };
 
     // Status filter
@@ -138,7 +126,7 @@ export async function GET(
     // Calculate statistics for all vouchers (not just filtered)
     const statsQuery: any = {
       routerId: new ObjectId(routerId),
-      customerId: customer._id,
+      userId: new ObjectId(userId),
     };
 
     const allVouchers = await db

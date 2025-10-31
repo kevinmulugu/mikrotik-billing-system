@@ -16,7 +16,6 @@ interface ICommunication {
 
 // Ticket interface
 export interface ITicket extends Document {
-  customerId: mongoose.Types.ObjectId
   userId: mongoose.Types.ObjectId
   routerId?: mongoose.Types.ObjectId
   ticket: {
@@ -89,12 +88,6 @@ const CommunicationSchema = new Schema<ICommunication>({
 // Ticket schema
 const TicketSchema = new Schema<ITicket>(
   {
-    customerId: {
-      type: Schema.Types.ObjectId,
-      ref: 'Customer',
-      required: true,
-      index: true,
-    },
     userId: {
       type: Schema.Types.ObjectId,
       ref: 'User',
@@ -198,7 +191,7 @@ const TicketSchema = new Schema<ITicket>(
 // Indexes for performance
 TicketSchema.index({ createdAt: -1 })
 TicketSchema.index({ status: 1, 'ticket.priority': 1 })
-TicketSchema.index({ customerId: 1, status: 1 })
+TicketSchema.index({ userId: 1, status: 1 })
 TicketSchema.index({ 'sla.breachedSla': 1 })
 
 // Text search index
@@ -266,10 +259,10 @@ TicketSchema.pre('save', function(next) {
 })
 
 // Static method to get ticket statistics
-TicketSchema.statics.getStatistics = async function(customerId: string) {
+TicketSchema.statics.getStatistics = async function(userId: string) {
   const stats = await this.aggregate([
     {
-      $match: { customerId: new mongoose.Types.ObjectId(customerId) }
+      $match: { userId: new mongoose.Types.ObjectId(userId) }
     },
     {
       $group: {

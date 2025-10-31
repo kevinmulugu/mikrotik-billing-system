@@ -1,3 +1,4 @@
+// lib/auth.ts
 import { NextAuthOptions } from 'next-auth';
 import GoogleProvider from 'next-auth/providers/google';
 import EmailProvider from 'next-auth/providers/email';
@@ -133,108 +134,74 @@ export const authOptions: NextAuthOptions = {
           return '/signup?error=AccountNotFound&email=' + encodeURIComponent(user.email);
         }
 
-        // User exists - allow sign in and set up if needed
+        // User exists - allow sign in and set up business fields if missing
         const userId = existingUser._id;
-        let needsSetup = !existingUser.role || !existingUser.customerId;
+        let needsSetup = !existingUser.role || !existingUser.businessInfo;
 
         if (needsSetup) {
-          const customersCollection = db.collection('customers');
+          const updateFields: any = {
+            updatedAt: new Date()
+          };
 
           // Set role if missing
           if (!existingUser.role) {
-            await usersCollection.updateOne(
-              { _id: userId },
-              {
-                $set: {
-                  role: 'homeowner',
-                  status: 'active',
-                  emailVerified: new Date(),
-                  preferences: {
-                    language: 'en',
-                    notifications: { email: true, sms: true, push: true },
-                    theme: 'system'
-                  },
-                  metadata: {
-                    loginCount: 0,
-                    lastLogin: new Date()
-                  },
-                  updatedAt: new Date()
-                }
-              }
-            );
+            updateFields.role = 'homeowner';
+            updateFields.status = 'active';
+            updateFields.emailVerified = new Date();
+            updateFields.preferences = {
+              language: 'en',
+              notifications: { email: true, sms: true, push: true },
+              theme: 'system'
+            };
+            updateFields.metadata = {
+              loginCount: 0,
+              lastLogin: new Date()
+            };
           }
 
-          // Create customer if missing
-          if (!existingUser.customerId) {
-            const existingCustomer = await customersCollection.findOne({ userId: userId });
-
-            if (existingCustomer) {
-              await usersCollection.updateOne(
-                { _id: userId },
-                { $set: { customerId: existingCustomer._id, updatedAt: new Date() } }
-              );
-            } else {
-              const newCustomer = {
-                userId: userId,
-                businessInfo: {
-                  name: user.name ? `${user.name}'s WiFi` : 'My WiFi Business',
-                  type: 'homeowner',
-                  address: {
-                    street: '',
-                    city: '',
-                    county: '',
-                    country: 'Kenya',
-                    postalCode: ''
-                  },
-                  contact: {
-                    phone: '',
-                    email: user.email.toLowerCase()
-                  }
-                },
-                paymentSettings: {
-                  preferredMethod: 'company_paybill',
-                  paybillNumber: null,
-                  accountNumber: null,
-                  commissionRate: 20,
-                  autoPayouts: true
-                },
-                subscription: {
-                  plan: 'personal',
-                  status: 'active',
-                  startDate: new Date(),
-                  endDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
-                  features: ['single_router', 'basic_analytics', 'email_support']
-                },
-                statistics: {
-                  totalRouters: 0,
-                  activeUsers: 0,
-                  totalRevenue: 0,
-                  monthlyRevenue: 0
-                },
-                status: 'active',
-                createdAt: new Date(),
-                updatedAt: new Date()
-              };
-
-              try {
-                const result = await customersCollection.insertOne(newCustomer);
-                await usersCollection.updateOne(
-                  { _id: userId },
-                  { $set: { customerId: result.insertedId, updatedAt: new Date() } }
-                );
-              } catch (error: any) {
-                if (error.code === 11000) {
-                  const existingCustomer = await customersCollection.findOne({ userId: userId });
-                  if (existingCustomer) {
-                    await usersCollection.updateOne(
-                      { _id: userId },
-                      { $set: { customerId: existingCustomer._id, updatedAt: new Date() } }
-                    );
-                  }
-                }
+          // Add business fields if missing
+          if (!existingUser.businessInfo) {
+            updateFields.businessInfo = {
+              name: user.name ? `${user.name}'s WiFi` : 'My WiFi Business',
+              type: 'homeowner',
+              address: {
+                street: '',
+                city: '',
+                county: '',
+                country: 'Kenya',
+                postalCode: ''
+              },
+              contact: {
+                phone: '',
+                email: user.email.toLowerCase()
               }
-            }
+            };
+            updateFields.paymentSettings = {
+              preferredMethod: 'company_paybill',
+              paybillNumber: null,
+              accountNumber: null,
+              commissionRate: 20,
+              autoPayouts: true
+            };
+            updateFields.subscription = {
+              plan: 'personal',
+              status: 'active',
+              startDate: new Date(),
+              endDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
+              features: ['single_router', 'basic_analytics', 'email_support']
+            };
+            updateFields.statistics = {
+              totalRouters: 0,
+              activeUsers: 0,
+              totalRevenue: 0,
+              monthlyRevenue: 0
+            };
           }
+
+          await usersCollection.updateOne(
+            { _id: userId },
+            { $set: updateFields }
+          );
         }
 
         return true;
@@ -248,9 +215,20 @@ export const authOptions: NextAuthOptions = {
       if (session.user && user) {
         session.user.id = user.id;
         session.user.role = user.role || 'homeowner';
-        if (user.customerId) {
-          // Convert ObjectId to string for client serialization
-          session.user.customerId = String(user.customerId);
+        
+        // Include business fields in session
+        const userData = user as any;
+        if (userData.businessInfo) {
+          (session.user as any).businessInfo = userData.businessInfo;
+        }
+        if (userData.paymentSettings) {
+          (session.user as any).paymentSettings = userData.paymentSettings;
+        }
+        if (userData.subscription) {
+          (session.user as any).subscription = userData.subscription;
+        }
+        if (userData.statistics) {
+          (session.user as any).statistics = userData.statistics;
         }
       }
       return session;

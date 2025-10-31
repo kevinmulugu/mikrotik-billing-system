@@ -53,8 +53,8 @@ async function createTicketIndexes(db: Db) {
   console.log('  📋 Creating ticket indexes...');
 
   // Single field indexes
-  await collection.createIndex({ customerId: 1 });
-  console.log('    ✓ customerId');
+  await collection.createIndex({ userId: 1 });
+  console.log('    ✓ userId');
 
   await collection.createIndex({ userId: 1 });
   console.log('    ✓ userId');
@@ -72,8 +72,8 @@ async function createTicketIndexes(db: Db) {
   console.log('    ✓ sla.breachedSla');
 
   // Compound indexes for common queries
-  await collection.createIndex({ customerId: 1, status: 1 });
-  console.log('    ✓ customerId + status (compound)');
+  await collection.createIndex({ userId: 1, status: 1 });
+  console.log('    ✓ userId + status (compound)');
 
   await collection.createIndex({ status: 1, 'ticket.priority': 1 });
   console.log('    ✓ status + ticket.priority (compound)');
@@ -89,12 +89,12 @@ async function createTicketIndexes(db: Db) {
 /**
  * Get ticket statistics helper function
  */
-async function getTicketStatistics(db: Db, customerId: string) {
+async function getTicketStatistics(db: Db, userId: string) {
   const collection = db.collection('tickets');
 
   const stats = await collection.aggregate([
     {
-      $match: { customerId: new ObjectId(customerId) }
+      $match: { userId: new ObjectId(userId) }
     },
     {
       $group: {
@@ -202,13 +202,13 @@ async function initializeDatabase() {
     const vpnTunnelsExists = await db.listCollections({ name: 'vpn_tunnels' }).hasNext();
     if (!vpnTunnelsExists) {
       await db.createCollection('vpn_tunnels', {
-        validator: {
+          validator: {
           $jsonSchema: {
             bsonType: 'object',
-            required: ['routerId', 'customerId', 'vpnConfig', 'connection'],
+            required: ['routerId', 'userId', 'vpnConfig', 'connection'],
             properties: {
               routerId: { bsonType: 'objectId', description: 'Reference to routers collection' },
-              customerId: { bsonType: 'objectId', description: 'Reference to customers collection' },
+              userId: { bsonType: 'objectId', description: 'Reference to users collection' },
               vpnConfig: {
                 bsonType: 'object',
                 required: ['clientPublicKey', 'assignedIP', 'endpoint'],
@@ -292,10 +292,14 @@ async function initializeDatabase() {
     console.log('    ✓ email (unique)');
     await db.collection('users').createIndex({ role: 1 });
     console.log('    ✓ role');
-    await db.collection('users').createIndex({ customerId: 1 });
-    console.log('    ✓ customerId');
+    await db.collection('users').createIndex({ 'businessInfo.type': 1 });
+    console.log('    ✓ businessInfo.type');
+    await db.collection('users').createIndex({ 'subscription.status': 1 });
+    console.log('    ✓ subscription.status');
     await db.collection('users').createIndex({ status: 1 });
     console.log('    ✓ status');
+    await db.collection('users').createIndex({ 'paymentSettings.paybillNumber': 1 });
+    console.log('    ✓ paymentSettings.paybillNumber');
 
     // Accounts collection indexes (NextAuth)
     console.log('\n  Accounts indexes:');
@@ -332,21 +336,21 @@ async function initializeDatabase() {
     );
     console.log('    ✓ expires (TTL)');
 
-    // Customers collection indexes
+    // Customers collection indexes (WiFi voucher purchasers - no authentication)
     console.log('\n  Customers indexes:');
-    await db.collection('customers').createIndex({ userId: 1 }, { unique: true });
-    console.log('    ✓ userId (unique)');
-    await db.collection('customers').createIndex({ 'businessInfo.type': 1 });
-    console.log('    ✓ businessInfo.type');
-    await db.collection('customers').createIndex({ status: 1 });
-    console.log('    ✓ status');
-    await db.collection('customers').createIndex({ 'paymentSettings.paybillNumber': 1 });
-    console.log('    ✓ paymentSettings.paybillNumber');
+    await db.collection('customers').createIndex({ phone: 1 }, { unique: true });
+    console.log('    ✓ phone (unique)');
+    await db.collection('customers').createIndex({ sha256Phone: 1 }, { unique: true });
+    console.log('    ✓ sha256Phone (unique) - for M-Pesa webhook matching');
+    await db.collection('customers').createIndex({ email: 1 }, { sparse: true });
+    console.log('    ✓ email (sparse)');
+    await db.collection('customers').createIndex({ lastPurchaseDate: -1 });
+    console.log('    ✓ lastPurchaseDate (desc)');
 
     // Routers collection indexes
     console.log('\n  Routers indexes:');
-    await db.collection('routers').createIndex({ customerId: 1 });
-    console.log('    ✓ customerId');
+    await db.collection('routers').createIndex({ userId: 1 });
+    console.log('    ✓ userId (was customerId)');
     await db.collection('routers').createIndex(
       { 'routerInfo.serialNumber': 1 },
       { unique: true, sparse: true }
@@ -381,8 +385,10 @@ async function initializeDatabase() {
     console.log('    ✓ reference (unique)');
     await db.collection('vouchers').createIndex({ routerId: 1 });
     console.log('    ✓ routerId');
+    await db.collection('vouchers').createIndex({ userId: 1 });
+    console.log('    ✓ userId (router owner)');
     await db.collection('vouchers').createIndex({ customerId: 1 });
-    console.log('    ✓ customerId');
+    console.log('    ✓ customerId (WiFi customer who purchased)');
     await db.collection('vouchers').createIndex({ status: 1 });
     console.log('    ✓ status');
     await db.collection('vouchers').createIndex({ 'batch.batchId': 1 });
@@ -401,8 +407,8 @@ async function initializeDatabase() {
       { unique: true }
     );
     console.log('    ✓ routerId + userInfo.username (unique)');
-    await db.collection('pppoe_users').createIndex({ customerId: 1 });
-    console.log('    ✓ customerId');
+    await db.collection('pppoe_users').createIndex({ userId: 1 });
+    console.log('    ✓ userId (router owner)');
     await db.collection('pppoe_users').createIndex({ 'userInfo.phone': 1 });
     console.log('    ✓ userInfo.phone');
     await db.collection('pppoe_users').createIndex({ status: 1 });
@@ -412,8 +418,8 @@ async function initializeDatabase() {
 
     // Payments collection indexes
     console.log('\n  Payments indexes:');
-    await db.collection('payments').createIndex({ customerId: 1 });
-    console.log('    ✓ customerId');
+    await db.collection('payments').createIndex({ userId: 1 });
+    console.log('    ✓ userId (router owner)');
     await db.collection('payments').createIndex({ 'mpesa.transactionId': 1 });
     console.log('    ✓ mpesa.transactionId');
     await db.collection('payments').createIndex({ 'transaction.reference': 1 });
@@ -429,8 +435,8 @@ async function initializeDatabase() {
 
     // Commissions collection indexes
     console.log('\n  Commissions indexes:');
-    await db.collection('commissions').createIndex({ customerId: 1 });
-    console.log('    ✓ customerId');
+    await db.collection('commissions').createIndex({ userId: 1 });
+    console.log('    ✓ userId (router owner)');
     await db.collection('commissions').createIndex({ 'period.month': 1 });
     console.log('    ✓ period.month');
     await db.collection('commissions').createIndex({ 'payout.status': 1 });
@@ -443,8 +449,8 @@ async function initializeDatabase() {
       { unique: true }
     );
     console.log('    ✓ paybillInfo.number (unique)');
-    await db.collection('paybills').createIndex({ customerId: 1 });
-    console.log('    ✓ customerId');
+    await db.collection('paybills').createIndex({ userId: 1 });
+    console.log('    ✓ userId (router owner)');
     await db.collection('paybills').createIndex({ 'paybillInfo.type': 1 });
     console.log('    ✓ paybillInfo.type');
     await db.collection('paybills').createIndex({ status: 1 });
@@ -457,9 +463,7 @@ async function initializeDatabase() {
     // Audit logs collection indexes
     console.log('\n  Audit Logs indexes:');
     await db.collection('audit_logs').createIndex({ userId: 1 });
-    console.log('    ✓ userId');
-    await db.collection('audit_logs').createIndex({ customerId: 1 });
-    console.log('    ✓ customerId');
+    console.log('    ✓ userId (person who performed action)');
     await db.collection('audit_logs').createIndex({ 'action.type': 1 });
     console.log('    ✓ action.type');
     await db.collection('audit_logs').createIndex({ timestamp: -1 });
@@ -791,8 +795,9 @@ async function initializeDatabase() {
       validator: {
         $jsonSchema: {
           bsonType: 'object',
-          required: ['customerId', 'transaction', 'status'],
+          required: ['userId', 'transaction', 'status'],
           properties: {
+            userId: { bsonType: 'objectId' },
             'transaction.amount': {
               bsonType: 'number',
               minimum: 0,
@@ -815,9 +820,9 @@ async function initializeDatabase() {
       validator: {
         $jsonSchema: {
           bsonType: 'object',
-          required: ['customerId', 'routerInfo', 'connection', 'configuration', 'health'],
+          required: ['userId', 'routerInfo', 'connection', 'configuration', 'health'],
           properties: {
-            customerId: { bsonType: 'objectId' },
+            userId: { bsonType: 'objectId' },
             routerInfo: { bsonType: 'object' },
             connection: {
               bsonType: 'object',
