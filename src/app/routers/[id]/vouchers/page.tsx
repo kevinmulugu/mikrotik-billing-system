@@ -185,9 +185,10 @@ export default function VouchersPage({ params }: VouchersPageProps) {
 
       {/* Voucher Management Tabs */}
       <Tabs defaultValue="all" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-5">
+        <TabsList className="grid w-full grid-cols-6">
           <TabsTrigger value="all">All</TabsTrigger>
           <TabsTrigger value="active">Active</TabsTrigger>
+          <TabsTrigger value="paid">Paid</TabsTrigger>
           <TabsTrigger value="used">Used</TabsTrigger>
           <TabsTrigger value="expired">Expired</TabsTrigger>
           <TabsTrigger value="cancelled">Cancelled</TabsTrigger>
@@ -199,6 +200,10 @@ export default function VouchersPage({ params }: VouchersPageProps) {
 
         <TabsContent value="active">
           <VoucherList routerId={id} filterStatus="active" />
+        </TabsContent>
+
+        <TabsContent value="paid">
+          <VoucherList routerId={id} filterStatus="paid" />
         </TabsContent>
 
         <TabsContent value="used">

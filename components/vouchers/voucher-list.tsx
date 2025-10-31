@@ -90,6 +90,10 @@ interface Voucher {
     endTime?: Date
     dataUsed?: number
     timeUsed?: number
+    maxDurationMinutes?: number
+    expectedEndTime?: Date
+    timedOnPurchase?: boolean
+    purchaseExpiresAt?: Date
   }
   payment: {
     method: string
@@ -107,7 +111,7 @@ interface Voucher {
     expiresAt: Date
     autoDelete: boolean
   }
-  status: "active" | "used" | "expired" | "cancelled"
+  status: "active" | "paid" | "used" | "expired" | "cancelled"
   createdAt: Date
   updatedAt: Date
 }
@@ -129,6 +133,8 @@ const getStatusVariant = (status: string): BadgeProps["variant"] => {
   switch (status) {
     case "active":
       return "default"
+    case "paid":
+      return "secondary"
     case "used":
       return "secondary"
     case "expired":
@@ -282,9 +288,26 @@ export function VoucherList({ routerId, filterStatus = "all" }: VoucherListProps
     }
   }
 
-  // Check if voucher is expired
+  // Check if voucher is expired (considering all expiry types)
   const isExpired = (voucher: Voucher): boolean => {
-    return new Date() > new Date(voucher.expiry.expiresAt)
+    const now = new Date()
+    
+    // Check activation expiry (for unpurchased vouchers)
+    if (voucher.expiry.expiresAt && new Date(voucher.expiry.expiresAt) < now) {
+      return true
+    }
+    
+    // Check purchase expiry (for time-after-purchase vouchers)
+    if (voucher.usage?.purchaseExpiresAt && new Date(voucher.usage.purchaseExpiresAt) < now) {
+      return true
+    }
+    
+    // Check usage expiry (for active sessions)
+    if (voucher.usage?.expectedEndTime && new Date(voucher.usage.expectedEndTime) < now) {
+      return true
+    }
+    
+    return false
   }
 
   // Effects
@@ -365,6 +388,7 @@ export function VoucherList({ routerId, filterStatus = "all" }: VoucherListProps
             <SelectContent>
               <SelectItem value="all">All Status</SelectItem>
               <SelectItem value="active">Active</SelectItem>
+              <SelectItem value="paid">Paid</SelectItem>
               <SelectItem value="used">Used</SelectItem>
               <SelectItem value="expired">Expired</SelectItem>
               <SelectItem value="cancelled">Cancelled</SelectItem>
