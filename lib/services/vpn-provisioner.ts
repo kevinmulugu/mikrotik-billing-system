@@ -197,6 +197,10 @@ export class VPNProvisioner {
     serverIP: string;
   }): string {
     const [endpointHost, endpointPort] = config.endpoint.split(':');
+    
+    // Extract domain from NEXT_PUBLIC_APP_URL for hotspot walled-garden
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.NEXTAUTH_URL || 'http://localhost:3000';
+    const apiDomain = new URL(appUrl).hostname;
 
     return `# MikroTik VPN Auto-Setup Script
 # Generated: ${new Date().toISOString()}
@@ -219,10 +223,14 @@ export class VPNProvisioner {
 # Allow incoming connections from VPN network
 /ip firewall filter add chain=input src-address=${config.allowedIPs} action=accept place-before=0 comment="Allow VPN Management";
 
+# Add captive portal API domain to hotspot walled-garden (allow API calls before login)
+/ip hotspot walled-garden add dst-host=${apiDomain} comment="Captive Portal API Access";
+
 # Enable WireGuard interface (if disabled)
 /interface wireguard enable wg-mgmt;
 
 :log info "VPN setup complete! IP: ${config.vpnIP}";
+:log info "Hotspot walled-garden configured for: ${apiDomain}";
 
 # Notify server that setup is complete (optional - router will be verified via VPN connectivity test)
 :log info "Setup token: Check VPN connectivity from portal";`;
