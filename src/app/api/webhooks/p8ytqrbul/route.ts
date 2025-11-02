@@ -88,12 +88,23 @@ export async function POST(request: NextRequest) {
     // C2B Confirmation is the PRIMARY voucher assignment handler
     // STK Callback only marks failures - this ensures no race conditions
     console.log('[M-Pesa Webhook] C2B Confirmation received for:', BillRefNumber);
+    console.log('[M-Pesa Webhook] BillRefNumber type:', typeof BillRefNumber);
+    console.log('[M-Pesa Webhook] BillRefNumber value:', JSON.stringify(BillRefNumber));
 
     // Try to find STK initiation first (for STK Push payments)
     const stkInitiation = await db.collection('stk_initiations').findOne({
       AccountReference: BillRefNumber,
     });
     console.log('[M-Pesa Webhook] STK initiation lookup result:', stkInitiation);
+    
+    // Additional debugging: Check if any stk_initiations exist
+    const allStk = await db.collection('stk_initiations').find({}).limit(3).toArray();
+    console.log('[M-Pesa Webhook] Sample stk_initiations (first 3):', allStk.map(s => ({
+      AccountReference: s.AccountReference,
+      type: typeof s.AccountReference,
+      CheckoutRequestID: s.CheckoutRequestID,
+      status: s.status,
+    })));
 
     let voucher = null;
     let phoneNumber = MSISDN ? String(MSISDN) : null;
