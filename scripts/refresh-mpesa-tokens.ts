@@ -6,7 +6,7 @@
  * Tokens expire after ~1 hour, so this runs every 30 minutes to ensure valid tokens.
  * 
  * Usage: pnpm refresh-tokens
- * Cron: */30 * * * * (every 30 minutes)
+ * Cron: *30 * * * * (every 30 minutes)
  * 
  * Run via cron or scheduler:
  * - Vercel Cron: .vercel/cron.json

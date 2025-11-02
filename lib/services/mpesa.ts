@@ -39,7 +39,7 @@ export class MpesaService {
   private baseUrl: string;
 
   private constructor() {
-    this.baseUrl = process.env.MPESA_ENV === 'production'
+    this.baseUrl = process.env.MPESA_ENVIRONMENT === 'production'
       ? 'https://api.safaricom.co.ke'
       : 'https://sandbox.safaricom.co.ke';
   }
