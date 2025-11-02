@@ -78,7 +78,7 @@ async function generateAccessToken(
     // Generate auth string
     const auth = Buffer.from(`${consumerKey}:${consumerSecret}`).toString('base64');
 
-    const response = await fetch(`${MPESA_BASE_URL}/oauth/v1/generate?grant_type=client_credentials`, {
+    const response = await fetch(`${MPESA_BASE_URL}/oauth/v2/generate?grant_type=client_credentials`, {
       method: 'GET',
       headers: {
         'Authorization': `Basic ${auth}`,
