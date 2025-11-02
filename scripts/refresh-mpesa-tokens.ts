@@ -11,6 +11,10 @@
  * Run via cron or scheduler:
  * - Vercel Cron: .vercel/cron.json
  * - Manual: npx tsx scripts/refresh-mpesa-tokens.ts
+ * 
+ * NOTE: This script does NOT import lib/mongodb or lib/services/mpesa
+ * to avoid module initialization issues with environment variables.
+ * It uses its own MongoDB connection and implements token refresh directly.
  */
 
 // Load environment variables FIRST before any other imports
@@ -18,12 +22,14 @@ import * as dotenv from 'dotenv';
 import * as path from 'path';
 dotenv.config({ path: path.resolve(process.cwd(), '.env.local') });
 
-// Then import modules that depend on environment variables
+// Only import what's needed
 import { MongoClient } from 'mongodb';
-import { mpesaService } from '@/lib/services/mpesa';
 
 const MONGODB_URI = process.env.MONGODB_URI;
 const MONGODB_DB_NAME = process.env.MONGODB_DB_NAME || 'mikrotik_billing';
+const MPESA_BASE_URL = process.env.MPESA_ENVIRONMENT === 'production'
+  ? 'https://api.safaricom.co.ke'
+  : 'https://sandbox.safaricom.co.ke';
 
 if (!MONGODB_URI) {
   throw new Error('Please define MONGODB_URI in .env.local');
@@ -37,10 +43,76 @@ interface Paybill {
     type: 'paybill' | 'till';
   };
   credentials?: {
+    consumerKey?: string;
+    consumerSecret?: string;
     accessToken?: string;
     tokenExpiresAt?: Date;
   };
   status: string;
+}
+
+interface AccessTokenResponse {
+  access_token: string;
+  expires_in: string;
+}
+
+/**
+ * Generate M-Pesa access token for a paybill
+ * This is a standalone implementation for the script only
+ */
+async function generateAccessToken(
+  db: any,
+  paybill: Paybill
+): Promise<{ token: string; expiresAt: Date } | null> {
+  try {
+    const consumerKey = paybill.credentials?.consumerKey;
+    const consumerSecret = paybill.credentials?.consumerSecret;
+
+    if (!consumerKey || !consumerSecret) {
+      throw new Error(`Missing credentials for paybill ${paybill.paybillInfo.number}`);
+    }
+
+    // Generate auth string
+    const auth = Buffer.from(`${consumerKey}:${consumerSecret}`).toString('base64');
+
+    const response = await fetch(`${MPESA_BASE_URL}/oauth/v1/generate?grant_type=client_credentials`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Basic ${auth}`,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to generate token: ${response.statusText}`);
+    }
+
+    const data: AccessTokenResponse = await response.json();
+    
+    // Token expires in seconds (usually 3599 seconds = ~1 hour)
+    const expiresIn = parseInt(data.expires_in);
+    const expiresAt = new Date(Date.now() + (expiresIn * 1000));
+
+    // Update paybill with new token
+    await db.collection('paybills').updateOne(
+      { _id: paybill._id },
+      {
+        $set: {
+          'credentials.accessToken': data.access_token,
+          'credentials.tokenExpiresAt': expiresAt,
+          'credentials.lastTokenRefresh': new Date(),
+          updatedAt: new Date(),
+        },
+      }
+    );
+
+    return {
+      token: data.access_token,
+      expiresAt,
+    };
+  } catch (error) {
+    console.error('Error generating M-Pesa access token:', error);
+    return null;
+  }
 }
 
 async function refreshMpesaTokens() {
@@ -98,8 +170,8 @@ async function refreshMpesaTokens() {
           console.log(`  ⚠️  No token found, generating new one...`);
         }
 
-        // Generate new token using mpesaService
-        const result = await mpesaService.generateAccessToken(paybillNumber);
+        // Generate new token
+        const result = await generateAccessToken(db, paybill);
 
         if (result) {
           console.log(`  ✅ Token refreshed successfully`);
