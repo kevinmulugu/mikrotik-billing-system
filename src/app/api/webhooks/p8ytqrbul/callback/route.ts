@@ -9,12 +9,24 @@ import { ObjectId } from 'mongodb';
  * This endpoint receives callbacks from Safaricom after an STK Push transaction
  * is completed (either successful or failed).
  * 
+ * ARCHITECTURE: FAILURE HANDLER ONLY
+ * - This webhook ONLY handles payment failures
+ * - Successful payments are marked as 'pending_confirmation'
+ * - C2B Confirmation webhook handles all voucher assignments
+ * - This prevents race conditions and double voucher assignments
+ * 
  * Expected Flow:
  * 1. Customer receives STK Push on their phone
  * 2. Customer enters PIN and confirms (or cancels)
  * 3. Safaricom calls this webhook with the result
- * 4. We update the payment record in the database
- * 5. If successful, we can trigger voucher activation logic
+ * 4. If failure: Update payment/STK status to 'failed'
+ * 5. If success: Mark STK as 'pending_confirmation', wait for C2B
+ * 6. C2B Confirmation arrives → Assigns voucher from pool
+ * 
+ * Benefits:
+ * - No race conditions (only C2B assigns vouchers)
+ * - Clean separation: STK = status updates, C2B = voucher assignment
+ * - Duplicate webhook protection (C2B checks if already completed)
  * 
  * Callback Structure:
  * {
@@ -165,9 +177,8 @@ export async function POST(request: NextRequest) {
     const updateData: any = {
       'mpesa.resultCode': ResultCode,
       'mpesa.resultDesc': ResultDesc,
-      'status.current': ResultCode === 0 ? 'completed' : 'failed',
-      'status.updatedAt': new Date(),
-      'timestamps.completedAt': ResultCode === 0 ? new Date() : null,
+      status: ResultCode === 0 ? 'completed' : 'failed',
+      updatedAt: new Date(),
     };
 
     if (ResultCode === 0 && mpesaReceiptNumber) {
@@ -175,11 +186,6 @@ export async function POST(request: NextRequest) {
       updateData['reconciliation.isReconciled'] = true;
       updateData['reconciliation.reconciledAt'] = new Date();
       updateData['reconciliation.matchedTransactionId'] = mpesaReceiptNumber;
-    }
-
-    if (ResultCode !== 0) {
-      updateData['timestamps.failedAt'] = new Date();
-      updateData['status.failureReason'] = ResultDesc;
     }
 
     await db.collection('payments').updateOne(
@@ -195,34 +201,34 @@ export async function POST(request: NextRequest) {
       mpesaReceiptNumber,
     });
 
-    // Create transaction record if successful
-    if (ResultCode === 0 && mpesaReceiptNumber) {
-      const transactionDoc = {
-        userId: payment.userId,
-        routerId: payment.routerId,
-        type: 'voucher_purchase',
-        amount: amount || payment.transaction.amount,
-        currency: payment.transaction.currency || 'KES',
-        paymentMethod: 'mpesa',
-        transactionId: mpesaReceiptNumber,
-        phoneNumber: phoneNumber || payment.mpesa.phoneNumber,
-        status: 'completed',
-        metadata: {
-          checkoutRequestId: CheckoutRequestID,
-          merchantRequestId: MerchantRequestID,
-          transactionDate: transactionDate,
-          packageInfo: payment.transaction.description,
-          webhookProcessingTime: Date.now() - startTime,
-        },
-        createdAt: new Date(),
-      };
-
-      await db.collection('transactions').insertOne(transactionDoc);
-
-      console.log('[STK Callback] Transaction record created:', {
-        transactionId: mpesaReceiptNumber,
-        amount: transactionDoc.amount,
-      });
+    // SIMPLIFIED STK CALLBACK LOGIC - Only handle failures here
+    // Success is handled by C2B Confirmation webhook (single point of voucher assignment)
+    if (ResultCode === 0) {
+      console.log('✅ [STK Callback] Payment successful - will be processed by C2B Confirmation webhook');
+      
+      // Update STK initiation to mark as ready for C2B processing
+      await db.collection('stk_initiations').updateOne(
+        { CheckoutRequestID: CheckoutRequestID },
+        {
+          $set: {
+            status: 'pending_confirmation', // Waiting for C2B to assign voucher
+            mpesaReceiptNumber: mpesaReceiptNumber,
+          },
+        }
+      );
+    } else {
+      // Payment failed - update STK initiation and mark as failed
+      console.log('❌ [STK Callback] Payment failed - updating records');
+      await db.collection('stk_initiations').updateOne(
+        { CheckoutRequestID: CheckoutRequestID },
+        {
+          $set: {
+            status: 'failed',
+            ResultCode,
+            ResultDesc,
+          },
+        }
+      );
     }
 
     // Log webhook

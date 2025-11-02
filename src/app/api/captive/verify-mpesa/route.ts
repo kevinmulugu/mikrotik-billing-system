@@ -82,8 +82,6 @@ export async function OPTIONS(request: NextRequest) {
 
 // POST /api/captive/verify-mpesa - Verify M-Pesa transaction and get voucher
 export async function POST(request: NextRequest) {
-  let attemptLogId: ObjectId | null = null;
-  
   try {
     // Parse request body
     const body = await request.json();
@@ -112,14 +110,13 @@ export async function POST(request: NextRequest) {
       errors.mac_address = 'MAC address is required';
     }
 
-    // Return validation errors
     if (Object.keys(errors).length > 0) {
       return NextResponse.json(
         {
           success: false,
-          error: 'invalid_input',
-          message: 'Invalid request parameters. Please check your input.',
-          details: errors,
+          error: 'validation_error',
+          message: 'Please provide all required information',
+          errors,
         },
         {
           status: 400,
@@ -136,60 +133,12 @@ export async function POST(request: NextRequest) {
     const client = await clientPromise;
     const db = client.db(process.env.MONGODB_DB_NAME || 'mikrotik_billing');
 
-    // Check rate limiting - max 5 attempts per MAC per hour
-    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
-    const recentAttempts = await db.collection('verification_attempts').countDocuments({
-      mac_address: normalizedMac,
-      timestamp: { $gte: oneHourAgo },
-    });
-
-    if (recentAttempts >= 5) {
-      console.warn(`Rate limit exceeded for MAC: ${normalizedMac}`);
-      
-      return NextResponse.json(
-        {
-          success: false,
-          error: 'rate_limit_exceeded',
-          message: 'Too many verification attempts. Please wait 1 hour before trying again.',
-          retry_after: 3600,
-        },
-        {
-          status: 429,
-          headers: {
-            ...corsHeaders,
-            'X-RateLimit-Limit': '5',
-            'X-RateLimit-Remaining': '0',
-            'Retry-After': '3600',
-          },
-        }
-      );
-    }
-
-    // Log verification attempt
-    const attemptLog = await db.collection('verification_attempts').insertOne({
-      mac_address: normalizedMac,
-      router_id: new ObjectId(router_id),
-      transaction_code: transactionCode,
-      success: false,
-      error_code: null,
-      timestamp: new Date(),
-      ip_address: request.headers.get('x-forwarded-for') || 'unknown',
-      user_agent: request.headers.get('user-agent') || 'unknown',
-    });
-
-    attemptLogId = attemptLog.insertedId;
-
     // Find router
     const router = await db.collection('routers').findOne({
       _id: new ObjectId(router_id),
     });
 
     if (!router) {
-      await db.collection('verification_attempts').updateOne(
-        { _id: attemptLogId },
-        { $set: { error_code: 'router_not_found' } }
-      );
-
       return NextResponse.json(
         {
           success: true,
@@ -199,11 +148,7 @@ export async function POST(request: NextRequest) {
         },
         {
           status: 200,
-          headers: {
-            ...corsHeaders,
-            'X-RateLimit-Limit': '5',
-            'X-RateLimit-Remaining': String(5 - recentAttempts - 1),
-          },
+          headers: corsHeaders,
         }
       );
     }
@@ -216,11 +161,6 @@ export async function POST(request: NextRequest) {
 
     // Payment not found or doesn't belong to this router owner
     if (!payment) {
-      await db.collection('verification_attempts').updateOne(
-        { _id: attemptLogId },
-        { $set: { error_code: 'payment_not_found' } }
-      );
-
       return NextResponse.json(
         {
           success: true,
@@ -230,22 +170,13 @@ export async function POST(request: NextRequest) {
         },
         {
           status: 200,
-          headers: {
-            ...corsHeaders,
-            'X-RateLimit-Limit': '5',
-            'X-RateLimit-Remaining': String(5 - recentAttempts - 1),
-          },
+          headers: corsHeaders,
         }
       );
     }
 
     // Check payment status
     if (payment.status === 'pending') {
-      await db.collection('verification_attempts').updateOne(
-        { _id: attemptLogId },
-        { $set: { error_code: 'payment_pending' } }
-      );
-
       return NextResponse.json(
         {
           success: true,
@@ -261,11 +192,6 @@ export async function POST(request: NextRequest) {
     }
 
     if (payment.status !== 'completed') {
-      await db.collection('verification_attempts').updateOne(
-        { _id: attemptLogId },
-        { $set: { error_code: 'payment_failed' } }
-      );
-
       return NextResponse.json(
         {
           success: true,
@@ -280,44 +206,18 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check if payment is reconciled
-    if (!payment.reconciliation?.isReconciled) {
-      await db.collection('verification_attempts').updateOne(
-        { _id: attemptLogId },
-        { $set: { error_code: 'payment_not_reconciled' } }
-      );
-
-      return NextResponse.json(
-        {
-          success: true,
-          valid: false,
-          error: 'payment_pending',
-          message: 'Payment verification in progress. Please wait a few moments.',
-        },
-        {
-          status: 200,
-          headers: corsHeaders,
-        }
-      );
-    }
-
-    // Find linked voucher
+    // Get voucher from payment linked items
     const voucherLink = payment.linkedItems?.find(
       (item: any) => item.type === 'voucher'
     );
 
     if (!voucherLink || !voucherLink.itemId) {
-      await db.collection('verification_attempts').updateOne(
-        { _id: attemptLogId },
-        { $set: { error_code: 'no_voucher_linked' } }
-      );
-
       return NextResponse.json(
         {
           success: true,
           valid: false,
-          error: 'transaction_not_found',
-          message: 'No voucher found for this transaction. Please contact support.',
+          error: 'voucher_not_found',
+          message: 'Voucher not found for this transaction. Please contact support.',
         },
         {
           status: 200,
@@ -332,17 +232,12 @@ export async function POST(request: NextRequest) {
     });
 
     if (!voucher) {
-      await db.collection('verification_attempts').updateOne(
-        { _id: attemptLogId },
-        { $set: { error_code: 'voucher_not_found' } }
-      );
-
       return NextResponse.json(
         {
           success: true,
           valid: false,
-          error: 'transaction_not_found',
-          message: 'Voucher not found. Please contact support.',
+          error: 'voucher_not_found',
+          message: 'Voucher details not found. Please contact support.',
         },
         {
           status: 200,
@@ -351,19 +246,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Verify voucher belongs to this router
-    if (voucher.routerId.toString() !== router._id.toString()) {
-      await db.collection('verification_attempts').updateOne(
-        { _id: attemptLogId },
-        { $set: { error_code: 'wrong_router' } }
-      );
-
+    // Verify voucher belongs to correct router
+    if (voucher.routerId.toString() !== router_id) {
       return NextResponse.json(
         {
           success: true,
           valid: false,
-          error: 'wrong_router',
-          message: 'This voucher is for a different WiFi hotspot.',
+          error: 'voucher_mismatch',
+          message: 'This voucher is not valid for this router.',
         },
         {
           status: 200,
@@ -373,22 +263,13 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if voucher is already used
-    if (voucher.usage?.used === true) {
-      await db.collection('verification_attempts').updateOne(
-        { _id: attemptLogId },
-        { $set: { error_code: 'voucher_used' } }
-      );
-
+    if (voucher.usage.used === true) {
       return NextResponse.json(
         {
           success: true,
           valid: false,
           error: 'voucher_used',
-          message: 'This voucher has already been used. Purchase a new package to continue.',
-          used_details: {
-            used_at: voucher.usage.startTime,
-            device_mac: voucher.usage.userId,
-          },
+          message: 'This voucher has already been used.',
         },
         {
           status: 200,
@@ -397,23 +278,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check if voucher is expired
-    const now = new Date();
-    const expiresAt = new Date(voucher.expiry.expiresAt);
-    
-    if (expiresAt < now) {
-      await db.collection('verification_attempts').updateOne(
-        { _id: attemptLogId },
-        { $set: { error_code: 'voucher_expired' } }
-      );
-
+    // Check voucher expiration
+    if (voucher.expiry.expiresAt && new Date(voucher.expiry.expiresAt) < new Date()) {
       return NextResponse.json(
         {
           success: true,
           valid: false,
           error: 'voucher_expired',
-          message: 'This voucher has expired. Please purchase a new package.',
-          expired_at: expiresAt.toISOString(),
+          message: 'This voucher has expired.',
         },
         {
           status: 200,
@@ -422,19 +294,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check voucher status
-    if (voucher.status !== 'active') {
-      await db.collection('verification_attempts').updateOne(
-        { _id: attemptLogId },
-        { $set: { error_code: 'voucher_inactive' } }
-      );
-
+    // Check voucher status - should be 'assigned' (paid but not used yet) or 'active'
+    if (voucher.status !== 'assigned' && voucher.status !== 'active') {
       return NextResponse.json(
         {
           success: true,
           valid: false,
-          error: 'voucher_expired',
-          message: 'This voucher is no longer active. Please purchase a new package.',
+          error: 'voucher_not_available',
+          message: 'This voucher is not available for use. Please contact support.',
         },
         {
           status: 200,
@@ -443,65 +310,33 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // SUCCESS - Update attempt log
-    await db.collection('verification_attempts').updateOne(
-      { _id: attemptLogId },
+    // Return successful response with voucher details
+    return NextResponse.json(
       {
-        $set: {
-          success: true,
-          voucher_id: voucher._id,
-          payment_id: payment._id,
+        success: true,
+        valid: true,
+        message: 'Voucher verified successfully!',
+        voucher: {
+          code: voucher.voucherInfo.code,
+          password: voucher.voucherInfo.password,
+          package_name: voucher.voucherInfo.packageDisplayName || voucher.voucherInfo.packageType,
+          duration: voucher.voucherInfo.duration,
+          duration_display: formatDuration(voucher.voucherInfo.duration),
+          bandwidth: formatBandwidth(voucher.voucherInfo.bandwidth),
+          expires_at: voucher.expiry.expiresAt,
         },
+        auto_login: {
+          username: voucher.voucherInfo.code,
+          password: voucher.voucherInfo.password,
+        },
+      },
+      {
+        status: 200,
+        headers: corsHeaders,
       }
     );
-
-    // Build successful response
-    const response = {
-      success: true,
-      valid: true,
-      voucher: {
-        code: voucher.voucherInfo.code,
-        password: voucher.voucherInfo.password,
-        package_name: voucher.voucherInfo.packageDisplayName || voucher.voucherInfo.packageType,
-        duration: voucher.voucherInfo.duration,
-        duration_display: formatDuration(voucher.voucherInfo.duration),
-        bandwidth: formatBandwidth(voucher.voucherInfo.bandwidth),
-        price: voucher.voucherInfo.price,
-        currency: voucher.voucherInfo.currency || 'KSh',
-        expires_at: voucher.expiry.expiresAt,
-      },
-      payment: {
-        transaction_id: payment.mpesa.transactionId,
-        amount: payment.transaction.amount,
-        payment_date: payment.createdAt,
-      },
-    };
-
-    return NextResponse.json(response, {
-      status: 200,
-      headers: {
-        ...corsHeaders,
-        'X-RateLimit-Limit': '5',
-        'X-RateLimit-Remaining': String(5 - recentAttempts - 1),
-      },
-    });
   } catch (error) {
     console.error('Error verifying M-Pesa transaction:', error);
-
-    // Update attempt log if it exists
-    if (attemptLogId) {
-      try {
-        const client = await clientPromise;
-        const db = client.db(process.env.MONGODB_DB_NAME || 'mikrotik_billing');
-        
-        await db.collection('verification_attempts').updateOne(
-          { _id: attemptLogId },
-          { $set: { error_code: 'server_error' } }
-        );
-      } catch (logError) {
-        console.error('Failed to update attempt log:', logError);
-      }
-    }
 
     return NextResponse.json(
       {

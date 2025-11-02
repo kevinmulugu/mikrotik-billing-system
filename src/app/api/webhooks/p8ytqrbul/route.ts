@@ -12,19 +12,35 @@ import { getRouterConnectionConfig } from '@/lib/services/router-connection';
  * This endpoint handles M-Pesa payment confirmations for voucher purchases.
  * It's called by Safaricom when a payment is successfully made to the paybill/till number.
  * 
+ * ARCHITECTURE: SINGLE POINT OF VOUCHER ASSIGNMENT
+ * - STK Callback: Only marks failures, does NOT assign vouchers
+ * - C2B Confirmation (THIS FILE): Handles ALL successful voucher assignments
+ * 
+ * Benefits:
+ * - No race conditions (only one webhook assigns vouchers)
+ * - STK data available: Uses STK initiation for customer/package details
+ * - Manual payments work: Falls back to voucher reference lookup
+ * - Clean separation: STK = failure handling, C2B = success handling
+ * 
  * Expected Flow:
- * 1. User pays to paybill with BillRefNumber = payment reference (NOT voucher code/password)
- * 2. Safaricom calls this webhook with payment details
- * 3. We find the voucher by reference, update payment info, set expiry timers
- * 4. We respond to Safaricom with success/failure
+ * 1. STK Push initiated → Payment pending
+ * 2. Customer enters PIN
+ * 3. STK Callback arrives → Updates payment (failure) OR marks pending_confirmation (success)
+ * 4. C2B Confirmation arrives → Assigns voucher from pool
+ * 5. Customer receives voucher code
+ * 
+ * Manual Payment Flow:
+ * 1. Customer pays directly to paybill with BillRefNumber = voucher.reference
+ * 2. C2B Confirmation arrives → Looks up voucher by reference
+ * 3. Assigns voucher from pool (same as STK)
  * 
  * Security Note:
  * - BillRefNumber should be the voucher.reference field (public payment reference)
  * - NOT voucherInfo.code (which is also the password and should remain private)
  * 
  * BillRefNumber examples:
- * - Payment reference: VCH1A2B3C4D (safe to share for payment)
- * - Transaction reference: TXN-xxxxx (from pending transaction table)
+ * - Transaction reference: TXN-1730556789-A3F2 (from STK Push)
+ * - Voucher reference: VCH1A2B3C4D (for manual payments)
  */
 export async function POST(request: NextRequest) {
   const startTime = Date.now();
@@ -69,41 +85,102 @@ export async function POST(request: NextRequest) {
     const db = await getDatabase();
     const purchaseTime = new Date();
 
-    // Try to find STK initiation first using AccountReference (voucher code)
+    // C2B Confirmation is the PRIMARY voucher assignment handler
+    // STK Callback only marks failures - this ensures no race conditions
+    console.log('[M-Pesa Webhook] C2B Confirmation received for:', BillRefNumber);
+
+    // Try to find STK initiation first (for STK Push payments)
     const stkInitiation = await db.collection('stk_initiations').findOne({
       AccountReference: BillRefNumber,
     });
 
     let voucher = null;
     let phoneNumber = MSISDN ? String(MSISDN) : null;
+    let isSTKPayment = false;
+    let packageInfo: any = null;
 
     if (stkInitiation) {
-      // Found STK initiation - we have all the context including raw phone
-      console.log('[M-Pesa Webhook] Found STK initiation:', {
+      // Found STK initiation - this is an STK Push payment
+      isSTKPayment = true;
+      console.log('[M-Pesa Webhook] STK payment detected:', {
         AccountReference: stkInitiation.AccountReference,
         PhoneNumber: stkInitiation.PhoneNumber,
         CheckoutRequestID: stkInitiation.CheckoutRequestID,
+        currentStatus: stkInitiation.status,
       });
 
-      phoneNumber = stkInitiation.PhoneNumber; // Use raw phone from STK
-      
-      // Find voucher by ID from STK initiation
-      voucher = await db.collection('vouchers').findOne({
-        _id: stkInitiation.voucherId,
-      });
+      // Check if already processed (duplicate webhook)
+      if (stkInitiation.status === 'completed' && stkInitiation.voucherId) {
+        console.log('[M-Pesa Webhook] Already processed - voucher:', stkInitiation.voucherId);
+        
+        await db.collection('webhook_logs').insertOne({
+          source: 'mpesa_confirmation',
+          type: 'c2b_confirmation',
+          status: 'duplicate_already_processed',
+          payload: body,
+          metadata: {
+            BillRefNumber,
+            TransID,
+            voucherId: stkInitiation.voucherId,
+            stkStatus: stkInitiation.status,
+          },
+          timestamp: purchaseTime,
+        });
+
+        return NextResponse.json({
+          ResultCode: 0,
+          ResultDesc: 'Payment already processed',
+        });
+      }
+
+      // Use STK data for voucher assignment
+      phoneNumber = stkInitiation.PhoneNumber;
+      packageInfo = {
+        routerId: stkInitiation.routerId,
+        userId: stkInitiation.userId,
+        packageId: stkInitiation.packageId,
+        packageDisplayName: stkInitiation.packageDisplayName,
+        packageDuration: stkInitiation.packageDuration,
+        packagePrice: stkInitiation.packagePrice,
+        macAddress: stkInitiation.macAddress,
+        customerId: stkInitiation.customerId,
+        paymentId: stkInitiation.paymentId,
+      };
+
+      console.log('[M-Pesa Webhook] Using STK data for voucher assignment');
     } else {
-      // No STK initiation found - try direct voucher lookup (legacy/manual payments)
-      console.log('[M-Pesa Webhook] No STK initiation found, trying direct voucher lookup');
+      // No STK initiation found - this is a manual payment
+      console.log('[M-Pesa Webhook] Manual payment - looking up by reference:', BillRefNumber);
+      
+      // Look up voucher by reference field
       voucher = await db.collection('vouchers').findOne({
-        'voucherInfo.code': BillRefNumber,
-        status: { $in: ['pending_payment', 'active'] },
+        reference: BillRefNumber,
+        status: 'active',
       });
+
+      if (voucher) {
+        console.log('[M-Pesa Webhook] Found voucher by reference:', voucher._id);
+        
+        // For manual payments, packageInfo comes from voucher
+        packageInfo = {
+          routerId: voucher.routerId,
+          userId: voucher.userId,
+          packageId: voucher.voucherInfo.packageType,
+          packageDisplayName: voucher.voucherInfo.packageDisplayName,
+          packageDuration: voucher.voucherInfo.duration,
+          packagePrice: voucher.voucherInfo.price,
+          macAddress: null, // No MAC for manual payments
+          customerId: null, // Will create customer if needed
+          paymentId: null, // No pre-existing payment
+        };
+      }
     }
 
-    if (!voucher) {
-      console.error(`[M-Pesa Webhook] Voucher not found for reference: ${BillRefNumber}`);
+    // VOUCHER ASSIGNMENT FROM POOL - Handles both STK and manual payments
+    if (!voucher && !isSTKPayment) {
+      // Manual payment with no matching voucher reference
+      console.error(`[M-Pesa Webhook] No voucher found for manual payment reference: ${BillRefNumber}`);
 
-      // Log failed webhook attempt
       await db.collection('webhook_logs').insertOne({
         source: 'mpesa_confirmation',
         type: 'c2b_confirmation',
@@ -111,25 +188,220 @@ export async function POST(request: NextRequest) {
         reason: 'voucher_not_found',
         payload: body,
         metadata: {
-          BillRefNumber: BillRefNumber,
-          TransID: TransID,
-          MSISDN: MSISDN,
+          BillRefNumber,
+          TransID,
+          MSISDN,
+          paymentType: 'manual',
         },
         timestamp: purchaseTime,
       });
 
       return NextResponse.json({
         ResultCode: 1,
-        ResultDesc: `Voucher not found for reference: ${BillRefNumber}`,
+        ResultDesc: `No voucher found for reference: ${BillRefNumber}. Please contact support.`,
+      });
+    }
+
+    if (!voucher && isSTKPayment) {
+      // STK payment - ALWAYS assign from pool (STK callback doesn't assign vouchers)
+      console.log('[M-Pesa Webhook] STK payment - assigning voucher from pool...');
+
+      const voucherResult = await db.collection('vouchers').findOneAndUpdate(
+        {
+          routerId: packageInfo.routerId,
+          'voucherInfo.packageType': packageInfo.packageId,
+          status: 'active',
+        },
+        {
+          $set: {
+            status: 'assigned',
+            'payment.transactionId': TransID,
+            'payment.phoneNumber': phoneNumber,
+            'payment.paymentDate': purchaseTime,
+            'usage.deviceMac': packageInfo.macAddress,
+            customerId: packageInfo.customerId,
+            updatedAt: purchaseTime,
+          },
+        },
+        {
+          returnDocument: 'after',
+        }
+      );
+
+      if (voucherResult) {
+        voucher = voucherResult;
+        console.log('✅ [M-Pesa Webhook] Voucher assigned from pool:', voucher._id);
+
+        // Update STK initiation with voucher ID
+        await db.collection('stk_initiations').updateOne(
+          { AccountReference: BillRefNumber },
+          {
+            $set: {
+              voucherId: voucher._id,
+              status: 'completed',
+            },
+          }
+        );
+
+        // Link voucher to payment
+        if (packageInfo.paymentId) {
+          await db.collection('payments').updateOne(
+            { _id: packageInfo.paymentId },
+            {
+              $push: {
+                linkedItems: {
+                  type: 'voucher',
+                  itemId: voucher._id,
+                  quantity: 1,
+                },
+              } as any,
+            }
+          );
+        }
+
+        // Update purchase attempt with voucher ID
+        await db.collection('purchase_attempts').updateOne(
+          { transaction_reference: BillRefNumber },
+          {
+            $set: {
+              voucher_id: voucher._id,
+            },
+          }
+        );
+
+        console.log('✅ [M-Pesa Webhook] Voucher successfully linked to payment and STK');
+
+        // TODO: SMS NOTIFICATION - VOUCHER CODE TO CUSTOMER
+        console.log('📱 [SMS TODO] Send voucher code to customer');
+        console.log('Phone:', phoneNumber);
+        console.log('Voucher Code:', voucher.voucherInfo.code);
+        console.log('Package:', packageInfo.packageDisplayName);
+        console.log('Duration:', packageInfo.packageDuration, 'minutes');
+        // TODO: Integrate SMS provider (Africa's Talking)
+        // Message: "Your WiFi voucher: {code}. Package: {name}. Valid for {duration} minutes. Thank you!"
+      } else {
+        // OUT OF STOCK - No active vouchers available
+        console.error('🚨 [M-Pesa Webhook] OUT OF STOCK - No active vouchers!');
+
+        // Update payment status to pending_voucher
+        if (packageInfo.paymentId) {
+          await db.collection('payments').updateOne(
+            { _id: packageInfo.paymentId },
+            {
+              $set: {
+                status: 'pending_voucher',
+                'metadata.outOfStock': true,
+                'metadata.outOfStockDetectedAt': purchaseTime,
+                updatedAt: purchaseTime,
+              },
+            }
+          );
+        }
+
+        // Update STK initiation
+        await db.collection('stk_initiations').updateOne(
+          { AccountReference: BillRefNumber },
+          {
+            $set: {
+              status: 'pending_voucher',
+            },
+          }
+        );
+
+        await db.collection('webhook_logs').insertOne({
+          source: 'mpesa_confirmation',
+          type: 'c2b_confirmation',
+          status: 'out_of_stock',
+          payload: body,
+          metadata: {
+            BillRefNumber,
+            TransID,
+            routerId: packageInfo.routerId,
+            packageId: packageInfo.packageId,
+          },
+          timestamp: purchaseTime,
+        });
+
+        // TODO: ADMIN ALERT - OUT OF STOCK NOTIFICATION
+        console.log('🚨 [ADMIN ALERT TODO] Send out-of-stock notification to admin');
+        console.log('Router ID:', packageInfo.routerId);
+        console.log('Package:', packageInfo.packageDisplayName);
+        console.log('Payment ID:', packageInfo.paymentId);
+        console.log('Transaction:', TransID);
+        console.log('Customer Phone:', phoneNumber);
+        // TODO: Send email/SMS to router owner
+        // Message: "URGENT: Router '{name}' is out of {package} vouchers. Payment received: {transactionId}. Customer: {phone}. Please generate vouchers or refund."
+
+        // TODO: SMS NOTIFICATION - CUSTOMER OUT-OF-STOCK MESSAGE
+        console.log('📱 [SMS TODO] Send out-of-stock message to customer');
+        console.log('Phone:', phoneNumber);
+        console.log('Amount:', TransAmount);
+        console.log('Transaction:', TransID);
+        // TODO: Send SMS to customer
+        // Message: "Payment of KES {amount} received successfully. Your voucher code will be sent within 24 hours. Ref: {transactionId}. Thank you for your patience!"
+
+        return NextResponse.json({
+          ResultCode: 0,
+          ResultDesc: 'Payment received. Voucher code will be sent shortly.',
+        });
+      }
+    }
+
+    // Final null check - voucher must be assigned at this point
+    if (!voucher) {
+      console.error('[M-Pesa Webhook] CRITICAL: Voucher is null after all lookup attempts');
+      await db.collection('webhook_logs').insertOne({
+        source: 'mpesa_confirmation',
+        type: 'c2b_confirmation',
+        status: 'failed',
+        reason: 'voucher_null_after_lookup',
+        payload: body,
+        metadata: {
+          BillRefNumber,
+          TransID,
+          isSTKPayment,
+        },
+        timestamp: purchaseTime,
+      });
+
+      return NextResponse.json({
+        ResultCode: 1,
+        ResultDesc: 'Unable to process payment. Please contact support.',
       });
     }
 
     // Get voucher code for logging (keep it private in logs)
     voucherCode = voucher.voucherInfo.code;
 
-    // Check if voucher already purchased
-    if (voucher.payment?.transactionId) {
-      console.warn(`[M-Pesa Webhook] Voucher already purchased. Reference: ${BillRefNumber}`);
+    // Check if voucher already purchased with THIS transaction ID
+    if (voucher.payment?.transactionId === TransID) {
+      console.warn(`[M-Pesa Webhook] Duplicate webhook - voucher already purchased with this TransID: ${TransID}`);
+
+      // Log duplicate webhook
+      await db.collection('webhook_logs').insertOne({
+        source: 'mpesa_confirmation',
+        type: 'c2b_confirmation',
+        status: 'duplicate_transid',
+        payload: body,
+        metadata: {
+          voucherId: voucher._id,
+          BillRefNumber: BillRefNumber,
+          TransID: TransID,
+          existingTransID: voucher.payment.transactionId,
+        },
+        timestamp: purchaseTime,
+      });
+
+      // Still return success to Safaricom
+      return NextResponse.json({
+        ResultCode: 0,
+        ResultDesc: 'Duplicate transaction - already processed',
+      });
+    }
+
+    // Check if voucher already purchased with DIFFERENT transaction ID
+    if (voucher.payment?.transactionId && voucher.payment.transactionId !== TransID) {
+      console.warn(`[M-Pesa Webhook] Voucher already purchased with different transaction. Existing: ${voucher.payment.transactionId}, New: ${TransID}`);
 
       // Log duplicate webhook
       await db.collection('webhook_logs').insertOne({
@@ -289,28 +561,6 @@ export async function POST(request: NextRequest) {
     }
 
     console.log(`[M-Pesa Webhook] Voucher purchased successfully. Reference: ${BillRefNumber}, Commission: KES ${commissionAmount.toFixed(2)}`);
-
-    // Record commission in transactions
-    await db.collection('transactions').insertOne({
-      userId: voucher.userId,
-      routerId: voucher.routerId,
-      voucherId: voucher._id,
-      type: 'voucher_sale',
-      amount: paidAmount,
-      commission: commissionAmount,
-      commissionRate: commissionRate,
-      paymentMethod: 'mpesa',
-      transactionId: TransID,
-      phoneNumber: phoneNumber || MSISDN,
-      status: 'completed',
-      metadata: {
-        BillRefNumber: BillRefNumber,
-        packageType: voucher.voucherInfo.packageType,
-        purchaseExpiresAt: purchaseExpiresAt?.toISOString() || null,
-        webhookProcessingTime: Date.now() - startTime,
-      },
-      createdAt: purchaseTime,
-    });
 
     // Create audit log
     await db.collection('audit_logs').insertOne({

@@ -353,12 +353,10 @@ export async function POST(request: NextRequest) {
     
     console.log('✅ [Captive Purchase] Router owner found:', routerOwner.email);
 
-    // Generate unique voucher code that will be used as AccountReference
-    console.log('🎫 [Captive Purchase] Generating voucher code...');
-    const voucherCode = await generateUniqueVoucherCode(db);
-    console.log('✅ [Captive Purchase] Voucher code generated:', voucherCode);
-    const voucherPassword = voucherCode; // Password same as code for vouchers
-    const accountReference = voucherCode; // Use voucher code as account reference
+    // Generate unique transaction reference (NOT voucher code)
+    console.log('🔖 [Captive Purchase] Generating transaction reference...');
+    const transactionRef = `TXN-${Date.now()}-${crypto.randomBytes(4).toString('hex').toUpperCase()}`;
+    console.log('✅ [Captive Purchase] Transaction reference generated:', transactionRef);
 
     // Get router owner's paybill from paymentSettings
     let paybillNumber: string | null = null;
@@ -421,13 +419,13 @@ export async function POST(request: NextRequest) {
     console.log('✅ [Captive Purchase] Paybill verified:', paybill.paybillInfo.name);
 
     // Prepare STK Push parameters using mpesaService
-    const callbackUrl = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000'}/api/webhooks/mpesa/callback`;
+    const callbackUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/webhooks/p8ytqrbul/callback`;
     
     console.log('🚀 [Captive Purchase] Initiating STK Push with params:', {
       paybillNumber,
       phoneNumber: normalizedPhone,
       amount: selectedPackage.price,
-      accountReference,
+      accountReference: transactionRef,
       callbackUrl,
     });
 
@@ -438,7 +436,7 @@ export async function POST(request: NextRequest) {
         paybillNumber: paybillNumber,
         phoneNumber: normalizedPhone,
         amount: selectedPackage.price,
-        accountReference: accountReference, // Use voucher code
+        accountReference: transactionRef, // Use transaction reference (NOT voucher code)
         transactionDesc: `${selectedPackage.displayName}`,
         callbackUrl: callbackUrl,
       });
@@ -495,7 +493,7 @@ export async function POST(request: NextRequest) {
       },
       paybill: {
         paybillNumber: paybillNumber,
-        accountNumber: accountReference,
+        accountNumber: transactionRef,
         type: paybill.paybillInfo.type || 'paybill',
       },
       reconciliation: {
@@ -520,60 +518,8 @@ export async function POST(request: NextRequest) {
     const paymentId = paymentResult.insertedId;
     console.log('✅ [Captive Purchase] Payment record created:', paymentId);
 
-    // Create pending voucher
-    console.log('🎫 [Captive Purchase] Creating voucher record...');
-    const voucherDoc = {
-      routerId: router._id,
-      userId: router.userId, // Router owner's user ID
-      voucherInfo: {
-        code: voucherCode,
-        password: voucherPassword,
-        packageType: selectedPackage.name,
-        packageDisplayName: selectedPackage.displayName,
-        duration: selectedPackage.duration,
-        dataLimit: selectedPackage.dataLimit || 0,
-        bandwidth: {
-          upload: selectedPackage.bandwidth.upload,
-          download: selectedPackage.bandwidth.download,
-        },
-        price: selectedPackage.price,
-        currency: 'KES',
-      },
-      usage: {
-        used: false,
-        userId: null as string | null,
-        deviceMac: null as string | null,
-        startTime: null as Date | null,
-        endTime: null as Date | null,
-        dataUsed: 0,
-        timeUsed: 0,
-      },
-      payment: {
-        method: 'mpesa' as const,
-        transactionId: null as string | null,
-        phoneNumber: normalizedPhone,
-        amount: selectedPackage.price,
-        paymentDate: null as Date | null,
-      },
-      batch: {
-        batchId: null as string | null,
-        batchSize: 1,
-        generatedBy: null as ObjectId | null,
-      },
-      expiry: {
-        expiresAt: new Date(
-          Date.now() + (selectedPackage.validity || 30) * 24 * 60 * 60 * 1000
-        ),
-        autoDelete: true,
-      },
-      status: 'pending_payment' as const,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    };
-
-    const voucherResult = await db.collection('vouchers').insertOne(voucherDoc);
-    const voucherId = voucherResult.insertedId;
-    console.log('✅ [Captive Purchase] Voucher record created:', voucherId);
+    // DO NOT create voucher here - it will be assigned from pool on payment success
+    console.log('⏭️  [Captive Purchase] Skipping voucher creation - will assign from pool on payment confirmation');
 
     // Create or update WiFi customer record
     console.log('👥 [Captive Purchase] Managing customer record...');
@@ -630,46 +576,29 @@ export async function POST(request: NextRequest) {
       console.log(`[Captive Purchase] Updated existing WiFi customer: ${normalizedPhone}`);
     }
 
-    // Link voucher to customer
-    await db.collection('vouchers').updateOne(
-      { _id: voucherId },
-      {
-        $set: {
-          customerId: wifiCustomer._id,
-        }
-      }
-    );
-
-    // Link voucher to payment
-    await db.collection('payments').updateOne(
-      { _id: paymentId },
-      {
-        $push: {
-          linkedItems: {
-            type: 'voucher',
-            itemId: voucherId,
-            quantity: 1,
-          },
-        } as any,
-      }
-    );
-
-    // Save STK initiation data for callback matching
+    // Save STK initiation data for callback matching (NO voucherId yet)
     await db.collection('stk_initiations').insertOne({
       CheckoutRequestID: stkPushResponse.checkoutRequestId || '',
       MerchantRequestID: stkPushResponse.merchantRequestId || '',
-      AccountReference: accountReference, // Voucher code
+      AccountReference: transactionRef, // Transaction reference (NOT voucher code)
       PhoneNumber: normalizedPhone, // Raw phone number
       Amount: selectedPackage.price,
       paybillNumber: paybillNumber,
       routerId: router._id,
-      voucherId: voucherId,
+      userId: router.userId,
+      customerId: wifiCustomer._id,
+      packageId: selectedPackage.name,
+      packageDisplayName: selectedPackage.displayName,
+      packageDuration: selectedPackage.duration,
+      packagePrice: selectedPackage.price,
+      macAddress: normalizedMac,
       paymentId: paymentId,
+      voucherId: null, // Will be assigned on payment success
       status: 'initiated',
       createdAt: new Date(),
     });
 
-    // Log purchase attempt
+    // Log purchase attempt (NO voucher_id yet)
     await db.collection('purchase_attempts').insertOne({
       mac_address: normalizedMac,
       router_id: router._id,
@@ -678,8 +607,9 @@ export async function POST(request: NextRequest) {
       phone_number: normalizedPhone,
       amount: selectedPackage.price,
       payment_id: paymentId,
-      voucher_id: voucherId,
+      voucher_id: null, // Will be assigned on payment success
       checkout_request_id: stkPushResponse.checkoutRequestId,
+      transaction_reference: transactionRef,
       timestamp: new Date(),
     });
 
