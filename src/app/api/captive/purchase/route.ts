@@ -366,7 +366,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Prepare STK Push parameters using mpesaService
-    const callbackUrl = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000'}/api/webhooks/mpesa/callback`;
+    const callbackUrl = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000'}/api/webhooks/p8ytqrbul/callback`;
 
     // Initiate STK Push using mpesaService
     let stkPushResponse;
