@@ -255,11 +255,16 @@ export async function POST(request: NextRequest) {
           }
         );
 
-        // Link voucher to payment
+        // Link voucher to payment and mark as completed
         if (packageInfo.paymentId) {
           await db.collection('payments').updateOne(
             { _id: packageInfo.paymentId },
             {
+              $set: {
+                status: 'completed',
+                'mpesa.transactionId': TransID,
+                updatedAt: purchaseTime,
+              },
               $push: {
                 linkedItems: {
                   type: 'voucher',
