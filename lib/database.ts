@@ -27,7 +27,7 @@ if (process.env.NODE_ENV === 'development') {
 
 export async function getDatabase(): Promise<Db> {
   const client = await clientPromise;
-  return client.db(process.env.MONGODB_DB || 'mikrotik-portal');
+  return client.db(process.env.MONGODB_DB_NAME || 'mikrotik-portal');
 }
 
 export default clientPromise;
