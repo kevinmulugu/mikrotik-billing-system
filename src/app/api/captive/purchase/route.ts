@@ -365,13 +365,20 @@ export async function POST(request: NextRequest) {
     
     if (routerOwner.paymentSettings?.paybillNumber) {
       paybillNumber = routerOwner.paymentSettings.paybillNumber;
+      console.log('💳 [Captive Purchase] Using user configured paybill:', paybillNumber);
+    } else {
+      // Fallback to default paybill from environment
+      paybillNumber = process.env.MPESA_DEFAULT_PAYBILL || null;
+      if (paybillNumber) {
+        console.log('💳 [Captive Purchase] Using default paybill from env:', paybillNumber);
+      } else {
+        console.log('💳 [Captive Purchase] Paybill number: NOT CONFIGURED');
+      }
     }
-    
-    console.log('💳 [Captive Purchase] Paybill number:', paybillNumber || 'NOT CONFIGURED');
 
     // If no paybill configured, return error
     if (!paybillNumber) {
-      console.log('❌ [Captive Purchase] No paybill configured for owner');
+      console.log('❌ [Captive Purchase] No paybill configured for owner and no default paybill set');
       return NextResponse.json(
         {
           success: false,
