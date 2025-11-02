@@ -167,17 +167,29 @@ export class MpesaService {
    * Initiate STK Push
    */
   async initiateSTKPush(params: STKPushParams): Promise<STKPushResponse> {
+    console.log('🚀 [M-Pesa Service] initiateSTKPush called with:', {
+      paybillNumber: params.paybillNumber,
+      phoneNumber: params.phoneNumber,
+      amount: params.amount,
+      accountReference: params.accountReference,
+      transactionDesc: params.transactionDesc,
+    });
+    
     try {
+      console.log('🔑 [M-Pesa Service] Getting access token...');
       const accessToken = await this.getValidAccessToken(params.paybillNumber);
 
       if (!accessToken) {
+        console.log('❌ [M-Pesa Service] Failed to get access token');
         return {
           success: false,
           error: 'Failed to get access token',
         };
       }
+      console.log('✅ [M-Pesa Service] Access token obtained');
 
       // Get paybill details for passkey
+      console.log('🔍 [M-Pesa Service] Fetching paybill details from database...');
       const client = await clientPromise;
       const db = client.db(process.env.MONGODB_DB_NAME || 'mikrotik_billing');
 
@@ -187,16 +199,20 @@ export class MpesaService {
       });
 
       if (!paybill) {
+        console.log('❌ [M-Pesa Service] Paybill not found:', params.paybillNumber);
         return {
           success: false,
           error: 'Paybill not found',
         };
       }
+      
+      console.log('✅ [M-Pesa Service] Paybill found:', paybill.paybillInfo.name);
 
       const passKey = paybill.credentials?.passKey;
       const shortcode = paybill.paybillInfo.number;
 
       if (!passKey) {
+        console.log('❌ [M-Pesa Service] Paybill passkey not configured');
         return {
           success: false,
           error: 'Paybill passkey not configured',
@@ -205,15 +221,19 @@ export class MpesaService {
 
       // Generate timestamp
       const timestamp = new Date().toISOString().replace(/[^0-9]/g, '').slice(0, 14);
+      console.log('⏰ [M-Pesa Service] Timestamp generated:', timestamp);
 
       // Generate password
       const password = Buffer.from(`${shortcode}${passKey}${timestamp}`).toString('base64');
+      console.log('🔐 [M-Pesa Service] Password generated (base64)');
 
       // Format phone number (remove leading 0 or +, ensure 254 prefix)
       let phone = params.phoneNumber.replace(/\s/g, '');
       if (phone.startsWith('0')) phone = '254' + phone.slice(1);
       if (phone.startsWith('+')) phone = phone.slice(1);
       if (!phone.startsWith('254')) phone = '254' + phone;
+      
+      console.log('📱 [M-Pesa Service] Phone formatted:', { original: params.phoneNumber, formatted: phone });
 
       const stkPayload = {
         BusinessShortCode: shortcode,
@@ -229,13 +249,12 @@ export class MpesaService {
         TransactionDesc: params.transactionDesc,
       };
 
-      console.log('📱 Initiating STK Push:', {
-        shortcode,
-        phone,
-        amount: params.amount,
-        reference: params.accountReference,
+      console.log('� [M-Pesa Service] STK Push payload:', {
+        ...stkPayload,
+        Password: '***HIDDEN***',
       });
 
+      console.log('🌐 [M-Pesa Service] Sending request to:', `${this.baseUrl}/mpesa/stkpush/v1/processrequest`);
       const response = await fetch(`${this.baseUrl}/mpesa/stkpush/v1/processrequest`, {
         method: 'POST',
         headers: {
@@ -245,9 +264,15 @@ export class MpesaService {
         body: JSON.stringify(stkPayload),
       });
 
+      console.log('📥 [M-Pesa Service] Response status:', response.status);
       const data = await response.json();
+      console.log('📥 [M-Pesa Service] Response data:', data);
 
       if (data.ResponseCode === '0') {
+        console.log('✅ [M-Pesa Service] STK Push successful:', {
+          checkoutRequestId: data.CheckoutRequestID,
+          merchantRequestId: data.MerchantRequestID,
+        });
         return {
           success: true,
           checkoutRequestId: data.CheckoutRequestID,
@@ -257,6 +282,11 @@ export class MpesaService {
           customerMessage: data.CustomerMessage,
         };
       } else {
+        console.log('❌ [M-Pesa Service] STK Push failed:', {
+          responseCode: data.ResponseCode,
+          responseDescription: data.ResponseDescription,
+          errorMessage: data.errorMessage,
+        });
         return {
           success: false,
           responseCode: data.ResponseCode,
@@ -266,7 +296,8 @@ export class MpesaService {
         };
       }
     } catch (error) {
-      console.error('Error initiating STK Push:', error);
+      console.error('💥 [M-Pesa Service] Error initiating STK Push:', error);
+      console.error('Stack trace:', error instanceof Error ? error.stack : 'No stack trace');
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to initiate STK Push',

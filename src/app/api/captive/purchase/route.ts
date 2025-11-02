@@ -97,10 +97,19 @@ export async function OPTIONS(request: NextRequest) {
 
 // POST /api/captive/purchase - Initiate package purchase with M-Pesa
 export async function POST(request: NextRequest) {
+  console.log('🚀 [Captive Purchase] Request received');
+  
   try {
     // Parse request body
     const body = await request.json();
     const { router_id, package_id, phone_number, mac_address } = body;
+    
+    console.log('📝 [Captive Purchase] Request body:', {
+      router_id,
+      package_id,
+      phone_number,
+      mac_address,
+    });
 
     // Validate required fields
     const errors: any = {};
@@ -125,6 +134,7 @@ export async function POST(request: NextRequest) {
 
     // Return validation errors
     if (Object.keys(errors).length > 0) {
+      console.log('❌ [Captive Purchase] Validation errors:', errors);
       return NextResponse.json(
         {
           success: false,
@@ -141,8 +151,10 @@ export async function POST(request: NextRequest) {
 
     // Validate and normalize phone number
     const normalizedPhone = validateAndNormalizePhoneNumber(phone_number);
+    console.log('📱 [Captive Purchase] Phone normalized:', { raw: phone_number, normalized: normalizedPhone });
     
     if (!normalizedPhone) {
+      console.log('❌ [Captive Purchase] Invalid phone number format');
       return NextResponse.json(
         {
           success: false,
@@ -159,20 +171,27 @@ export async function POST(request: NextRequest) {
 
     // Normalize MAC address
     const normalizedMac = normalizeMacAddress(mac_address);
+    console.log('💻 [Captive Purchase] MAC normalized:', { raw: mac_address, normalized: normalizedMac });
 
     // Connect to database
+    console.log('🔌 [Captive Purchase] Connecting to database...');
     const client = await clientPromise;
     const db = client.db(process.env.MONGODB_DB_NAME || 'mikrotik_billing');
+    console.log('✅ [Captive Purchase] Database connected');
 
     // Check rate limiting - max 3 purchases per MAC per 5 minutes
     const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
     
+    console.log('⏱️  [Captive Purchase] Checking rate limit...');
     const recentPurchases = await db.collection('purchase_attempts').countDocuments({
       mac_address: normalizedMac,
       timestamp: { $gte: fiveMinutesAgo },
     });
+    console.log(`📊 [Captive Purchase] Recent purchases: ${recentPurchases}/3`);
 
     if (recentPurchases >= 3) {
+      console.log('🚫 [Captive Purchase] Rate limit exceeded');
+
       return NextResponse.json(
         {
           success: false,
@@ -193,11 +212,13 @@ export async function POST(request: NextRequest) {
     }
 
     // Find router
+    console.log('🔍 [Captive Purchase] Finding router:', router_id);
     const router = await db.collection('routers').findOne({
       _id: new ObjectId(router_id),
     });
 
     if (!router) {
+      console.log('❌ [Captive Purchase] Router not found:', router_id);
       return NextResponse.json(
         {
           success: false,
@@ -210,6 +231,8 @@ export async function POST(request: NextRequest) {
         }
       );
     }
+    
+    console.log('✅ [Captive Purchase] Router found:', router.routerInfo?.name);
 
     // Check router status (optional: prevent purchases if router offline)
     // Commenting out to allow offline purchases
@@ -229,11 +252,13 @@ export async function POST(request: NextRequest) {
     // }
 
     // Find package
+    console.log('📦 [Captive Purchase] Finding package:', package_id);
     const selectedPackage = router.packages?.hotspot?.find(
       (pkg: any) => pkg.name === package_id
     );
 
     if (!selectedPackage) {
+      console.log('❌ [Captive Purchase] Package not found:', package_id);
       return NextResponse.json(
         {
           success: false,
@@ -247,9 +272,17 @@ export async function POST(request: NextRequest) {
         }
       );
     }
+    
+    console.log('✅ [Captive Purchase] Package found:', {
+      name: selectedPackage.displayName,
+      price: selectedPackage.price,
+      duration: selectedPackage.duration,
+      syncStatus: selectedPackage.syncStatus,
+    });
 
     // Check if package is synced
     if (selectedPackage.syncStatus !== 'synced') {
+      console.log('❌ [Captive Purchase] Package not synced:', selectedPackage.syncStatus);
       return NextResponse.json(
         {
           success: false,
@@ -268,6 +301,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Check for existing pending payment (prevent duplicate purchases)
+    console.log('🔍 [Captive Purchase] Checking for pending payments...');
     const existingPendingPayment = await db.collection('payments').findOne({
       routerId: new ObjectId(router_id),
       'mpesa.phoneNumber': normalizedPhone,
@@ -276,6 +310,7 @@ export async function POST(request: NextRequest) {
     });
 
     if (existingPendingPayment) {
+      console.log('⚠️  [Captive Purchase] Existing pending payment found:', existingPendingPayment._id);
       return NextResponse.json(
         {
           success: false,
@@ -296,11 +331,13 @@ export async function POST(request: NextRequest) {
     }
 
     // Get router owner (ISP) for payment settings
+    console.log('👤 [Captive Purchase] Finding router owner:', router.userId);
     const routerOwner = await db.collection('users').findOne({
       _id: router.userId,
     });
 
     if (!routerOwner) {
+      console.log('❌ [Captive Purchase] Router owner not found:', router.userId);
       return NextResponse.json(
         {
           success: false,
@@ -313,9 +350,13 @@ export async function POST(request: NextRequest) {
         }
       );
     }
+    
+    console.log('✅ [Captive Purchase] Router owner found:', routerOwner.email);
 
     // Generate unique voucher code that will be used as AccountReference
+    console.log('🎫 [Captive Purchase] Generating voucher code...');
     const voucherCode = await generateUniqueVoucherCode(db);
+    console.log('✅ [Captive Purchase] Voucher code generated:', voucherCode);
     const voucherPassword = voucherCode; // Password same as code for vouchers
     const accountReference = voucherCode; // Use voucher code as account reference
 
@@ -325,9 +366,12 @@ export async function POST(request: NextRequest) {
     if (routerOwner.paymentSettings?.paybillNumber) {
       paybillNumber = routerOwner.paymentSettings.paybillNumber;
     }
+    
+    console.log('💳 [Captive Purchase] Paybill number:', paybillNumber || 'NOT CONFIGURED');
 
     // If no paybill configured, return error
     if (!paybillNumber) {
+      console.log('❌ [Captive Purchase] No paybill configured for owner');
       return NextResponse.json(
         {
           success: false,
@@ -346,12 +390,14 @@ export async function POST(request: NextRequest) {
     }
 
     // Verify paybill exists in database
+    console.log('🔍 [Captive Purchase] Verifying paybill in database...');
     const paybill = await db.collection('paybills').findOne({
       'paybillInfo.number': paybillNumber,
       status: 'active',
     });
 
     if (!paybill) {
+      console.log('❌ [Captive Purchase] Paybill not found in database:', paybillNumber);
       return NextResponse.json(
         {
           success: false,
@@ -364,9 +410,19 @@ export async function POST(request: NextRequest) {
         }
       );
     }
+    
+    console.log('✅ [Captive Purchase] Paybill verified:', paybill.paybillInfo.name);
 
     // Prepare STK Push parameters using mpesaService
-    const callbackUrl = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000'}/api/webhooks/p8ytqrbul/callback`;
+    const callbackUrl = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000'}/api/webhooks/mpesa/callback`;
+    
+    console.log('🚀 [Captive Purchase] Initiating STK Push with params:', {
+      paybillNumber,
+      phoneNumber: normalizedPhone,
+      amount: selectedPackage.price,
+      accountReference,
+      callbackUrl,
+    });
 
     // Initiate STK Push using mpesaService
     let stkPushResponse;
@@ -381,10 +437,16 @@ export async function POST(request: NextRequest) {
       });
 
       if (!stkPushResponse.success) {
+        console.log('❌ [Captive Purchase] STK Push failed:', stkPushResponse);
         throw new Error(stkPushResponse.error || 'STK Push failed');
       }
+      
+      console.log('✅ [Captive Purchase] STK Push successful:', {
+        checkoutRequestId: stkPushResponse.checkoutRequestId,
+        merchantRequestId: stkPushResponse.merchantRequestId,
+      });
     } catch (stkError) {
-      console.error('STK Push failed:', stkError);
+      console.error('❌ [Captive Purchase] STK Push error:', stkError);
       
       return NextResponse.json(
         {
@@ -405,6 +467,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Create payment record
+    console.log('💾 [Captive Purchase] Creating payment record...');
     const paymentDoc = {
       userId: router.userId, // Router owner's user ID
       routerId: router._id,
@@ -448,8 +511,10 @@ export async function POST(request: NextRequest) {
 
     const paymentResult = await db.collection('payments').insertOne(paymentDoc);
     const paymentId = paymentResult.insertedId;
+    console.log('✅ [Captive Purchase] Payment record created:', paymentId);
 
     // Create pending voucher
+    console.log('🎫 [Captive Purchase] Creating voucher record...');
     const voucherDoc = {
       routerId: router._id,
       userId: router.userId, // Router owner's user ID
@@ -501,8 +566,10 @@ export async function POST(request: NextRequest) {
 
     const voucherResult = await db.collection('vouchers').insertOne(voucherDoc);
     const voucherId = voucherResult.insertedId;
+    console.log('✅ [Captive Purchase] Voucher record created:', voucherId);
 
     // Create or update WiFi customer record
+    console.log('👥 [Captive Purchase] Managing customer record...');
     // This is where we have the plain phone number from captive portal
     // We save both plain phone and SHA-256 hash for M-Pesa webhook matching
     const sha256Phone = crypto.createHash('sha256').update(normalizedPhone).digest('hex');
@@ -609,6 +676,8 @@ export async function POST(request: NextRequest) {
       timestamp: new Date(),
     });
 
+    console.log('✅ [Captive Purchase] All records created successfully');
+
     // Build successful response
     const response = {
       success: true,
@@ -643,6 +712,7 @@ export async function POST(request: NextRequest) {
       },
     };
 
+    console.log('🎉 [Captive Purchase] Request completed successfully');
     return NextResponse.json(response, {
       status: 200,
       headers: {
@@ -652,7 +722,8 @@ export async function POST(request: NextRequest) {
       },
     });
   } catch (error) {
-    console.error('Error processing purchase:', error);
+    console.error('💥 [Captive Purchase] Fatal error:', error);
+    console.error('Stack trace:', error instanceof Error ? error.stack : 'No stack trace');
 
     return NextResponse.json(
       {
