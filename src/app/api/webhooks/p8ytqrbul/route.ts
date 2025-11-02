@@ -49,10 +49,6 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
 
-    // Wait 2 seconds to allow STK callback to complete first
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    console.log('[M-Pesa Webhook] Delayed 2s for STK callback completion');
-
     // TODO: Verify webhook signature for production
     // const signature = headers().get('x-safaricom-signature');
     // await verifyMpesaSignature(body, signature);
@@ -97,6 +93,7 @@ export async function POST(request: NextRequest) {
     const stkInitiation = await db.collection('stk_initiations').findOne({
       AccountReference: BillRefNumber,
     });
+    console.log('[M-Pesa Webhook] STK initiation lookup result:', stkInitiation);
 
     let voucher = null;
     let phoneNumber = MSISDN ? String(MSISDN) : null;
