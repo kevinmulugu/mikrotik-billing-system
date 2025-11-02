@@ -35,6 +35,9 @@ if (!MONGODB_URI) {
   throw new Error('Please define MONGODB_URI in .env.local');
 }
 
+// log the mpesa base url
+console.log('M-Pesa Base URL:', MPESA_BASE_URL);
+
 interface Paybill {
   _id: any;
   paybillInfo: {
