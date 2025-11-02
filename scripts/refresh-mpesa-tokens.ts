@@ -13,13 +13,14 @@
  * - Manual: npx tsx scripts/refresh-mpesa-tokens.ts
  */
 
-import { MongoClient } from 'mongodb';
+// Load environment variables FIRST before any other imports
 import * as dotenv from 'dotenv';
 import * as path from 'path';
-import { mpesaService } from '@/lib/services/mpesa';
-
-// Load environment variables
 dotenv.config({ path: path.resolve(process.cwd(), '.env.local') });
+
+// Then import modules that depend on environment variables
+import { MongoClient } from 'mongodb';
+import { mpesaService } from '@/lib/services/mpesa';
 
 const MONGODB_URI = process.env.MONGODB_URI;
 const MONGODB_DB_NAME = process.env.MONGODB_DB_NAME || 'mikrotik_billing';
