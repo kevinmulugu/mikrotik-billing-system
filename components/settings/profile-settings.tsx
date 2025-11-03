@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import { useSession } from "next-auth/react";
 import {
   User,
   Mail,
@@ -44,8 +45,6 @@ interface ProfileFormData {
     county: string;
     postalCode: string;
   };
-  bio: string;
-  website: string;
 }
 
 interface SocialAccount {
@@ -55,38 +54,79 @@ interface SocialAccount {
 }
 
 export const ProfileSettings: React.FC = () => {
+  const { data: session } = useSession();
   const [isSaving, setIsSaving] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
 
   const [profileData, setProfileData] = useState<ProfileFormData>({
-    fullName: "John Kamau",
-    email: "john.kamau@example.com",
-    phoneNumber: "+254 712 345 678",
-    businessName: "Kamau WiFi Services",
+    fullName: "",
+    email: "",
+    phoneNumber: "",
+    businessName: "",
     businessType: "homeowner",
-    idNumber: "12345678",
+    idNumber: "",
     address: {
-      street: "Ngong Road, Kilimani",
-      city: "Nairobi",
-      county: "Nairobi",
-      postalCode: "00100",
+      street: "",
+      city: "",
+      county: "",
+      postalCode: "",
     },
-    bio: "Providing reliable WiFi services to my community since 2023",
-    website: "https://kamau-wifi.co.ke",
   });
 
   const [errors, setErrors] = useState<Partial<Record<keyof ProfileFormData, string>>>({});
 
-  // Sample connected accounts - replace with API
-  const connectedAccounts: SocialAccount[] = [
-    {
-      provider: "google",
-      email: "john.kamau@gmail.com",
-      connectedAt: new Date("2024-01-15"),
-    },
-  ];
+  // Fetch user profile data
+  useEffect(() => {
+    const fetchProfile = async () => {
+      setIsLoading(true);
+      try {
+        const res = await fetch('/api/user/profile');
+        if (!res.ok) throw new Error('Failed to fetch profile');
+        
+        const data = await res.json();
+        
+        setProfileData({
+          fullName: data.name || "",
+          email: data.email || "",
+          phoneNumber: data.businessInfo?.contact?.phone || "",
+          businessName: data.businessInfo?.name || "",
+          businessType: data.businessInfo?.type || "homeowner",
+          idNumber: "",
+          address: {
+            street: data.businessInfo?.address?.street || "",
+            city: data.businessInfo?.address?.city || "",
+            county: data.businessInfo?.address?.county || "",
+            postalCode: data.businessInfo?.address?.postalCode || "",
+          },
+        });
+        
+        if (data.image) {
+          setAvatarPreview(data.image);
+        }
+      } catch (error) {
+        console.error('Failed to fetch profile:', error);
+        toast.error('Failed to load profile data');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    if (session?.user) {
+      fetchProfile();
+    }
+  }, [session]);
+
+  // Sample connected accounts - will show Google if user has Google OAuth
+  const connectedAccounts: SocialAccount[] = session?.user?.email && session.user.email.includes('gmail') 
+    ? [{
+        provider: "google" as const,
+        email: session.user.email,
+        connectedAt: new Date(),
+      }]
+    : [];
 
   const kenyanCounties = [
     "Nairobi", "Mombasa", "Kisumu", "Nakuru", "Eldoret", "Thika", "Malindi",
@@ -96,8 +136,9 @@ export const ProfileSettings: React.FC = () => {
 
   const businessTypes = [
     { value: "homeowner", label: "Homeowner" },
-    { value: "isp", label: "Internet Service Provider" },
-    { value: "business", label: "Business/Enterprise" },
+    { value: "individual", label: "Individual" },
+    { value: "isp", label: "ISP Basic" },
+    { value: "isp_pro", label: "ISP Pro" },
   ];
 
   const handleInputChange = (field: keyof ProfileFormData, value: string) => {
@@ -195,13 +236,40 @@ export const ProfileSettings: React.FC = () => {
     setIsSaving(true);
 
     try {
-      // API call to save profile
-      await new Promise((resolve) => setTimeout(resolve, 2000));
+      const res = await fetch('/api/user/profile', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: profileData.fullName,
+          image: avatarPreview,
+          businessInfo: {
+            name: profileData.businessName,
+            type: profileData.businessType,
+            contact: {
+              phone: profileData.phoneNumber,
+              email: profileData.email,
+            },
+            address: {
+              street: profileData.address.street,
+              city: profileData.address.city,
+              county: profileData.address.county,
+              country: 'Kenya',
+              postalCode: profileData.address.postalCode,
+            },
+          },
+        }),
+      });
+
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.error || 'Failed to update profile');
+      }
 
       toast.success("Profile updated successfully");
       setHasChanges(false);
-    } catch (error) {
-      toast.error("Failed to update profile");
+    } catch (error: any) {
+      console.error('Save profile error:', error);
+      toast.error(error.message || "Failed to update profile");
     } finally {
       setIsSaving(false);
     }
@@ -237,6 +305,21 @@ export const ProfileSettings: React.FC = () => {
         return "⚫";
     }
   };
+
+  if (isLoading) {
+    return (
+      <div className="space-y-6">
+        <Card>
+          <CardContent className="flex items-center justify-center p-12">
+            <div className="text-center space-y-4">
+              <Loader2 className="h-8 w-8 animate-spin mx-auto text-muted-foreground" />
+              <p className="text-muted-foreground">Loading profile...</p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -363,12 +446,13 @@ export const ProfileSettings: React.FC = () => {
                   placeholder="your.email@example.com"
                   className="pl-10"
                   value={profileData.email}
-                  onChange={(e) => handleInputChange("email", e.target.value)}
+                  disabled
+                  readOnly
                 />
               </div>
-              {errors.email && (
-                <p className="text-sm text-destructive">{errors.email}</p>
-              )}
+              <p className="text-xs text-muted-foreground">
+                Email cannot be changed as it's linked to your authentication
+              </p>
             </div>
 
             <div className="space-y-2">
@@ -387,19 +471,6 @@ export const ProfileSettings: React.FC = () => {
                 <p className="text-sm text-destructive">{errors.phoneNumber}</p>
               )}
             </div>
-          </div>
-
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Bio (Optional)</label>
-            <Textarea
-              placeholder="Tell us a bit about yourself and your business..."
-              rows={3}
-              value={profileData.bio}
-              onChange={(e) => handleInputChange("bio", e.target.value)}
-            />
-            <p className="text-xs text-muted-foreground">
-              {profileData.bio.length}/200 characters
-            </p>
           </div>
         </CardContent>
       </Card>
@@ -447,20 +518,6 @@ export const ProfileSettings: React.FC = () => {
                   ))}
                 </SelectContent>
               </Select>
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Website (Optional)</label>
-            <div className="relative">
-              <Globe className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                type="url"
-                placeholder="https://your-website.com"
-                className="pl-10"
-                value={profileData.website}
-                onChange={(e) => handleInputChange("website", e.target.value)}
-              />
             </div>
           </div>
         </CardContent>
