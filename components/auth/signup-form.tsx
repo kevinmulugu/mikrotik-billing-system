@@ -1,3 +1,4 @@
+// components/auth/signup-form.tsx
 "use client";
 
 import React, { useState } from "react";
@@ -522,28 +523,51 @@ export const SignUpForm: React.FC<SignUpFormProps> = ({
                   onCheckedChange={(checked) =>
                     handleInputChange("agreeToTerms", checked as boolean)
                   }
+                  className={errors.agreeToTerms ? "border-destructive" : ""}
                 />
                 <div className="grid gap-1.5 leading-none">
                   <label
                     htmlFor="terms"
                     className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
                   >
-                    I agree to the terms and conditions
+                    I agree to the terms and conditions *
                   </label>
                   <p className="text-sm text-muted-foreground">
                     By creating an account, you agree to our{" "}
-                    <a href="/terms" className="underline hover:text-primary">
+                    <a 
+                      href="/legal/terms-of-service" 
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="underline hover:text-primary font-medium"
+                    >
                       Terms of Service
-                    </a>{" "}
-                    and{" "}
-                    <a href="/privacy" className="underline hover:text-primary">
+                    </a>
+                    ,{" "}
+                    <a 
+                      href="/legal/privacy-policy" 
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="underline hover:text-primary font-medium"
+                    >
                       Privacy Policy
+                    </a>
+                    , and{" "}
+                    <a 
+                      href="/legal/acceptable-use" 
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="underline hover:text-primary font-medium"
+                    >
+                      Acceptable Use Policy
                     </a>
                   </p>
                 </div>
               </div>
               {errors.agreeToTerms && (
-                <p className="text-sm text-destructive">{errors.agreeToTerms}</p>
+                <p className="text-sm text-destructive flex items-center gap-1 mt-1">
+                  <AlertCircle className="h-3 w-3" />
+                  {errors.agreeToTerms}
+                </p>
               )}
 
               <div className="flex gap-2">

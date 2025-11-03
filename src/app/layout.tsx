@@ -1,9 +1,11 @@
+// src/app/layout.tsx
 import type { Metadata, Viewport } from 'next';
 import { Inter } from 'next/font/google';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
 import { Providers } from '@/lib/providers';
 import { Toaster } from 'sonner';
+import { CookieConsent } from '@/components/common/cookie-consent';
 import './globals.css';
 
 const inter = Inter({
@@ -73,6 +75,7 @@ export default async function RootLayout({
       <body className={`${inter.variable} font-sans antialiased`}>
         <Providers session={session}>
           {children}
+          <CookieConsent />
           <Toaster
             position="top-right"
             richColors

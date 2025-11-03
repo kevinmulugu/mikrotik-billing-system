@@ -10,13 +10,17 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Separator } from '@/components/ui/separator';
 import { toast } from 'sonner';
-import { CheckCircle, XCircle } from 'lucide-react';
+import { CheckCircle, XCircle, AlertCircle } from 'lucide-react';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Label } from '@/components/ui/label';
 
 export default function SignUpPage() {
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
   const [authConfig, setAuthConfig] = useState({ hasGoogle: false, hasEmail: false });
   const [configError, setConfigError] = useState(false);
+  const [agreeToTerms, setAgreeToTerms] = useState(false);
+  const [termsError, setTermsError] = useState(false);
   const router = useRouter();
 
   // Check available auth methods
@@ -53,6 +57,16 @@ export default function SignUpPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Check terms acceptance
+    if (!agreeToTerms) {
+      setTermsError(true);
+      toast.error('Please accept the terms and conditions', {
+        description: 'You must agree to our terms to create an account.',
+      });
+      return;
+    }
+    
     if (!authConfig.hasEmail) {
       toast.error('Email signup is not configured', {
         description: 'Please use Google sign-in instead.',
@@ -122,6 +136,15 @@ export default function SignUpPage() {
   };
 
   const handleGoogleSignUp = () => {
+    // Check terms acceptance
+    if (!agreeToTerms) {
+      setTermsError(true);
+      toast.error('Please accept the terms and conditions', {
+        description: 'You must agree to our terms to create an account.',
+      });
+      return;
+    }
+    
     signIn('google', { callbackUrl: '/dashboard' });
   };
 
@@ -210,6 +233,64 @@ export default function SignUpPage() {
               </AlertDescription>
             </Alert>
           )}
+
+          {/* Terms and Conditions Acceptance */}
+          <div className="space-y-3">
+            <div className="flex items-start space-x-2">
+              <Checkbox
+                id="terms"
+                checked={agreeToTerms}
+                onCheckedChange={(checked) => {
+                  setAgreeToTerms(checked as boolean);
+                  if (checked) setTermsError(false);
+                }}
+                className={termsError ? "border-destructive" : ""}
+              />
+              <div className="grid gap-1.5 leading-none">
+                <Label
+                  htmlFor="terms"
+                  className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                >
+                  I agree to the terms and conditions *
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  By creating an account, you agree to our{" "}
+                  <a 
+                    href="/legal/terms-of-service" 
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="underline hover:text-primary font-medium"
+                  >
+                    Terms of Service
+                  </a>
+                  ,{" "}
+                  <a 
+                    href="/legal/privacy-policy" 
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="underline hover:text-primary font-medium"
+                  >
+                    Privacy Policy
+                  </a>
+                  , and{" "}
+                  <a 
+                    href="/legal/acceptable-use" 
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="underline hover:text-primary font-medium"
+                  >
+                    Acceptable Use Policy
+                  </a>
+                </p>
+              </div>
+            </div>
+            {termsError && (
+              <p className="text-sm text-destructive flex items-center gap-1">
+                <AlertCircle className="h-3 w-3" />
+                You must agree to the terms and conditions to continue
+              </p>
+            )}
+          </div>
 
           <div className="text-center">
             <p className="text-sm text-muted-foreground">
