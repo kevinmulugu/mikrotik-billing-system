@@ -178,6 +178,35 @@ export const BillingSettings: React.FC = () => {
     };
   }, []);
 
+  // Fetch revenue stats
+  React.useEffect(() => {
+    let mounted = true;
+    const fetchRevenueStats = async () => {
+      try {
+        const res = await fetch('/api/payments/stats');
+        if (!res.ok) throw new Error('Failed to load revenue stats');
+        const data = await res.json();
+        if (!mounted) return;
+        
+        // Update revenue stats from API
+        setRevenueStats({
+          thisMonth: data.stats?.monthlyRevenue || 0,
+          lastMonth: data.stats?.totalRevenue - (data.stats?.monthlyRevenue || 0) || 0,
+          growth: 0, // Can be calculated if we have historical data
+          commission: data.stats?.monthlyCommission || 0,
+          pending: data.stats?.pendingPayments || 0,
+        });
+      } catch (err) {
+        console.warn('Failed to fetch revenue stats', err);
+      }
+    };
+
+    fetchRevenueStats();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
   // Fetch all billing data (paybills, payout settings, invoices, payouts)
   React.useEffect(() => {
     let mounted = true;
@@ -537,7 +566,9 @@ export const BillingSettings: React.FC = () => {
     return customerData.plan === 'isp' || customerData.plan === 'isp_pro';
   };
 
-  const growthPercentage = ((revenueStats.thisMonth - revenueStats.lastMonth) / revenueStats.lastMonth) * 100;
+  const growthPercentage = revenueStats.lastMonth > 0
+    ? ((revenueStats.thisMonth - revenueStats.lastMonth) / revenueStats.lastMonth) * 100
+    : 0;
 
   return (
     <div className="space-y-6">

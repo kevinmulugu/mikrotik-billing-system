@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   TrendingUp,
   DollarSign,
@@ -17,6 +17,7 @@ import {
   CheckCircle2,
   Clock,
   AlertCircle,
+  Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -76,101 +77,106 @@ export const CommissionTracker: React.FC = () => {
   const [selectedPeriod, setSelectedPeriod] = useState<string>("current");
   const [timeRange, setTimeRange] = useState<string>("6months");
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [loading, setLoading] = useState(true);
+  
+  // Real data from API
+  const [stats, setStats] = useState<any>(null);
+  const [breakdown, setBreakdown] = useState<any>(null);
+  const [recentTransactions, setRecentTransactions] = useState<any[]>([]);
+  const [commissionRate, setCommissionRate] = useState<number>(0);
+  const [userPlan, setUserPlan] = useState<string>('individual');
 
-  // Sample data - replace with API calls
-  const commissionPeriods: CommissionPeriod[] = [
-    {
-      id: "period-1",
-      month: "January 2025",
-      startDate: new Date("2025-01-01"),
-      endDate: new Date("2025-01-31"),
-      revenue: {
-        totalRevenue: 45670,
-        voucherRevenue: 28340,
-        pppoeRevenue: 17330,
-        transactionCount: 156,
-      },
-      commission: {
-        rate: 15,
-        amount: 6850,
-        previousBalance: 0,
-        totalOwed: 6850,
-      },
-      payout: {
-        status: "paid",
-        method: "M-Pesa",
-        transactionId: "MPESA-COMM-123456",
-        paidAt: new Date("2025-02-01"),
-        fees: 0,
-      },
-      breakdown: [
-        { type: "1 Hour Voucher", count: 45, revenue: 4500, commission: 675 },
-        { type: "3 Hour Voucher", count: 32, revenue: 8000, commission: 1200 },
-        { type: "5 Hour Voucher", count: 28, revenue: 11200, commission: 1680 },
-        { type: "1 Day Voucher", count: 12, revenue: 4640, commission: 696 },
-        { type: "PPPoE Monthly", count: 39, revenue: 17330, commission: 2599 },
-      ],
-    },
-    {
-      id: "period-2",
-      month: "February 2025",
-      startDate: new Date("2025-02-01"),
-      endDate: new Date("2025-02-28"),
-      revenue: {
-        totalRevenue: 15600,
-        voucherRevenue: 8920,
-        pppoeRevenue: 6680,
-        transactionCount: 48,
-      },
-      commission: {
-        rate: 15,
-        amount: 2340,
-        previousBalance: 0,
-        totalOwed: 2340,
-      },
-      payout: {
-        status: "pending",
-      },
-      breakdown: [
-        { type: "1 Hour Voucher", count: 12, revenue: 1200, commission: 180 },
-        { type: "3 Hour Voucher", count: 8, revenue: 2000, commission: 300 },
-        { type: "5 Hour Voucher", count: 10, revenue: 4000, commission: 600 },
-        { type: "1 Day Voucher", count: 3, revenue: 1720, commission: 258 },
-        { type: "PPPoE Monthly", count: 15, revenue: 6680, commission: 1002 },
-      ],
-    },
-  ];
+  // Fetch real commission data
+  useEffect(() => {
+    const fetchCommissionData = async () => {
+      setLoading(true);
+      try {
+        const res = await fetch('/api/payments/stats');
+        if (!res.ok) throw new Error('Failed to fetch commission data');
+        
+        const data = await res.json();
+        setStats(data.stats);
+        setBreakdown(data.breakdown);
+        setRecentTransactions(data.recentTransactions || []);
+        setCommissionRate(data.stats?.commissionRate || 0);
+        setUserPlan(data.stats?.userPlan || 'individual');
+      } catch (error) {
+        console.error('Error fetching commission data:', error);
+        toast.error('Failed to load commission data');
+      } finally {
+        setLoading(false);
+      }
+    };
 
-  const currentPeriod = commissionPeriods[1]; // February (current)
-  const lastPeriod = commissionPeriods[0]; // January
+    fetchCommissionData();
+  }, []);
+
+  const isISP = userPlan === 'isp' || userPlan === 'isp_pro';
+
+  // For backwards compatibility with existing UI
+  const currentPeriod = {
+    id: "current",
+    month: new Date().toLocaleString('default', { month: 'long', year: 'numeric' }),
+    startDate: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
+    endDate: new Date(),
+    revenue: {
+      totalRevenue: stats?.monthlyRevenue || 0,
+      voucherRevenue: breakdown?.voucherSales?.revenue || 0,
+      pppoeRevenue: breakdown?.otherSales?.revenue || 0,
+      transactionCount: stats?.monthlyTransactions || 0,
+    },
+    commission: {
+      rate: commissionRate,
+      amount: stats?.monthlyCommission || 0,
+      previousBalance: 0,
+      totalOwed: stats?.totalCommission || 0,
+    },
+    payout: {
+      status: "pending" as const,
+    },
+    breakdown: [
+      { 
+        type: "Voucher Sales", 
+        count: breakdown?.voucherSales?.count || 0, 
+        revenue: breakdown?.voucherSales?.revenue || 0, 
+        commission: breakdown?.voucherSales?.commission || 0 
+      },
+      { 
+        type: "Other Sales", 
+        count: breakdown?.otherSales?.count || 0, 
+        revenue: breakdown?.otherSales?.revenue || 0, 
+        commission: breakdown?.otherSales?.commission || 0 
+      },
+    ],
+  };
+
+  const lastPeriod = {
+    revenue: {
+      totalRevenue: stats?.totalRevenue || 0,
+    },
+  };
 
   // Calculate growth
-  const revenueGrowth =
-    currentPeriod && lastPeriod
-      ? ((currentPeriod.revenue.totalRevenue - lastPeriod.revenue.totalRevenue) /
-          lastPeriod.revenue.totalRevenue) *
-        100
-      : 0;
+  const revenueGrowth = 0; // Can be calculated from historical data if needed
 
-  const commissionGrowth =
-    currentPeriod && lastPeriod
-      ? ((currentPeriod.commission.amount - lastPeriod.commission.amount) /
-          lastPeriod.commission.amount) *
-        100
-      : 0;
+  const commissionGrowth = 0; // Can be calculated from historical data if needed
 
-  // Daily breakdown for chart
-  const dailyBreakdown: RevenueBreakdown[] = [
-    { date: "Week 1", vouchers: 2340, pppoe: 1500, total: 3840 },
-    { date: "Week 2", vouchers: 1890, pppoe: 1680, total: 3570 },
-    { date: "Week 3", vouchers: 2450, pppoe: 1750, total: 4200 },
-    { date: "Week 4", vouchers: 2240, pppoe: 1750, total: 3990 },
-  ];
+  // Daily breakdown for chart (would come from API in production)
+  const dailyBreakdown: RevenueBreakdown[] = [];
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
     try {
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      const res = await fetch('/api/payments/stats');
+      if (!res.ok) throw new Error('Failed to refresh commission data');
+      
+      const data = await res.json();
+      setStats(data.stats);
+      setBreakdown(data.breakdown);
+      setRecentTransactions(data.recentTransactions || []);
+      setCommissionRate(data.stats?.commissionRate || 0);
+      setUserPlan(data.stats?.userPlan || 'individual');
+      
       toast.success("Commission data refreshed");
     } catch (error) {
       toast.error("Failed to refresh data");
@@ -236,10 +242,22 @@ export const CommissionTracker: React.FC = () => {
     }
   };
 
-  const selectedPeriodData =
-    selectedPeriod === "current"
-      ? currentPeriod
-      : commissionPeriods.find((p) => p.id === selectedPeriod) || currentPeriod;
+  const selectedPeriodData = currentPeriod;
+
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <Card>
+          <CardContent className="flex items-center justify-center p-12">
+            <div className="text-center space-y-4">
+              <Loader2 className="h-8 w-8 animate-spin mx-auto text-muted-foreground" />
+              <p className="text-muted-foreground">Loading commission data...</p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   if (!currentPeriod) {
     return (
@@ -422,19 +440,11 @@ export const CommissionTracker: React.FC = () => {
             </Alert>
           )}
 
-          {currentPeriod.payout.status === "paid" && currentPeriod.payout.paidAt && (
-            <Alert className="border-green-500 bg-green-500/10">
-              <CheckCircle2 className="h-4 w-4 text-green-500" />
-              <AlertTitle className="text-green-500">Payout Completed</AlertTitle>
+          {isISP && (
+            <Alert>
+              <Info className="h-4 w-4" />
               <AlertDescription>
-                Paid on {currentPeriod.payout.paidAt.toLocaleDateString()} via{" "}
-                {currentPeriod.payout.method}
-                {currentPeriod.payout.transactionId && (
-                  <>
-                    <br />
-                    Transaction ID: {currentPeriod.payout.transactionId}
-                  </>
-                )}
+                ISP plans have 0% commission. You pay a monthly subscription fee instead.
               </AlertDescription>
             </Alert>
           )}
@@ -443,9 +453,9 @@ export const CommissionTracker: React.FC = () => {
 
       {/* Tabs */}
       <Tabs defaultValue="breakdown" className="space-y-4">
-        <TabsList>
+        <TabsList className="grid w-full grid-cols-3">
           <TabsTrigger value="breakdown">Revenue Breakdown</TabsTrigger>
-          <TabsTrigger value="history">Payout History</TabsTrigger>
+          <TabsTrigger value="history">Recent Transactions</TabsTrigger>
           <TabsTrigger value="trends">Trends</TabsTrigger>
         </TabsList>
 
@@ -560,49 +570,62 @@ export const CommissionTracker: React.FC = () => {
         <TabsContent value="history" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>Payout History</CardTitle>
+              <CardTitle>Recent Transactions</CardTitle>
               <CardDescription>
-                All commission payouts and pending balances
+                Your recent payment transactions
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              {commissionPeriods.map((period) => (
-                <div key={period.id} className="rounded-lg border p-4">
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-2">
-                        <h4 className="font-medium">{period.month}</h4>
-                        <Badge variant={getStatusBadge(period.payout.status)}>
-                          {getStatusIcon(period.payout.status)}
-                          <span className="ml-1">{period.payout.status}</span>
-                        </Badge>
+              {recentTransactions.length === 0 ? (
+                <Alert>
+                  <Info className="h-4 w-4" />
+                  <AlertDescription>
+                    No transactions found for this period.
+                  </AlertDescription>
+                </Alert>
+              ) : (
+                <div className="space-y-3">
+                  {recentTransactions.map((txn) => (
+                    <div key={txn.id} className="rounded-lg border p-4">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-2">
+                            <h4 className="font-medium capitalize">{txn.type}</h4>
+                            <Badge variant={txn.status === 'completed' ? 'default' : 'secondary'}>
+                              {txn.status}
+                            </Badge>
+                          </div>
+                          <div className="grid gap-2 text-sm md:grid-cols-3">
+                            <div>
+                              <p className="text-muted-foreground">Amount</p>
+                              <p className="font-medium">{formatCurrency(txn.amount)}</p>
+                            </div>
+                            {!isISP && (
+                              <div>
+                                <p className="text-muted-foreground">Commission</p>
+                                <p className="font-semibold text-green-600">
+                                  {formatCurrency(txn.commission)}
+                                </p>
+                              </div>
+                            )}
+                            <div>
+                              <p className="text-muted-foreground">Date</p>
+                              <p className="font-medium">
+                                {new Date(txn.date).toLocaleDateString()}
+                              </p>
+                            </div>
+                          </div>
+                          {txn.mpesaRef && (
+                            <p className="text-xs text-muted-foreground mt-2">
+                              M-Pesa Ref: {txn.mpesaRef}
+                            </p>
+                          )}
+                        </div>
                       </div>
-                      <div className="grid gap-2 text-sm md:grid-cols-3">
-                        <div>
-                          <p className="text-muted-foreground">Revenue</p>
-                          <p className="font-medium">{formatCurrency(period.revenue.totalRevenue)}</p>
-                        </div>
-                        <div>
-                          <p className="text-muted-foreground">Commission</p>
-                          <p className="font-semibold text-green-600">
-                            {formatCurrency(period.commission.amount)}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-muted-foreground">Transactions</p>
-                          <p className="font-medium">{period.revenue.transactionCount}</p>
-                        </div>
-                      </div>
-                      {period.payout.paidAt && (
-                        <p className="text-xs text-muted-foreground mt-2">
-                          Paid on {period.payout.paidAt.toLocaleDateString()}
-                          {period.payout.transactionId && ` • ${period.payout.transactionId}`}
-                        </p>
-                      )}
                     </div>
-                  </div>
+                  ))}
                 </div>
-              ))}
+              )}
             </CardContent>
           </Card>
         </TabsContent>
