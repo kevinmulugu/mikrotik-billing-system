@@ -3,86 +3,131 @@
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Activity, Users, Wifi } from 'lucide-react';
-import { formatBytes } from '@/lib/utils';
+import { Activity, Users, Wifi, Loader2, Package } from 'lucide-react';
+
+interface UsageData {
+  activeUsers: number;
+  totalUsers: number;
+  activeVouchers: number;
+  totalVouchers: number;
+  activePppoe: number;
+  totalPppoe: number;
+}
 
 export function UsageChart() {
-  const [metric, setMetric] = useState<'users' | 'data' | 'sessions'>('users');
-  const [data, setData] = useState<any>(null);
+  const [metric, setMetric] = useState<'users' | 'vouchers' | 'pppoe'>('users');
+  const [data, setData] = useState<UsageData | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
       try {
-        await new Promise(resolve => setTimeout(resolve, 800));
-        
+        const res = await fetch('/api/analytics/dashboard');
+        if (!res.ok) throw new Error('Failed to fetch analytics');
+        const json = await res.json();
+
+        const overview = json?.overview || {};
+        const vouchers = json?.vouchers || {};
+        const pppoeUsers = json?.pppoeUsers || {};
+
         setData({
-          users: {
-            current: 127,
-            peak: 89,
-            change: 8.2,
-            chartData: [45, 52, 38, 67, 73, 89, 76, 65, 58, 49, 67, 82],
-          },
-          data: {
-            current: 1024 * 1024 * 1024 * 15.7, // 15.7GB
-            peak: 1024 * 1024 * 1024 * 23.2, // 23.2GB
-            change: -5.1,
-            chartData: [12.3, 15.7, 14.2, 18.9, 16.1, 23.2, 19.7, 17.3, 15.8, 14.2, 16.7, 18.9],
-          },
-          sessions: {
-            current: 234,
-            peak: 156,
-            change: 15.3,
-            chartData: [89, 102, 76, 134, 145, 156, 142, 128, 115, 98, 132, 149],
-          },
+          activeUsers: overview.totalActiveUsers || 0,
+          totalUsers: (vouchers.total || 0) + (pppoeUsers.total || 0),
+          activeVouchers: vouchers.active || 0,
+          totalVouchers: vouchers.total || 0,
+          activePppoe: pppoeUsers.active || 0,
+          totalPppoe: pppoeUsers.total || 0,
         });
       } catch (error) {
         console.error('Failed to fetch usage data:', error);
+        setData({
+          activeUsers: 0,
+          totalUsers: 0,
+          activeVouchers: 0,
+          totalVouchers: 0,
+          activePppoe: 0,
+          totalPppoe: 0,
+        });
       } finally {
         setLoading(false);
       }
     };
 
     fetchData();
-  }, [metric]);
+    // Refresh every 30 seconds
+    const interval = setInterval(fetchData, 30000);
+    return () => clearInterval(interval);
+  }, []);
 
   if (loading) {
     return (
       <Card>
         <CardHeader>
-          <div className="h-6 bg-gray-200 rounded w-32 animate-pulse"></div>
+          <div className="flex items-center gap-2">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            <span className="text-sm text-muted-foreground">Loading usage data...</span>
+          </div>
         </CardHeader>
         <CardContent>
-          <div className="h-64 bg-gray-100 rounded animate-pulse"></div>
+          <div className="h-64 bg-muted/50 rounded animate-pulse"></div>
         </CardContent>
       </Card>
     );
   }
 
-  const currentData = data?.[metric];
-  const formatValue = (value: number) => {
+  const getCurrentMetricData = () => {
+    if (!data) return { current: 0, total: 0, percentage: 0 };
+    
     switch (metric) {
-      case 'data':
-        return formatBytes(value);
       case 'users':
-      case 'sessions':
-        return value.toString();
+        return {
+          current: data.activeUsers,
+          total: data.totalUsers,
+          percentage: data.totalUsers > 0 ? (data.activeUsers / data.totalUsers) * 100 : 0
+        };
+      case 'vouchers':
+        return {
+          current: data.activeVouchers,
+          total: data.totalVouchers,
+          percentage: data.totalVouchers > 0 ? (data.activeVouchers / data.totalVouchers) * 100 : 0
+        };
+      case 'pppoe':
+        return {
+          current: data.activePppoe,
+          total: data.totalPppoe,
+          percentage: data.totalPppoe > 0 ? (data.activePppoe / data.totalPppoe) * 100 : 0
+        };
       default:
-        return value.toString();
+        return { current: 0, total: 0, percentage: 0 };
     }
   };
+
+  const metricData = getCurrentMetricData();
 
   const getIcon = () => {
     switch (metric) {
       case 'users':
         return Users;
-      case 'data':
-        return Activity;
-      case 'sessions':
+      case 'vouchers':
+        return Package;
+      case 'pppoe':
         return Wifi;
       default:
         return Activity;
+    }
+  };
+
+  const getMetricLabel = () => {
+    switch (metric) {
+      case 'users':
+        return 'Total Active Users';
+      case 'vouchers':
+        return 'Active Vouchers';
+      case 'pppoe':
+        return 'Active PPPoE Users';
+      default:
+        return 'Users';
     }
   };
 
@@ -90,28 +135,30 @@ export function UsageChart() {
 
   return (
     <Card>
-      <CardHeader className="flex flex-row items-center justify-between">
-        <div>
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+        <div className="space-y-1">
           <CardTitle className="flex items-center gap-2">
             <IconComponent className="h-5 w-5 text-blue-600" />
-            Usage Analytics
+            User Analytics
           </CardTitle>
-          <div className="flex items-center gap-2 mt-2">
-            <span className="text-2xl font-bold">
-              {formatValue(currentData?.current || 0)}
-            </span>
-            <span className="text-sm text-gray-500">
-              {metric === 'users' ? 'total users' : 
-               metric === 'data' ? 'data usage' : 'sessions'}
-            </span>
+          <div className="flex items-center gap-3 mt-2">
+            <div>
+              <p className="text-xs text-muted-foreground">{getMetricLabel()}</p>
+              <span className="text-2xl font-bold">
+                {metricData.current}
+              </span>
+              <span className="text-sm text-muted-foreground ml-1">
+                / {metricData.total}
+              </span>
+            </div>
           </div>
         </div>
         
         <div className="flex items-center gap-1">
           {([
-            { key: 'users', label: 'Users', icon: Users },
-            { key: 'data', label: 'Data', icon: Activity },
-            { key: 'sessions', label: 'Sessions', icon: Wifi },
+            { key: 'users', label: 'All Users', icon: Users },
+            { key: 'vouchers', label: 'Vouchers', icon: Package },
+            { key: 'pppoe', label: 'PPPoE', icon: Wifi },
           ] as const).map(({ key, label, icon: Icon }) => (
             <Button
               key={key}
@@ -119,6 +166,7 @@ export function UsageChart() {
               size="sm"
               onClick={() => setMetric(key)}
               className="h-8 w-8 p-0"
+              title={label}
             >
               <Icon className="h-4 w-4" />
             </Button>
@@ -127,34 +175,63 @@ export function UsageChart() {
       </CardHeader>
       
       <CardContent>
-        <div className="h-64 flex items-center justify-center bg-gray-50 rounded-lg">
-          <div className="text-center text-gray-500">
-            <Activity className="h-12 w-12 mx-auto mb-2 opacity-50" />
-            <p className="text-sm">Usage chart will be rendered here</p>
-            <p className="text-xs">Showing {metric} over time</p>
+        {/* Visual representation */}
+        <div className="h-64 flex flex-col items-center justify-center space-y-4">
+          {/* Circular progress indicator */}
+          <div className="relative w-48 h-48">
+            <svg className="w-full h-full transform -rotate-90">
+              {/* Background circle */}
+              <circle
+                cx="96"
+                cy="96"
+                r="80"
+                stroke="currentColor"
+                strokeWidth="16"
+                fill="none"
+                className="text-muted/20"
+              />
+              {/* Progress circle */}
+              <circle
+                cx="96"
+                cy="96"
+                r="80"
+                stroke="currentColor"
+                strokeWidth="16"
+                fill="none"
+                strokeDasharray={`${2 * Math.PI * 80}`}
+                strokeDashoffset={`${2 * Math.PI * 80 * (1 - metricData.percentage / 100)}`}
+                className="text-primary transition-all duration-500"
+                strokeLinecap="round"
+              />
+            </svg>
+            <div className="absolute inset-0 flex flex-col items-center justify-center">
+              <span className="text-4xl font-bold">{metricData.current}</span>
+              <span className="text-sm text-muted-foreground">Active</span>
+              <span className="text-xs text-muted-foreground mt-1">
+                {metricData.percentage.toFixed(1)}%
+              </span>
+            </div>
           </div>
         </div>
         
         {/* Quick Stats */}
-        <div className="grid grid-cols-3 gap-4 mt-4 pt-4 border-t">
+        <div className="grid grid-cols-3 gap-4 mt-6 pt-4 border-t">
           <div className="text-center">
-            <p className="text-sm text-gray-600">Current</p>
-            <p className="text-lg font-semibold">
-              {formatValue(currentData?.current || 0)}
+            <p className="text-sm text-muted-foreground">Active</p>
+            <p className="text-lg font-semibold text-green-600">
+              {metricData.current}
             </p>
           </div>
           <div className="text-center">
-            <p className="text-sm text-gray-600">Peak</p>
+            <p className="text-sm text-muted-foreground">Total</p>
             <p className="text-lg font-semibold">
-              {formatValue(currentData?.peak || 0)}
+              {metricData.total}
             </p>
           </div>
           <div className="text-center">
-            <p className="text-sm text-gray-600">Change</p>
-            <p className={`text-lg font-semibold ${
-              (currentData?.change || 0) > 0 ? 'text-green-600' : 'text-red-600'
-            }`}>
-              {(currentData?.change || 0) > 0 ? '+' : ''}{currentData?.change || 0}%
+            <p className="text-sm text-muted-foreground">Usage Rate</p>
+            <p className="text-lg font-semibold text-blue-600">
+              {metricData.percentage.toFixed(0)}%
             </p>
           </div>
         </div>
