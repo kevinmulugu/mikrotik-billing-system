@@ -178,6 +178,38 @@ export async function GET(
 
     const result = stats[0];
 
+    // Handle case where aggregation returns no results
+    if (!result) {
+      return NextResponse.json({
+        success: true,
+        stats: {
+          vouchers: {
+            total: 0,
+            active: 0,
+            used: 0,
+            expired: 0,
+            cancelled: 0,
+          },
+          revenue: {
+            total: 0,
+            commission: 0,
+            net: 0,
+            today: 0,
+            week: 0,
+            month: 0,
+          },
+          usage: {
+            used: 0,
+            unused: 0,
+            percentage: 0,
+            totalDataUsed: 0,
+          },
+          packageBreakdown: [],
+          recentVouchers: [],
+        },
+      });
+    }
+
     // Format status counts
     const statusCounts = {
       total: 0,

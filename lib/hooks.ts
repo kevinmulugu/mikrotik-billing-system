@@ -14,7 +14,6 @@ export function useAuth() {
     isLoading: status === 'loading',
     isAuthenticated: !!session,
     role: session?.user?.role,
-    customerId: session?.user?.customerId,
   };
 }
 

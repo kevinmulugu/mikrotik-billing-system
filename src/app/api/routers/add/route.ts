@@ -245,7 +245,8 @@ export async function POST(req: NextRequest) {
         if (vpnTest.success) {
           console.log(`[Router Add] ✓ VPN connection verified`);
           macAddress = await MikroTikService.getRouterMacAddress(connectionConfig);
-          identity = await MikroTikService.getIdentity(connectionConfig);
+          const identityResult = await MikroTikService.getIdentity(connectionConfig);
+          identity = identityResult || 'Unknown';
           firmwareVersion = vpnTest.data?.routerInfo?.version || 'Unknown';
         } else {
           console.warn(`[Router Add] ⚠ VPN connection test failed, will retry`);

@@ -156,7 +156,7 @@ class DeployedConfigTracker {
   ): Promise<void> {
     const config: DeployedConfig = {
       name,
-      mikrotikId,
+      ...(mikrotikId && { mikrotikId }),
       type: 'ip-pool',
       parameters: { ranges },
       createdAt: new Date(),
@@ -195,7 +195,7 @@ class DeployedConfigTracker {
   ): Promise<void> {
     const config: DeployedConfig = {
       name,
-      mikrotikId,
+      ...(mikrotikId && { mikrotikId }),
       type: 'dhcp-server',
       parameters: { interface: interfaceName, addressPool },
       createdAt: new Date(),
@@ -225,14 +225,14 @@ class DeployedConfigTracker {
     routerId: string,
     address: string,
     gateway: string,
-    dnsServer: string,
+    dnsServers: string,
     mikrotikId?: string
   ): Promise<void> {
     const config: DeployedConfig = {
-      name: address,
-      mikrotikId,
+      name: `dhcp-network-${address}`,
+      ...(mikrotikId && { mikrotikId }),
       type: 'dhcp-network',
-      parameters: { address, gateway, dnsServer },
+      parameters: { address, gateway, dnsServers },
       createdAt: new Date(),
       lastChecked: new Date(),
       status: 'active',
@@ -264,7 +264,7 @@ class DeployedConfigTracker {
   ): Promise<void> {
     const config: DeployedConfig = {
       name: bridgeName,
-      mikrotikId,
+      ...(mikrotikId && { mikrotikId }),
       type: 'bridge',
       parameters: { address: bridgeAddress },
       createdAt: new Date(),
@@ -298,7 +298,7 @@ class DeployedConfigTracker {
   ): Promise<void> {
     const config: DeployedConfig = {
       name: `${bridgeName}-${interfaceName}`,
-      mikrotikId,
+      ...(mikrotikId && { mikrotikId }),
       type: 'bridge-port',
       parameters: { bridge: bridgeName, interface: interfaceName },
       createdAt: new Date(),
@@ -339,7 +339,7 @@ class DeployedConfigTracker {
   ): Promise<void> {
     const config: DeployedConfig = {
       name,
-      mikrotikId,
+      ...(mikrotikId && { mikrotikId }),
       type: 'hotspot-profile',
       parameters: { hotspotAddress, dnsName, loginBy: 'http-chap,trial,cookie' },
       createdAt: new Date(),
@@ -375,7 +375,7 @@ class DeployedConfigTracker {
   ): Promise<void> {
     const config: DeployedConfig = {
       name,
-      mikrotikId,
+      ...(mikrotikId && { mikrotikId }),
       type: 'hotspot-server',
       parameters: { interface: interfaceName, addressPool, profile },
       createdAt: new Date(),
@@ -410,7 +410,7 @@ class DeployedConfigTracker {
   ): Promise<void> {
     const config: DeployedConfig = {
       name,
-      mikrotikId,
+      ...(mikrotikId && { mikrotikId }),
       type: 'hotspot-user-profile',
       parameters: { sessionTimeout, rateLimit },
       createdAt: new Date(),
@@ -446,7 +446,7 @@ class DeployedConfigTracker {
   ): Promise<void> {
     const config: DeployedConfig = {
       name: `${chain}-${srcAddress}-${outInterface}`,
-      mikrotikId,
+      ...(mikrotikId && { mikrotikId }),
       type: 'nat-rule',
       parameters: { chain, srcAddress, outInterface, action },
       createdAt: new Date(),
@@ -485,7 +485,7 @@ class DeployedConfigTracker {
   ): Promise<void> {
     const config: DeployedConfig = {
       name: interfaceName,
-      mikrotikId,
+      ...(mikrotikId && { mikrotikId }),
       type: 'wan-interface',
       parameters: { interface: interfaceName, dhcpClient: true },
       createdAt: new Date(),
@@ -519,7 +519,7 @@ class DeployedConfigTracker {
   ): Promise<void> {
     const config: DeployedConfig = {
       name: interfaceName,
-      mikrotikId,
+      ...(mikrotikId && { mikrotikId }),
       type: 'wifi-config',
       parameters: { interface: interfaceName, ssid, mode: 'ap-bridge' },
       createdAt: new Date(),
@@ -554,7 +554,7 @@ class DeployedConfigTracker {
   ): Promise<void> {
     const config: DeployedConfig = {
       name: serviceName,
-      mikrotikId,
+      ...(mikrotikId && { mikrotikId }),
       type: 'pppoe-server',
       parameters: { serviceName, interface: interfaceName, defaultProfile },
       createdAt: new Date(),
@@ -590,7 +590,7 @@ class DeployedConfigTracker {
   ): Promise<void> {
     const config: DeployedConfig = {
       name,
-      mikrotikId,
+      ...(mikrotikId && { mikrotikId }),
       type: 'ppp-profile',
       parameters: { localAddress, remoteAddress, rateLimit },
       createdAt: new Date(),
@@ -933,12 +933,16 @@ export class RouterProvisioningService {
       if (Array.isArray(bridgeResult.data) && bridgeResult.data.length > 1) {
         // First element is bridge, rest are bridge ports
         for (let i = 1; i < bridgeResult.data.length && i - 1 < bridgeInterfaces.length; i++) {
+          const interfaceIndex = i - 1;
+          const interfaceName = bridgeInterfaces[interfaceIndex];
+          if (!interfaceName) continue; // Skip if interface is undefined
+          
           const portMikrotikId = bridgeResult.data[i]['.id'];
           await DeployedConfigTracker.trackBridgePort(
             db,
             routerId,
             bridgeName,
-            bridgeInterfaces[i - 1],
+            interfaceName,
             portMikrotikId
           );
         }
@@ -1052,19 +1056,24 @@ export class RouterProvisioningService {
       // If response is array of created profiles with .id
       if (Array.isArray(profilesResult.data) && profilesResult.data.length === profiles.length) {
         for (let i = 0; i < profiles.length; i++) {
+          const profile = profiles[i];
+          if (!profile) continue; // Skip if profile is undefined
+          
           const profileMikrotikId = profilesResult.data[i]['.id'];
           await DeployedConfigTracker.trackHotspotUserProfile(
             db,
             routerId,
-            profiles[i].name,
-            profiles[i].sessionTimeout,
-            profiles[i].rateLimit,
+            profile.name,
+            profile.sessionTimeout,
+            profile.rateLimit,
             profileMikrotikId
           );
         }
       } else {
         // Fallback: Track without .id
         for (const profile of profiles) {
+          if (!profile) continue; // Skip if profile is undefined
+          
           await DeployedConfigTracker.trackHotspotUserProfile(
             db,
             routerId,
@@ -1282,20 +1291,25 @@ export class RouterProvisioningService {
       // If response is array of created profiles with .id
       if (Array.isArray(profilesResult.data) && profilesResult.data.length === profiles.length) {
         for (let i = 0; i < profiles.length; i++) {
+          const profile = profiles[i];
+          if (!profile) continue; // Skip if profile is undefined
+          
           const profileMikrotikId = profilesResult.data[i]['.id'];
           await DeployedConfigTracker.trackPPPProfile(
             db,
             routerId,
-            profiles[i].name,
-            profiles[i].localAddress,
-            profiles[i].remoteAddress,
-            profiles[i].rateLimit,
+            profile.name,
+            profile.localAddress,
+            profile.remoteAddress,
+            profile.rateLimit,
             profileMikrotikId
           );
         }
       } else {
         // Fallback: Track without .id
         for (const profile of profiles) {
+          if (!profile) continue; // Skip if profile is undefined
+          
           await DeployedConfigTracker.trackPPPProfile(
             db,
             routerId,

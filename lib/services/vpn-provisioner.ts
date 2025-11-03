@@ -176,11 +176,16 @@ export class VPNProvisioner {
     } catch (error) {
       console.error(`[VPN Script] ❌ Failed to generate VPN setup script:`, error);
       
-      return {
+      const result: VPNSetupScriptResult = {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error',
-        details: error instanceof Error ? error.stack : undefined,
       };
+      
+      if (error instanceof Error && error.stack) {
+        result.details = error.stack;
+      }
+      
+      return result;
     }
   }
 
@@ -321,11 +326,16 @@ export class VPNProvisioner {
     } catch (error) {
       console.error(`[VPN] ❌ VPN provisioning failed:`, error);
       
-      return {
+      const result: VPNProvisioningResult = {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error',
-        details: error instanceof Error ? error.stack : undefined,
       };
+      
+      if (error instanceof Error && error.stack) {
+        result.details = error.stack;
+      }
+      
+      return result;
     }
   }
 
@@ -527,7 +537,13 @@ export class VPNProvisioner {
 
       // Step 2: Add peer (VPN server)
       console.log('[VPN] Adding VPN server as peer...');
-      const [endpoint, port] = wgConfig.endpoint.split(':');
+      const endpointParts = wgConfig.endpoint.split(':');
+      const endpoint = endpointParts[0];
+      const port = endpointParts[1];
+      
+      if (!endpoint || !port) {
+        throw new Error('Invalid VPN endpoint format (expected host:port)');
+      }
       
       await MikroTikService.makeRequest(
         config,
@@ -701,7 +717,7 @@ export class VPNProvisioner {
   /**
    * Encrypt private key for storage
    */
-  private static encryptPrivateKey(privateKey: string): string {
+  static encryptPrivateKey(privateKey: string): string {
     const algorithm = 'aes-256-cbc';
     const key = crypto.scryptSync(
       process.env.NEXTAUTH_SECRET || 'default-secret',
@@ -728,7 +744,14 @@ export class VPNProvisioner {
       32
     );
 
-    const [ivHex, encrypted] = encryptedKey.split(':');
+    const parts = encryptedKey.split(':');
+    const ivHex = parts[0];
+    const encrypted = parts[1];
+    
+    if (!ivHex || !encrypted) {
+      throw new Error('Invalid encrypted key format');
+    }
+    
     const iv = Buffer.from(ivHex, 'hex');
 
     const decipher = crypto.createDecipheriv(algorithm, key, iv);

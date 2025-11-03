@@ -143,7 +143,7 @@ export function Sidebar() {
           </li>
 
           {/* Payment Method Indicator - Fetch from customer data */}
-          {session?.user?.customerId && (
+          {session?.user?.id && (
             <li className="mt-auto">
               <div className="rounded-lg bg-muted p-3">
                 <div className="mb-2 flex items-center gap-2">

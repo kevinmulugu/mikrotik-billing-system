@@ -134,7 +134,8 @@ export async function POST(req: NextRequest) {
     
     try {
       macAddress = await MikroTikService.getRouterMacAddress(connectionConfig);
-      identity = await MikroTikService.getIdentity(connectionConfig);
+      const identityResult = await MikroTikService.getIdentity(connectionConfig);
+      identity = identityResult || 'Unknown';
       console.log(`[VPN Verify] Router details - MAC: ${macAddress}, Identity: ${identity}`);
     } catch (error) {
       console.warn('[VPN Verify] Could not get router details:', error);

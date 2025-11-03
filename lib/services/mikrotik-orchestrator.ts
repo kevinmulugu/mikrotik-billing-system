@@ -228,9 +228,10 @@ export class MikroTikOrchestrator {
         // Step 2.4: Create PPPoE user profiles
         console.log('[Orchestrator] Step 2.4: Creating PPPoE user profiles...');
         
+        const pppoeGatewayIP = NETWORK_SUBNETS.PPPOE.INTERFACE_1.GATEWAY.split('/')[0] ?? '10.10.10.1';
         const pppoeProfilesResult = await MikroTikServiceConfig.createPPPoEUserProfiles(
           config,
-          NETWORK_SUBNETS.PPPOE.INTERFACE_1.GATEWAY.split('/')[0], // Extract IP without CIDR
+          pppoeGatewayIP, // Extract IP without CIDR
           NETWORK_SUBNETS.PPPOE.INTERFACE_1.POOL_NAME
         );
 
@@ -360,7 +361,7 @@ export class MikroTikOrchestrator {
           },
           {
             address: NETWORK_SUBNETS.HOTSPOT.NETWORK,
-            gateway: NETWORK_SUBNETS.HOTSPOT.GATEWAY.split('/')[0], // Extract IP without CIDR
+            gateway: NETWORK_SUBNETS.HOTSPOT.GATEWAY.split('/')[0] ?? '10.5.50.1', // Extract IP without CIDR
             'dns-server': '8.8.8.8,8.8.4.4',
           }
         );
@@ -379,11 +380,12 @@ export class MikroTikOrchestrator {
         // Step 3.5: Configure hotspot server
         console.log('[Orchestrator] Step 3.5: Configuring hotspot server...');
         
+        const hotspotGatewayIP = NETWORK_SUBNETS.HOTSPOT.GATEWAY.split('/')[0] ?? '10.5.50.1';
         const hotspotResult = await MikroTikServiceConfig.configureHotspot(
           config,
           {
             name: 'hsprof1',
-            'hotspot-address': NETWORK_SUBNETS.HOTSPOT.GATEWAY.split('/')[0],
+            'hotspot-address': hotspotGatewayIP,
             'dns-name': 'hotspot.local',
             'html-directory': 'hotspot',
             'http-proxy': '0.0.0.0:0',

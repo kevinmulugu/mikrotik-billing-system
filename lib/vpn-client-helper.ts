@@ -97,7 +97,13 @@ export async function pushVPNConfigToRouter(
     // Stage 2: Add VPN server as peer
     onProgress?.('Connecting to VPN server...', 40);
 
-    const [endpoint, port] = vpnConfig.endpoint.split(':');
+    const endpointParts = vpnConfig.endpoint.split(':');
+    const endpoint = endpointParts[0];
+    const port = endpointParts[1];
+    
+    if (!endpoint || !port) {
+      throw new Error('Invalid VPN endpoint format (expected host:port)');
+    }
     
     const addPeerResponse = await fetch(`${baseUrl}/rest/interface/wireguard/peers`, {
       method: 'PUT',

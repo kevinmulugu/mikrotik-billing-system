@@ -179,6 +179,17 @@ export const AddRouterWizard: React.FC<AddRouterWizardProps> = ({
 
   const [errors, setErrors] = useState<Partial<Record<string, string>>>({});
 
+  // Helper function to safely get current step - prevents TypeScript "possibly undefined" errors
+  const getCurrentStep = (): typeof steps[number] => {
+    const step = steps[currentStep - 1];
+    // This should never happen in practice since currentStep is controlled by our navigation
+    if (!step) {
+      console.error(`Invalid step index: ${currentStep}`);
+      return steps[0]!; // Fallback to first step with non-null assertion
+    }
+    return step;
+  };
+
   const kenyanCounties = [
     "Mombasa", "Kwale", "Kilifi", "Tana River", "Lamu", "Taita-Taveta",
     "Garissa", "Wajir", "Mandera", "Marsabit", "Isiolo", "Meru",
@@ -565,11 +576,11 @@ export const AddRouterWizard: React.FC<AddRouterWizardProps> = ({
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            {steps[currentStep - 1].icon &&
-              React.createElement(steps[currentStep - 1].icon, {
+            {getCurrentStep().icon &&
+              React.createElement(getCurrentStep().icon, {
                 className: "h-5 w-5",
               })}
-            {steps[currentStep - 1].title}
+            {getCurrentStep().title}
           </CardTitle>
         </CardHeader>
 

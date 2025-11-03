@@ -1,3 +1,4 @@
+// src/app/settings/page.tsx
 import { Metadata } from 'next';
 import { getServerSession } from 'next-auth/next';
 import { redirect } from 'next/navigation';
@@ -44,8 +45,8 @@ export default async function SettingsPage() {
       {/* Settings Grid */}
       <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
         {/* Profile Settings */}
-        <Card className="hover:shadow-lg transition-shadow cursor-pointer" asChild>
-          <a href="/settings/profile">
+        <a href="/settings/profile">
+          <Card className="hover:shadow-lg transition-shadow cursor-pointer">
             <CardHeader className="text-center">
               <User className="h-12 w-12 text-blue-600 mx-auto mb-4" />
               <CardTitle>Profile Settings</CardTitle>
@@ -58,12 +59,12 @@ export default async function SettingsPage() {
                 Name, Email, Phone, Business Details
               </div>
             </CardContent>
-          </a>
-        </Card>
+          </Card>
+        </a>
 
         {/* Notifications */}
-        <Card className="hover:shadow-lg transition-shadow cursor-pointer" asChild>
-          <a href="/settings/notifications">
+        <a href="/settings/notifications">
+          <Card className="hover:shadow-lg transition-shadow cursor-pointer">
             <CardHeader className="text-center">
               <Bell className="h-12 w-12 text-green-600 mx-auto mb-4" />
               <CardTitle>Notifications</CardTitle>
@@ -76,12 +77,12 @@ export default async function SettingsPage() {
                 Email, SMS, Push Notifications
               </div>
             </CardContent>
-          </a>
-        </Card>
+          </Card>
+        </a>
 
         {/* Billing Settings */}
-        <Card className="hover:shadow-lg transition-shadow cursor-pointer" asChild>
-          <a href="/settings/billing">
+        <a href="/settings/billing">
+          <Card className="hover:shadow-lg transition-shadow cursor-pointer">
             <CardHeader className="text-center">
               <CreditCard className="h-12 w-12 text-purple-600 mx-auto mb-4" />
               <CardTitle>Billing Settings</CardTitle>
@@ -94,12 +95,12 @@ export default async function SettingsPage() {
                 Payment Methods, Commission Rates
               </div>
             </CardContent>
-          </a>
-        </Card>
+          </Card>
+        </a>
 
         {/* Security Settings */}
-        <Card className="hover:shadow-lg transition-shadow cursor-pointer" asChild>
-          <a href="/settings/security">
+        <a href="/settings/security">
+          <Card className="hover:shadow-lg transition-shadow cursor-pointer">
             <CardHeader className="text-center">
               <Shield className="h-12 w-12 text-red-600 mx-auto mb-4" />
               <CardTitle>Security</CardTitle>
@@ -112,8 +113,8 @@ export default async function SettingsPage() {
                 Password, 2FA, Login History
               </div>
             </CardContent>
-          </a>
-        </Card>
+          </Card>
+        </a>
 
         {/* Language & Region */}
         <Card className="hover:shadow-lg transition-shadow">

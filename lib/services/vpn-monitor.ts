@@ -158,11 +158,26 @@ export class VPNMonitor {
       );
 
       const lines = stdout.trim().split('\n');
+      
+      if (lines.length === 0) {
+        throw new Error('No WireGuard interface data returned');
+      }
+      
       const [interfaceLine, ...peerLines] = lines;
+      
+      if (!interfaceLine) {
+        throw new Error('Invalid WireGuard interface data');
+      }
 
-      const [privateKey, publicKey, listeningPort] = interfaceLine.split('\t');
+      const interfaceParts = interfaceLine.split('\t');
+      const [privateKey, publicKey, listeningPort] = interfaceParts;
+      
+      if (!publicKey || !listeningPort) {
+        throw new Error('Incomplete WireGuard interface data');
+      }
 
       const peers = peerLines.map(line => {
+        const parts = line.split('\t');
         const [
           publicKey,
           presharedKey,
@@ -172,16 +187,36 @@ export class VPNMonitor {
           bytesReceived,
           bytesSent,
           keepalive,
-        ] = line.split('\t');
+        ] = parts;
+        
+        if (!publicKey) {
+          throw new Error('Invalid peer data: missing public key');
+        }
 
-        return {
+        const peer: {
+          publicKey: string;
+          endpoint?: string;
+          allowedIPs: string[];
+          lastHandshake?: number;
+          bytesReceived: number;
+          bytesSent: number;
+        } = {
           publicKey,
-          endpoint: endpoint !== '(none)' ? endpoint : undefined,
-          allowedIPs: allowedIPs.split(','),
-          lastHandshake: latestHandshake !== '0' ? parseInt(latestHandshake) : undefined,
-          bytesReceived: parseInt(bytesReceived) || 0,
-          bytesSent: parseInt(bytesSent) || 0,
+          allowedIPs: allowedIPs?.split(',') || [],
+          bytesReceived: bytesReceived ? parseInt(bytesReceived) : 0,
+          bytesSent: bytesSent ? parseInt(bytesSent) : 0,
         };
+        
+        // Add optional properties only if they exist
+        if (endpoint && endpoint !== '(none)') {
+          peer.endpoint = endpoint;
+        }
+        
+        if (latestHandshake && latestHandshake !== '0') {
+          peer.lastHandshake = parseInt(latestHandshake);
+        }
+        
+        return peer;
       });
 
       return {

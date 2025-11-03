@@ -179,7 +179,7 @@ export function MobileNav({ isOpen, onClose }: MobileNavProps) {
                     </li>
 
                     {/* Payment Method Indicator */}
-                    {session?.user?.customerId && (
+                    {session?.user?.id && (
                       <li className="mt-auto">
                         <div className="rounded-lg bg-muted p-3">
                           <div className="mb-2 flex items-center gap-2">
