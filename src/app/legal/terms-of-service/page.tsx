@@ -239,7 +239,7 @@ export default function TermsOfServicePage() {
         <p className="m-0"><strong>PAY N BROWSE Support</strong></p>
         <p className="m-0">Email: support@paynbrowse.com</p>
         <p className="m-0">Phone: +254 796 002 630</p>
-        <p className="m-0">Address: [Your Business Address], Kenya</p>
+        <p className="m-0">Address: Nairobi CBD, Kimathi Street IPS Building, 6th Floo, Kenya</p>
         <p className="m-0">Business Hours: Monday - Friday, 8:00 AM - 6:00 PM EAT</p>
       </div>
 
