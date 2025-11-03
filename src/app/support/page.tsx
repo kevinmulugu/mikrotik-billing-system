@@ -1,3 +1,4 @@
+// src/app/support/page.tsx
 import { Metadata } from 'next';
 import { getServerSession } from 'next-auth/next';
 import { redirect } from 'next/navigation';
@@ -16,11 +17,57 @@ import {
   AlertTriangle,
   Plus
 } from 'lucide-react';
+import { RecentSupportTickets } from '@/components/support/recent-support-tickets';
+import { TicketHelpers, toObjectId } from '@/lib/mongodb-helpers';
 
 export const metadata: Metadata = {
   title: 'Support - MikroTik Billing',
   description: 'Get help with your routers, payments, and technical issues',
 };
+
+async function fetchSupportData(userId: string) {
+  try {
+    const ticketsCollection = await TicketHelpers.getCollection();
+
+    // Build query for user's tickets
+    const query = {
+      userId: toObjectId(userId),
+    };
+
+    // Fetch tickets
+    const tickets = await ticketsCollection
+      .find(query)
+      .sort({ createdAt: -1 })
+      .limit(10) // Get last 10 tickets for stats
+      .toArray();
+
+    // Calculate statistics
+    const stats = {
+      total: tickets.length,
+      open: tickets.filter(t => t.status === 'open').length,
+      inProgress: tickets.filter(t => t.status === 'in_progress').length,
+      resolved: tickets.filter(t => t.status === 'resolved').length,
+      breachedSla: tickets.filter(t => t.sla?.breachedSla).length,
+    };
+
+    return {
+      tickets: JSON.parse(JSON.stringify(tickets)), // Serialize for client component
+      stats,
+    };
+  } catch (error) {
+    console.error('Error fetching support data:', error);
+    return {
+      tickets: [],
+      stats: {
+        total: 0,
+        open: 0,
+        inProgress: 0,
+        resolved: 0,
+        breachedSla: 0,
+      }
+    };
+  }
+}
 
 export default async function SupportPage() {
   const session = await getServerSession(authOptions);
@@ -29,13 +76,19 @@ export default async function SupportPage() {
     redirect('/signin');
   }
 
-  // TODO: Fetch support data from API
-  const supportStats = {
-    openTickets: 2,
-    resolvedTickets: 8,
-    avgResponseTime: '4 hours',
-    satisfaction: 4.8,
+  // Fetch real support data from API
+  const supportData = await fetchSupportData(session.user.id);
+  const stats = supportData.stats || {
+    total: 0,
+    open: 0,
+    inProgress: 0,
+    resolved: 0,
+    breachedSla: 0,
   };
+
+  // Calculate average response time (placeholder - can be enhanced later)
+  const avgResponseTime = stats.total > 0 ? '4 hours' : 'N/A';
+  const satisfaction = 4.8; // This would come from a ratings system
 
   return (
     <div className="space-y-6">
@@ -66,7 +119,7 @@ export default async function SupportPage() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-muted-foreground">Open Tickets</p>
-                <p className="text-2xl font-semibold text-orange-600">{supportStats.openTickets}</p>
+                <p className="text-2xl font-semibold text-orange-600">{stats.open}</p>
               </div>
               <Clock className="h-5 w-5 text-orange-600" />
             </div>
@@ -78,7 +131,7 @@ export default async function SupportPage() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-muted-foreground">Resolved</p>
-                <p className="text-2xl font-semibold text-green-600">{supportStats.resolvedTickets}</p>
+                <p className="text-2xl font-semibold text-green-600">{stats.resolved}</p>
               </div>
               <CheckCircle className="h-5 w-5 text-green-600" />
             </div>
@@ -90,7 +143,7 @@ export default async function SupportPage() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-muted-foreground">Avg Response</p>
-                <p className="text-2xl font-semibold text-blue-600">{supportStats.avgResponseTime}</p>
+                <p className="text-2xl font-semibold text-blue-600">{avgResponseTime}</p>
               </div>
               <MessageSquare className="h-5 w-5 text-blue-600" />
             </div>
@@ -102,13 +155,13 @@ export default async function SupportPage() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-muted-foreground">Satisfaction</p>
-                <p className="text-2xl font-semibold text-purple-600">{supportStats.satisfaction}/5</p>
+                <p className="text-2xl font-semibold text-purple-600">{satisfaction}/5</p>
               </div>
               <div className="flex">
                 {[...Array(5)].map((_, i) => (
                   <svg
                     key={i}
-                    className={`h-4 w-4 ${i < Math.floor(supportStats.satisfaction) ? 'text-yellow-400' : 'text-gray-300'}`}
+                    className={`h-4 w-4 ${i < Math.floor(satisfaction) ? 'text-yellow-400' : 'text-gray-300'}`}
                     fill="currentColor"
                     viewBox="0 0 20 20"
                   >
@@ -123,8 +176,8 @@ export default async function SupportPage() {
 
       {/* Quick Help Options */}
       <div className="grid md:grid-cols-3 gap-6">
-        <Card className="hover:shadow-lg transition-shadow cursor-pointer" asChild>
-          <a href="/support/tickets">
+        <a href="/support/tickets">
+          <Card className="hover:shadow-lg transition-shadow cursor-pointer">
             <CardHeader className="text-center">
               <MessageSquare className="h-12 w-12 text-blue-600 mx-auto mb-4" />
               <CardTitle>Support Tickets</CardTitle>
@@ -134,14 +187,14 @@ export default async function SupportPage() {
                 Get personalized help from our support team for technical issues
               </p>
               <Badge variant="secondary">
-                {supportStats.openTickets} open tickets
+                {stats.open} open tickets
               </Badge>
             </CardContent>
-          </a>
-        </Card>
+          </Card>
+        </a>
 
-        <Card className="hover:shadow-lg transition-shadow cursor-pointer" asChild>
-          <a href="/support/knowledge-base">
+        <a href="/support/knowledge-base">
+          <Card className="hover:shadow-lg transition-shadow cursor-pointer">
             <CardHeader className="text-center">
               <BookOpen className="h-12 w-12 text-green-600 mx-auto mb-4" />
               <CardTitle>Knowledge Base</CardTitle>
@@ -154,8 +207,8 @@ export default async function SupportPage() {
                 50+ articles
               </Badge>
             </CardContent>
-          </a>
-        </Card>
+          </Card>
+        </a>
 
         <Card className="hover:shadow-lg transition-shadow">
           <CardHeader className="text-center">
@@ -176,80 +229,7 @@ export default async function SupportPage() {
       </div>
 
       {/* Recent Tickets */}
-      <Card>
-        <CardHeader>
-          <div className="flex justify-between items-center">
-            <CardTitle>Recent Support Tickets</CardTitle>
-            <Button variant="outline" size="sm" asChild>
-              <a href="/support/tickets">View All</a>
-            </Button>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            {[
-              {
-                id: 'TK-001',
-                title: 'Router not connecting to internet',
-                status: 'open',
-                priority: 'high',
-                created: '2 hours ago',
-                category: 'Technical'
-              },
-              {
-                id: 'TK-002',
-                title: 'Payment not reflecting in account',
-                status: 'in_progress',
-                priority: 'medium',
-                created: '1 day ago',
-                category: 'Billing'
-              },
-              {
-                id: 'TK-003',
-                title: 'How to generate bulk vouchers?',
-                status: 'resolved',
-                priority: 'low',
-                created: '3 days ago',
-                category: 'General'
-              }
-            ].map((ticket) => (
-              <div key={ticket.id} className="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
-                <div className="flex-1">
-                  <div className="flex items-center gap-3 mb-2">
-                    <h3 className="font-medium">{ticket.title}</h3>
-                    <Badge
-                      variant={
-                        ticket.status === 'open' ? 'destructive' :
-                          ticket.status === 'in_progress' ? 'default' : 'secondary'
-                      }
-                    >
-                      {ticket.status.replace('_', ' ')}
-                    </Badge>
-                    <Badge
-                      variant="outline"
-                      className={
-                        ticket.priority === 'high' ? 'border-red-500 text-red-600' :
-                          ticket.priority === 'medium' ? 'border-yellow-500 text-yellow-600' :
-                            'border-green-500 text-green-600'
-                      }
-                    >
-                      {ticket.priority}
-                    </Badge>
-                  </div>
-                  <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                    <span>#{ticket.id}</span>
-                    <span>{ticket.category}</span>
-                    <span>{ticket.created}</span>
-                  </div>
-                </div>
-                <Button variant="outline" size="sm" asChild>
-                  <a href={`/support/tickets/${ticket.id}`}>View</a>
-                </Button>
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
+      <RecentSupportTickets tickets={supportData.tickets || []} />
 
       {/* Common Issues */}
       <Card>
