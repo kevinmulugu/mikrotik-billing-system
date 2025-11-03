@@ -122,7 +122,7 @@ export default async function MessagesPage() {
 
   return (
     <Tabs defaultValue="send" className="space-y-6">
-      <TabsList>
+      <TabsList className="grid w-full grid-cols-3">
         <TabsTrigger value="send">Send Message</TabsTrigger>
         <TabsTrigger value="history">Message History</TabsTrigger>
         <TabsTrigger value="templates">Templates</TabsTrigger>

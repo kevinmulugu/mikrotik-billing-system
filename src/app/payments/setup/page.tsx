@@ -1,3 +1,4 @@
+// src/app/payments/setup/page.tsx
 import { Metadata } from 'next';
 import { getServerSession } from 'next-auth/next';
 import { redirect } from 'next/navigation';

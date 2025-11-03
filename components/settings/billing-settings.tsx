@@ -2,6 +2,7 @@
 "use client";
 
 import React, { useState } from "react";
+import Link from "next/link";
 import {
   CreditCard,
   DollarSign,
@@ -17,10 +18,10 @@ import {
   Calendar,
   FileText,
   X,
-  Plus,
   Zap,
   Check,
   ArrowUp,
+  Settings,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -87,7 +88,6 @@ interface CustomerBillingData {
 
 export const BillingSettings: React.FC = () => {
   const [isSaving, setIsSaving] = useState(false);
-  const [showAddPaybill, setShowAddPaybill] = useState(false);
   const [showUpgradeDialog, setShowUpgradeDialog] = useState(false);
   const [selectedUpgradePlan, setSelectedUpgradePlan] = useState<string | null>(null);
   const [isUpgrading, setIsUpgrading] = useState(false);
@@ -115,6 +115,10 @@ export const BillingSettings: React.FC = () => {
   const [customerData, setCustomerData] = useState<CustomerBillingData | null>(null);
   const [billingLoading, setBillingLoading] = useState(true);
   const [dataLoading, setDataLoading] = useState(true);
+  
+  // Payment setup status - SOURCE OF TRUTH
+  const [userPaybillNumber, setUserPaybillNumber] = useState<string | null>(null);
+  const [paymentMethodType, setPaymentMethodType] = useState<string | null>(null);
 
   // Fetch the billing settings from the server
   React.useEffect(() => {
@@ -145,6 +149,30 @@ export const BillingSettings: React.FC = () => {
     };
 
     fetchBilling();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  // Fetch user's payment settings - SOURCE OF TRUTH for payment setup status
+  React.useEffect(() => {
+    let mounted = true;
+    const fetchUserPaymentSettings = async () => {
+      try {
+        const res = await fetch('/api/user/profile');
+        if (!res.ok) throw new Error('Failed to load user profile');
+        const data = await res.json();
+        if (!mounted) return;
+        
+        // Set the paybillNumber as source of truth
+        setUserPaybillNumber(data?.paymentSettings?.paybillNumber || null);
+        setPaymentMethodType(data?.paymentSettings?.method || null);
+      } catch (err) {
+        console.warn('Failed to fetch user payment settings', err);
+      }
+    };
+
+    fetchUserPaymentSettings();
     return () => {
       mounted = false;
     };
@@ -240,11 +268,6 @@ export const BillingSettings: React.FC = () => {
     };
   }, []);
 
-  const [newPaybill, setNewPaybill] = useState({
-    paybillNumber: "",
-    accountNumber: "",
-  });
-
   // Define plan details
   const planDetails = {
     individual: {
@@ -331,59 +354,6 @@ export const BillingSettings: React.FC = () => {
       toast.error(error.message || 'Failed to upgrade plan');
     } finally {
       setIsUpgrading(false);
-    }
-  };
-
-  const handleAddPaybill = async () => {
-    if (!newPaybill.paybillNumber || !newPaybill.accountNumber) {
-      toast.error("Please fill in all fields");
-      return;
-    }
-
-    setIsSaving(true);
-
-    try {
-      const response = await fetch('/api/settings/paybills', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          paybillNumber: newPaybill.paybillNumber,
-          paybillName: `Paybill ${newPaybill.paybillNumber}`,
-          type: 'paybill', // or 'till' based on selection
-          consumerKey: '', // These would come from form
-          consumerSecret: '',
-          passKey: '',
-          setAsDefault: true,
-        }),
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Failed to add paybill');
-      }
-
-      const data = await response.json();
-      
-      // Refresh paybills list
-      const paybillsRes = await fetch('/api/settings/paybills');
-      if (paybillsRes.ok) {
-        const paybillsData = await paybillsRes.json();
-        setPaymentMethods(paybillsData.paybills.map((p: any) => ({
-          id: p.id,
-          type: p.userId ? 'customer_paybill' : 'company_paybill',
-          paybillNumber: p.paybillNumber,
-          isDefault: p.isDefault,
-          status: p.status,
-        })));
-      }
-
-      toast.success("Paybill added successfully. Awaiting verification.");
-      setShowAddPaybill(false);
-      setNewPaybill({ paybillNumber: "", accountNumber: "" });
-    } catch (error: any) {
-      toast.error(error.message || "Failed to add paybill");
-    } finally {
-      setIsSaving(false);
     }
   };
 
@@ -855,78 +825,31 @@ export const BillingSettings: React.FC = () => {
                 Payment Methods
               </CardTitle>
               <CardDescription>
-                Choose between company paybill or your own paybill for payments
+                {!userPaybillNumber 
+                  ? 'Set up your payment method to start receiving payments'
+                  : 'Your active payment method configuration'
+                }
               </CardDescription>
             </div>
-            <Dialog open={showAddPaybill} onOpenChange={setShowAddPaybill}>
-              <DialogTrigger asChild>
-                <Button variant="outline" size="sm">
-                  <Plus className="h-4 w-4 mr-2" />
-                  Add Customer Paybill
-                </Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>Add Your Own Paybill</DialogTitle>
-                  <DialogDescription>
-                    Use your own M-Pesa paybill to receive payments directly. Commission
-                    rates still apply.
-                  </DialogDescription>
-                </DialogHeader>
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Paybill Number</label>
-                    <Input
-                      placeholder="Enter your paybill number"
-                      value={newPaybill.paybillNumber}
-                      onChange={(e) =>
-                        setNewPaybill({ ...newPaybill, paybillNumber: e.target.value })
-                      }
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Account Number</label>
-                    <Input
-                      placeholder="Enter account number"
-                      value={newPaybill.accountNumber}
-                      onChange={(e) =>
-                        setNewPaybill({ ...newPaybill, accountNumber: e.target.value })
-                      }
-                    />
-                  </div>
-                  <Alert>
-                    <AlertCircle className="h-4 w-4" />
-                    <AlertDescription>
-                      Your paybill will be verified before activation. This may take 1-2
-                      business days.
-                    </AlertDescription>
-                  </Alert>
-                </div>
-                <DialogFooter>
-                  <Button variant="outline" onClick={() => setShowAddPaybill(false)}>
-                    Cancel
-                  </Button>
-                  <Button onClick={handleAddPaybill} disabled={isSaving}>
-                    {isSaving ? (
-                      <>
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        Adding...
-                      </>
-                    ) : (
-                      "Add Paybill"
-                    )}
-                  </Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
+            <Button variant="default" size="sm" asChild>
+              <Link href="/payments/setup">
+                <Settings className="h-4 w-4 mr-2" />
+                {!userPaybillNumber ? 'Setup Payment Method' : 'Change Payment Method'}
+              </Link>
+            </Button>
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
-          {paymentMethods.map((method) => (
-            <div
-              key={method.id}
-              className="flex items-start justify-between rounded-lg border p-4"
-            >
+          {!userPaybillNumber ? (
+            <Alert>
+              <AlertCircle className="h-4 w-4" />
+              <AlertTitle>No Payment Method Configured</AlertTitle>
+              <AlertDescription>
+                You haven't set up a payment method yet. Click "Setup Payment Method" above to choose between using our company paybill or your own M-Pesa paybill.
+              </AlertDescription>
+            </Alert>
+          ) : (
+            <div className="flex items-start justify-between rounded-lg border p-4">
               <div className="flex-1 space-y-2">
                 <div className="flex items-center gap-2">
                   <div className="rounded-lg bg-primary/10 p-2">
@@ -935,27 +858,26 @@ export const BillingSettings: React.FC = () => {
                   <div>
                     <div className="flex items-center gap-2">
                       <p className="font-medium">
-                        {method.type === "company_paybill"
+                        {paymentMethodType === "company_paybill"
                           ? "Company Paybill"
-                          : "Customer Paybill"}
+                          : "Your M-Pesa Paybill"}
                       </p>
-                      {method.isDefault && (
-                        <Badge variant="default" className="text-xs">
-                          Default
-                        </Badge>
-                      )}
-                      <Badge variant={getStatusColor(method.status)} className="text-xs">
-                        {method.status}
+                      <Badge variant="default" className="text-xs">
+                        Active
                       </Badge>
                     </div>
                     <p className="text-sm text-muted-foreground">
-                      Paybill: {method.paybillNumber}
-                      {method.accountNumber && ` • Account: ${method.accountNumber}`}
+                      Paybill: {userPaybillNumber}
                     </p>
                   </div>
                 </div>
-                {method.type === "company_paybill" && (
-                  <Alert className="bg-muted/50">
+                <p className="text-sm text-muted-foreground">
+                  {paymentMethodType === "company_paybill"
+                    ? "Using our company paybill to receive customer payments"
+                    : "Using your own M-Pesa paybill with Daraja API integration"}
+                </p>
+                {paymentMethodType === "company_paybill" && (
+                  <Alert className="bg-muted/50 mt-2">
                     <CheckCircle2 className="h-4 w-4" />
                     <AlertDescription className="text-xs">
                       {billingLoading
@@ -965,28 +887,8 @@ export const BillingSettings: React.FC = () => {
                   </Alert>
                 )}
               </div>
-              <div className="flex gap-2">
-                {!method.isDefault && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleSetDefault(method.id)}
-                  >
-                    Set Default
-                  </Button>
-                )}
-                {method.type === "customer_paybill" && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => handleRemovePaybill(method.id)}
-                  >
-                    <X className="h-4 w-4" />
-                  </Button>
-                )}
-              </div>
             </div>
-          ))}
+          )}
         </CardContent>
       </Card>
 
