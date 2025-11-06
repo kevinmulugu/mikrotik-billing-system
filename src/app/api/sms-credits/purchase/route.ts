@@ -127,7 +127,7 @@ export async function POST(request: NextRequest) {
       : `SMS-${packageId.toUpperCase()}-${Date.now()}`;
 
     // Get company paybill
-    const paybillNumber = process.env.MPESA_SHORTCODE || '';
+    const paybillNumber = process.env.MPESA_DEFAULT_PAYBILL || '';
     const callbackUrl = `${process.env.NEXT_PUBLIC_APP_URL}/api/webhooks/${process.env.WEBHOOK_SECRET_PATH}`;
 
     // Initiate STK Push
