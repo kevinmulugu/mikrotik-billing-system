@@ -587,6 +587,39 @@ export async function POST(req: NextRequest) {
           console.warn(`[Router Add] ⚠ Captive portal upload reported issues: ${uploadResult.error || uploadResult.stderr}`);
         } else {
           console.log(`[Router Add] ✓ Captive portal files uploaded: ${uploadResult.stdout?.slice(0, 200)}`);
+
+          // === Restart router to apply captive portal changes ===
+          try {
+            console.log(`[Router Add] Restarting router to apply captive portal changes...`);
+            
+            const restartResult = await MikroTikService.restartRouter({
+              ipAddress: connectionConfig.ipAddress,
+              port: connectionConfig.port,
+              username: connectionConfig.username,
+              password: decryptedPassword,
+            });
+
+            if (restartResult) {
+              console.log(`[Router Add] ✓ Router restart initiated successfully`);
+              
+              // Update router status to indicate restart
+              await db.collection('routers').updateOne(
+                { _id: insertResult.insertedId },
+                {
+                  $set: {
+                    'health.status': 'restarting',
+                    'health.lastSeen': new Date(),
+                    'updatedAt': new Date(),
+                  },
+                }
+              );
+            } else {
+              console.warn(`[Router Add] ⚠ Router restart command may have failed`);
+            }
+          } catch (restartErr) {
+            console.warn(`[Router Add] ⚠ Router restart error (this is often expected):`, restartErr);
+            // Don't fail the entire operation - router disconnect during restart is normal
+          }
         }
       } catch (uploadErr) {
         console.error(`[Router Add] ❌ Failed to upload captive portal files:`, uploadErr);

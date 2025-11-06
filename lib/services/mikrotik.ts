@@ -506,8 +506,8 @@ export class MikroTikService {
       const pass = ftpPassword || config.password;
 
       // Use mirror -R to upload tmpDir content to remotePath
-      // The command logs in with provided credentials and mirrors, then exits
-      const lftpCmd = `lftp -u ${this.escapeShellArg(user)},${this.escapeShellArg(pass)} ${this.escapeShellArg(ip)} -e \"mirror -R ${this.escapeShellArg(tmpDir)} ${this.escapeShellArg(remotePath)}; bye\"`;
+      // EXPLICIT DELETE FIRST: Remove all files in hotspot directory, then upload fresh copy
+      const lftpCmd = `lftp -u ${this.escapeShellArg(user)},${this.escapeShellArg(pass)} ${this.escapeShellArg(ip)} -e \"rm -rf ${this.escapeShellArg(remotePath)}/*; mirror -R ${this.escapeShellArg(tmpDir)} ${this.escapeShellArg(remotePath)}; bye\"`;
 
       const { stdout, stderr } = await exec(lftpCmd, { maxBuffer: 10 * 1024 * 1024 });
 
@@ -1264,6 +1264,39 @@ export class MikroTikService {
     } catch (error) {
       console.error('Failed to get blocked MAC addresses:', error);
       return [];
+    }
+  }
+
+  /**
+   * Restart the MikroTik router
+   * WARNING: This will reboot the entire router and disconnect all users temporarily
+   */
+  static async restartRouter(config: MikroTikConnectionConfig): Promise<boolean> {
+    try {
+      console.log('Initiating router restart...');
+      
+      // Send reboot command via REST API
+      await this.makeRequest(
+        config,
+        '/rest/system/reboot',
+        'POST',
+        {}
+      );
+
+      console.log('Router restart command sent successfully');
+      return true;
+    } catch (error) {
+      // Router disconnect is expected during reboot, so don't treat as error
+      if (error instanceof Error && 
+          (error.message.includes('ECONNRESET') || 
+           error.message.includes('socket hang up') ||
+           error.message.includes('Connection reset'))) {
+        console.log('Router is rebooting (connection reset is expected)');
+        return true;
+      }
+
+      console.error('Failed to restart router:', error);
+      return false;
     }
   }
 
