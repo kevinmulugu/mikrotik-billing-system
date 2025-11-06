@@ -1,3 +1,4 @@
+// src/app/api/webhooks/p8ytqrbul/route.ts  
 import { NextRequest, NextResponse } from 'next/server';
 import { headers } from 'next/headers';
 import { getDatabase } from '@/lib/database';
@@ -143,15 +144,32 @@ export async function POST(request: NextRequest) {
 
         const totalCredits = stkInitiation.metadata.totalCredits || 0;
         const userId = stkInitiation.userId;
+        const packageName = stkInitiation.metadata.packageName || 'SMS Credits';
+        const pricePerCredit = stkInitiation.metadata.pricePerCredit;
 
         console.log(`[M-Pesa Webhook] Adding ${totalCredits} SMS credits to user ${userId}`);
+
+        // Build description based on pricing info
+        let description = `SMS Credits Purchase: ${packageName}`;
+        if (pricePerCredit) {
+          description += ` (${totalCredits} credits @ KES ${pricePerCredit.toFixed(2)}/SMS)`;
+        } else {
+          // Old format for backward compatibility
+          const credits = stkInitiation.metadata.credits || 0;
+          const bonus = stkInitiation.metadata.bonus || 0;
+          if (bonus > 0) {
+            description += ` (${credits} + ${bonus} bonus)`;
+          } else {
+            description += ` (${totalCredits} credits)`;
+          }
+        }
 
         // Add credits to user account
         const creditsResult = await SMSCreditsService.addCredits(
           userId,
           totalCredits,
           'purchase',
-          `SMS Credits Purchase: ${stkInitiation.metadata.packageName} (${stkInitiation.metadata.credits} + ${stkInitiation.metadata.bonus} bonus)`,
+          description,
           {
             TransID,
             TransAmount: parseFloat(TransAmount),

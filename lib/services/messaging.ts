@@ -49,9 +49,26 @@ export interface BulkSMSResult {
 }
 
 export class MessagingService {
-  private static apiKey: string = process.env.MOBILESASA_API_KEY || '';
-  private static senderId: string = process.env.MOBILESASA_SENDERID || 'MOBILESASA';
-  private static apiUrl: string = process.env.MOBILESASA_URL_SINGLE_MESSAGE || 'https://api.mobilesasa.com/v1/send/message';
+  /**
+   * Get API key from environment (lazy-loaded)
+   */
+  private static getApiKey(): string {
+    return process.env.MOBILESASA_API_KEY || '';
+  }
+
+  /**
+   * Get sender ID from environment (lazy-loaded)
+   */
+  private static getSenderId(): string {
+    return process.env.MOBILESASA_SENDERID || 'MOBILESASA';
+  }
+
+  /**
+   * Get API URL from environment (lazy-loaded)
+   */
+  private static getApiUrl(): string {
+    return process.env.MOBILESASA_URL_SINGLE_MESSAGE || 'https://api.mobilesasa.com/v1/send/message';
+  }
 
   /**
    * Validate phone number format for Kenya
@@ -88,14 +105,24 @@ export class MessagingService {
    * Validate that API credentials are configured
    */
   static validateConfiguration(): { valid: boolean; error?: string } {
-    if (!this.apiKey || this.apiKey === 'your-mobilesasa-api-key') {
+    const apiKey = this.getApiKey();
+    const apiUrl = this.getApiUrl();
+
+    // Debug logging (remove in production if needed)
+    console.log('[MobileSasa] Configuration check:', {
+      hasApiKey: !!apiKey,
+      apiKeyLength: apiKey?.length || 0,
+      apiUrl: apiUrl || 'not set',
+    });
+
+    if (!apiKey || apiKey === 'your-mobilesasa-api-key') {
       return {
         valid: false,
         error: 'MOBILESASA_API_KEY is not configured in environment variables',
       };
     }
 
-    if (!this.apiUrl) {
+    if (!apiUrl) {
       return {
         valid: false,
         error: 'MOBILESASA_URL_SINGLE_MESSAGE is not configured in environment variables',
@@ -146,7 +173,7 @@ export class MessagingService {
 
       // Prepare request payload
       const payload = {
-        senderID: senderId || this.senderId,
+        senderID: senderId || this.getSenderId(),
         message: message,
         phone: normalizedPhone,
       };
@@ -154,11 +181,11 @@ export class MessagingService {
       console.log(`[MobileSasa] Sending SMS to ${normalizedPhone}...`);
 
       // Make API request
-      const response = await fetch(this.apiUrl, {
+      const response = await fetch(this.getApiUrl(), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${this.apiKey}`,
+          'Authorization': `Bearer ${this.getApiKey()}`,
         },
         body: JSON.stringify(payload),
       });
