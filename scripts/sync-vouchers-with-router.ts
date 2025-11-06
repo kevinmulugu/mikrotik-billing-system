@@ -75,26 +75,13 @@ async function run() {
         // Get router connection config
         const conn = getRouterConnectionConfig(router, { forceVPN: true });
 
-        // Get all ACTIVE sessions on router (not user definitions)
-        const activeSessions = await MikroTikService.getActiveHotspotUsers(conn);
-        console.log(`[SyncVouchers]   Active sessions on router: ${activeSessions.length}`);
-
-        // Create map of active usernames for quick lookup
-        const activeUsernames = new Set(
-          activeSessions.map((session: any) => session.user || session.name)
-        );
-
-        // Find vouchers for this router that claim to be active/in-use OR have been synced to router
+        // Find vouchers for this router that have been synced to router and are not yet expired
         // We check any voucher that has mikrotikUserId (synced to router) and is not yet expired
         // This catches vouchers in states: 'active', 'assigned', 'paid' that have been added to router
         const vouchers = await db.collection('vouchers').find({
           routerId: router._id,
           status: { $ne: 'expired' }, // Not already expired
-          $or: [
-            { 'usage.used': true }, // Marked as used in DB
-            { mikrotikUserId: { $ne: null } }, // Has been added to router (any status)
-            { 'usage.startTime': { $ne: null } }, // Has a login timestamp
-          ],
+          mikrotikUserId: { $ne: null }, // Has been added to router
         }).toArray();
 
         console.log(`[SyncVouchers]   Vouchers to check: ${vouchers.length}`);
@@ -108,104 +95,89 @@ async function run() {
             continue;
           }
 
-          // Check if voucher's session is active on router
-          const isActive = activeUsernames.has(voucherCode);
+          // Check if user still exists on router and get uptime info
+          const routerUser = await MikroTikService.getHotspotUser(conn, voucherCode);
 
-          if (isActive) {
-            // Voucher is genuinely active - all good
-            stats.vouchersStillActive++;
-            console.log(`[SyncVouchers]     ✓ ${voucherCode} is active on router`);
-
-            // Optional: Get session details to update usage stats
-            const session = activeSessions.find(
-              (s: any) => (s.user || s.name) === voucherCode
+          if (!routerUser) {
+            // User has been removed from router (manually or by router itself)
+            console.log(`[SyncVouchers]     ✗ ${voucherCode} - User removed from router, marking expired`);
+            
+            // Mark as expired since router removed it
+            await db.collection('vouchers').updateOne(
+              { _id: voucher._id },
+              {
+                $set: {
+                  status: 'expired',
+                  'usage.used': true,
+                  'usage.endTime': new Date(),
+                  'expiry.expiredBy': 'routerSync-removed',
+                  updatedAt: new Date(),
+                },
+              }
             );
 
-            if (session && session.uptime) {
-              // Update last seen and current uptime
+            stats.vouchersExpired++;
+            continue;
+          }
+
+          // User exists on router - check limit-uptime
+          const limitUptime = routerUser['limit-uptime'];
+          const uptime = routerUser.uptime;
+
+          console.log(`[SyncVouchers]     → ${voucherCode} - limit: ${limitUptime || 'none'}, used: ${uptime || 'none'}`);
+
+          // Simple check: if limit-uptime exists and has been used up
+          if (limitUptime && uptime) {
+            const limitSeconds = MikroTikService.parseUptimeToSeconds(limitUptime);
+            const usedSeconds = MikroTikService.parseUptimeToSeconds(uptime);
+
+            if (usedSeconds >= limitSeconds) {
+              // SIMPLE: Limit used up → Mark as used in DB → Delete from router
+              console.log(`[SyncVouchers]     ✗ ${voucherCode} - Limit exhausted (${uptime}/${limitUptime}) - marking used & deleting`);
+
+              // Mark as used and expired in DB
+              await db.collection('vouchers').updateOne(
+                { _id: voucher._id },
+                {
+                  $set: {
+                    status: 'expired',
+                    'usage.used': true,
+                    'usage.endTime': new Date(),
+                    'expiry.expiredBy': 'routerSync-uptimeExhausted',
+                    updatedAt: new Date(),
+                  },
+                }
+              );
+
+              // Delete from router
+              await MikroTikService.deleteHotspotUser(conn, voucherCode);
+              console.log(`[SyncVouchers]       ✓ Deleted from router`);
+
+              stats.vouchersExpired++;
+            } else {
+              // Still has time - keep it
+              const remainingSeconds = limitSeconds - usedSeconds;
+              const remainingMinutes = Math.floor(remainingSeconds / 60);
+              console.log(`[SyncVouchers]     ✓ ${voucherCode} - Active (${remainingMinutes}m remaining)`);
+              
+              stats.vouchersStillActive++;
+              
+              // Update current uptime in DB
               await db.collection('vouchers').updateOne(
                 { _id: voucher._id },
                 {
                   $set: {
                     'usage.lastSeen': new Date(),
-                    'usage.currentUptime': session.uptime,
+                    'usage.currentUptime': uptime,
                     updatedAt: new Date(),
                   },
                 }
               );
             }
           } else {
-            // Voucher claims to be synced to router but NO active session exists
-            // This means the session expired/ended but DB wasn't updated
-            console.log(`[SyncVouchers]     ✗ ${voucherCode} NOT active on router - marking expired`);
-
-            // Calculate actual end time and backfill missing timestamps
-            let startTime = voucher.usage?.startTime;
-            let endTime = voucher.usage?.expectedEndTime;
-
-            // If startTime is missing, estimate it from payment date or creation date
-            if (!startTime) {
-              const estimatedStart = voucher.payment?.paymentDate || voucher.createdAt;
-              startTime = estimatedStart;
-              console.log(`[SyncVouchers]       Backfilling startTime from ${voucher.payment?.paymentDate ? 'payment' : 'creation'} date`);
-            }
-
-            // If expectedEndTime is missing, calculate it from duration
-            if (!endTime && startTime) {
-              const durationMs = (voucher.usage?.maxDurationMinutes || voucher.voucherInfo?.duration || 60) * 60 * 1000;
-              endTime = new Date(new Date(startTime).getTime() + durationMs);
-              console.log(`[SyncVouchers]       Calculated expectedEndTime: ${endTime.toISOString()}`);
-            }
-
-            // If still no endTime, use current time as best guess
-            if (!endTime) {
-              endTime = new Date();
-            }
-
-            // Mark voucher as expired
-            await db.collection('vouchers').updateOne(
-              { _id: voucher._id },
-              {
-                $set: {
-                  status: 'expired',
-                  'usage.used': true, // Was definitely used (had mikrotikUserId)
-                  'usage.startTime': startTime, // Backfill if missing
-                  'usage.endTime': endTime,
-                  'usage.expectedEndTime': endTime, // Backfill if missing
-                  'expiry.expiredBy': 'routerSync',
-                  updatedAt: new Date(),
-                },
-              }
-            );
-
-            // Try to remove from router user list (cleanup)
-            try {
-              await MikroTikService.deleteHotspotUser(conn, voucherCode);
-              console.log(`[SyncVouchers]       Removed user from router`);
-            } catch (err) {
-              // Non-critical - user might already be gone
-              console.log(`[SyncVouchers]       User removal: ${err instanceof Error ? err.message : 'already removed'}`);
-            }
-
-            // Log audit
-            await db.collection('audit_logs').insertOne({
-              user: { userId: null },
-              action: {
-                type: 'expire',
-                resource: 'voucher',
-                resourceId: voucher._id,
-                description: `Voucher expired by router sync - session no longer active`,
-              },
-              timestamp: new Date(),
-              metadata: {
-                voucherCode,
-                routerId: router._id,
-                routerName: router.name,
-                syncReason: 'sessionEnded',
-              },
-            });
-
-            stats.vouchersExpired++;
+            // No limit-uptime or no usage yet - keep it
+            console.log(`[SyncVouchers]     ○ ${voucherCode} - No usage yet or no limit set`);
+            stats.vouchersStillActive++;
           }
         }
 
