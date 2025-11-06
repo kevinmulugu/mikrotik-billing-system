@@ -488,6 +488,7 @@ export class MikroTikService {
             verify_mpesa: '/api/captive/verify-mpesa',
             purchase: '/api/captive/purchase',
             payment_status: '/api/captive/payment-status',
+            login_callback: '/api/captive/login-callback',
           },
           version: '1.0',
         },

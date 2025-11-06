@@ -547,7 +547,8 @@ export async function POST(request: NextRequest) {
       { _id: voucher._id },
       {
         $set: {
-          customerId: wifiCustomer._id, // Link voucher to WiFi customer
+          customerId: wifiCustomer._id, // Link voucher to WiFi customer (top level)
+          'usage.customerId': wifiCustomer._id, // Also set in usage object for queries
           'payment.method': 'mpesa',
           'payment.transactionId': TransID,
           'payment.phoneNumber': MSISDN,

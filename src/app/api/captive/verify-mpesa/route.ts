@@ -311,6 +311,9 @@ export async function POST(request: NextRequest) {
     }
 
     // Return successful response with voucher details
+    // NOTE: usage.startTime is NOT set here - it will be set when MikroTik
+    // confirms the user has successfully logged in (via login callback or status polling)
+    // This endpoint only verifies the transaction and returns credentials for auto-login
     return NextResponse.json(
       {
         success: true,

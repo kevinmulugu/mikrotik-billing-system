@@ -208,7 +208,7 @@ function startRedirect() {
 }
 
 // ============================================================================
-// LOAD CONFIGURATION (OPTIONAL)
+// LOAD CONFIGURATION AND TRACK LOGIN
 // ============================================================================
 async function loadConfig() {
     try {
@@ -216,10 +216,59 @@ async function loadConfig() {
         if (response.ok) {
             const config = await response.json();
             console.log('Login successful for router:', config.router_id);
+            
+            // Track login in database
+            await trackLogin(config);
         }
     } catch (error) {
         // Silently fail - config loading is optional here
         console.log('Config not loaded (optional)');
+    }
+}
+
+// ============================================================================
+// TRACK LOGIN IN DATABASE
+// ============================================================================
+async function trackLogin(config) {
+    try {
+        // Get MikroTik session variables
+        const username = '$(username)';
+        const macAddress = '$(mac)';
+        const ipAddress = '$(ip)';
+        
+        // Only track if we have a valid username (voucher code)
+        if (!username || username === '' || username === '$(username)') {
+            console.log('No valid username to track');
+            return;
+        }
+        
+        console.log('Tracking login for voucher:', username);
+        
+        // Call login callback endpoint
+        const callbackUrl = config.api.base_url + config.api.endpoints.login_callback;
+        const response = await fetch(callbackUrl, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                voucher_code: username,
+                router_id: config.router_id,
+                mac_address: macAddress !== '$(mac)' ? macAddress : null,
+                ip_address: ipAddress !== '$(ip)' ? ipAddress : null,
+            }),
+        });
+        
+        if (response.ok) {
+            const result = await response.json();
+            console.log('✓ Login tracked successfully:', result);
+        } else {
+            const error = await response.json().catch(() => ({ message: 'Unknown error' }));
+            console.warn('Login tracking failed:', error.message);
+        }
+    } catch (error) {
+        // Don't block redirect on tracking failure
+        console.warn('Login tracking error (non-critical):', error.message);
     }
 }
 

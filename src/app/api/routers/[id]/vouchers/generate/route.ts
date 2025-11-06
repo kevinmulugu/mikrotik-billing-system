@@ -279,9 +279,9 @@ export async function POST(
         },
         usage: {
           used: false,
-          userId: null,
+          customerId: null, // Will be set when voucher is purchased/assigned to a customer
           deviceMac: null,
-          startTime: null,
+          startTime: null, // Will be set when customer actually logs in via MikroTik
           endTime: null,
           dataUsed: 0,
           timeUsed: 0,
