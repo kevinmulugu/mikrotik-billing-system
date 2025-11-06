@@ -1,4 +1,8 @@
 #!/usr/bin/env ts-node
+import * as dotenv from 'dotenv';
+import * as path from 'path';
+dotenv.config({ path: path.resolve(process.cwd(), '.env.local') });
+
 import clientPromise from '@/lib/mongodb';
 import { MikroTikService } from '@/lib/services/mikrotik';
 import { getRouterConnectionConfig } from '@/lib/services/router-connection';
