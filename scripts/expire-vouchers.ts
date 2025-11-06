@@ -1,19 +1,32 @@
 #!/usr/bin/env ts-node
+// Load environment variables FIRST before any other imports
 import * as dotenv from 'dotenv';
 import * as path from 'path';
 dotenv.config({ path: path.resolve(process.cwd(), '.env.local') });
 
-import clientPromise from '@/lib/mongodb';
+// Only import what's needed
+import { MongoClient, ObjectId } from 'mongodb';
 import { MikroTikService } from '@/lib/services/mikrotik';
 import { getRouterConnectionConfig } from '@/lib/services/router-connection';
 
+// Environment variables
+const MONGODB_URI = process.env.MONGODB_URI;
+const MONGODB_DB_NAME = process.env.MONGODB_DB_NAME || 'mikrotik_billing';
+
+if (!MONGODB_URI) {
+  console.error('[ExpireVouchers] Error: MONGODB_URI is not set in environment variables');
+  process.exit(1);
+}
+
 async function run() {
-  const client = await clientPromise;
-  const db = client.db(process.env.MONGODB_DB_NAME || 'mikrotik_billing');
+  // Create own MongoDB connection
+  const client = await MongoClient.connect(MONGODB_URI!);
+  const db = client.db(MONGODB_DB_NAME);
 
-  const now = new Date();
+  try {
+    const now = new Date();
 
-  console.log('[ExpireVouchers] Starting expiry check at', now.toISOString());
+    console.log('[ExpireVouchers] Starting expiry check at', now.toISOString());
 
   // Find vouchers that should be expired due to activation expiry
   const activationCursor = db.collection('vouchers').find({
@@ -115,10 +128,23 @@ async function run() {
   }
 
   console.log(`[ExpireVouchers] Completed. Processed: ${processed}, removedOnRouter: ${deletedOnRouter}`);
-  process.exit(0);
+  
+  } catch (error) {
+    console.error('[ExpireVouchers] Fatal error:', error);
+    throw error;
+  } finally {
+    // Close MongoDB connection
+    await client.close();
+    console.log('[ExpireVouchers] MongoDB connection closed');
+  }
 }
 
-run().catch((err) => {
-  console.error('[ExpireVouchers] Fatal error:', err);
-  process.exit(1);
-});
+run()
+  .then(() => {
+    console.log('[ExpireVouchers] Script completed successfully');
+    process.exit(0);
+  })
+  .catch((err) => {
+    console.error('[ExpireVouchers] Script failed:', err);
+    process.exit(1);
+  });
