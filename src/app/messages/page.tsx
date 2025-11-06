@@ -90,6 +90,8 @@ async function getMessagingData(userId: string) {
           : null,
         message: m.message,
         recipientCount: m.recipientCount,
+        successfulDeliveries: m.successfulDeliveries || m.recipientCount,
+        failedDeliveries: m.failedDeliveries || 0,
         status: m.status,
         sentAt: m.sentAt,
       })),

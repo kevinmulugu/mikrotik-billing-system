@@ -1,10 +1,11 @@
-// src/app/api/webhooks/p8ytqrbul/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { headers } from 'next/headers';
 import { getDatabase } from '@/lib/database';
 import { ObjectId } from 'mongodb';
 import MikroTikService from '@/lib/services/mikrotik';
 import { getRouterConnectionConfig } from '@/lib/services/router-connection';
+import { MessagingService } from '@/lib/services/messaging';
+import { SMSCreditsService } from '@/lib/services/sms-credits';
 
 /**
  * M-Pesa C2B Confirmation Webhook
@@ -107,7 +108,131 @@ export async function POST(request: NextRequest) {
         PhoneNumber: stkInitiation.PhoneNumber,
         CheckoutRequestID: stkInitiation.CheckoutRequestID,
         currentStatus: stkInitiation.status,
+        metadata: stkInitiation.metadata,
       });
+
+      // ============================================
+      // HANDLE SMS CREDITS PURCHASE
+      // ============================================
+      if (stkInitiation.metadata?.type === 'sms_credits_purchase') {
+        console.log('[M-Pesa Webhook] SMS Credits purchase detected');
+
+        // Check if already processed
+        if (stkInitiation.status === 'completed') {
+          console.log('[M-Pesa Webhook] SMS Credits purchase already processed');
+          
+          await db.collection('webhook_logs').insertOne({
+            source: 'mpesa_confirmation',
+            type: 'c2b_confirmation',
+            status: 'duplicate_already_processed',
+            payload: body,
+            metadata: {
+              BillRefNumber,
+              TransID,
+              type: 'sms_credits_purchase',
+              stkStatus: stkInitiation.status,
+            },
+            timestamp: purchaseTime,
+          });
+
+          return NextResponse.json({
+            ResultCode: 0,
+            ResultDesc: 'SMS Credits purchase already processed',
+          });
+        }
+
+        const totalCredits = stkInitiation.metadata.totalCredits || 0;
+        const userId = stkInitiation.userId;
+
+        console.log(`[M-Pesa Webhook] Adding ${totalCredits} SMS credits to user ${userId}`);
+
+        // Add credits to user account
+        const creditsResult = await SMSCreditsService.addCredits(
+          userId,
+          totalCredits,
+          'purchase',
+          `SMS Credits Purchase: ${stkInitiation.metadata.packageName} (${stkInitiation.metadata.credits} + ${stkInitiation.metadata.bonus} bonus)`,
+          {
+            TransID,
+            TransAmount: parseFloat(TransAmount),
+            PhoneNumber: stkInitiation.PhoneNumber,
+            PaymentMethod: 'M-Pesa STK Push',
+          }
+        );
+
+        if (creditsResult.success) {
+          console.log(`[M-Pesa Webhook] ✓ SMS Credits added successfully. New balance: ${creditsResult.newBalance}`);
+
+          // Update STK initiation status
+          await db.collection('stk_initiations').updateOne(
+            { _id: stkInitiation._id },
+            {
+              $set: {
+                status: 'completed',
+                completedAt: purchaseTime,
+                TransID,
+                TransAmount: parseFloat(TransAmount),
+                creditsAdded: totalCredits,
+                newBalance: creditsResult.newBalance,
+                updatedAt: purchaseTime,
+              },
+            }
+          );
+
+          // Log successful webhook processing
+          await db.collection('webhook_logs').insertOne({
+            source: 'mpesa_confirmation',
+            type: 'c2b_confirmation',
+            status: 'success',
+            payload: body,
+            metadata: {
+              BillRefNumber,
+              TransID,
+              type: 'sms_credits_purchase',
+              packageId: stkInitiation.metadata.packageId,
+              packageName: stkInitiation.metadata.packageName,
+              creditsAdded: totalCredits,
+              newBalance: creditsResult.newBalance,
+              userId: userId.toString(),
+            },
+            timestamp: purchaseTime,
+          });
+
+          console.log('[M-Pesa Webhook] SMS Credits purchase completed successfully');
+
+          return NextResponse.json({
+            ResultCode: 0,
+            ResultDesc: 'SMS Credits purchase processed successfully',
+          });
+        } else {
+          console.error('[M-Pesa Webhook] Failed to add SMS credits:', creditsResult.error);
+
+          // Log failure
+          await db.collection('webhook_logs').insertOne({
+            source: 'mpesa_confirmation',
+            type: 'c2b_confirmation',
+            status: 'failed',
+            reason: 'credits_addition_failed',
+            payload: body,
+            metadata: {
+              BillRefNumber,
+              TransID,
+              type: 'sms_credits_purchase',
+              error: creditsResult.error,
+            },
+            timestamp: purchaseTime,
+          });
+
+          return NextResponse.json({
+            ResultCode: 1,
+            ResultDesc: 'Failed to add SMS credits',
+          });
+        }
+      }
+
+      // ============================================
+      // HANDLE VOUCHER PURCHASE (Existing Logic)
+      // ============================================
 
       // Check if already processed (duplicate webhook)
       if (stkInitiation.status === 'completed' && stkInitiation.voucherId) {
@@ -276,14 +401,112 @@ export async function POST(request: NextRequest) {
 
         console.log('✅ [M-Pesa Webhook] Voucher successfully linked to payment and STK');
 
-        // TODO: SMS NOTIFICATION - VOUCHER CODE TO CUSTOMER
-        console.log('📱 [SMS TODO] Send voucher code to customer');
-        console.log('Phone:', phoneNumber);
-        console.log('Voucher Code:', voucher.voucherInfo.code);
-        console.log('Package:', packageInfo.packageDisplayName);
-        console.log('Duration:', packageInfo.packageDuration, 'minutes');
-        // TODO: Integrate SMS provider (Africa's Talking)
-        // Message: "Your WiFi voucher: {code}. Package: {name}. Valid for {duration} minutes. Thank you!"
+        // === SEND SMS NOTIFICATION - VOUCHER CODE TO CUSTOMER ===
+        if (phoneNumber) {
+          try {
+            console.log('📱 [SMS] Sending voucher code to customer...');
+
+            // Fetch the "Voucher Purchase Confirmation" template
+            const template = await db.collection('message_templates').findOne({
+              name: 'Voucher Purchase Confirmation',
+              isSystem: true,
+              isActive: true,
+            });
+
+            if (template) {
+              // Format duration (convert minutes to readable format)
+              let durationText = '';
+              const durationMinutes = packageInfo.packageDuration || 0;
+              if (durationMinutes < 60) {
+                durationText = `${durationMinutes} minutes`;
+              } else if (durationMinutes === 60) {
+                durationText = '1 hour';
+              } else if (durationMinutes < 1440) {
+                const hours = Math.floor(durationMinutes / 60);
+                durationText = `${hours} hour${hours > 1 ? 's' : ''}`;
+              } else {
+                const days = Math.floor(durationMinutes / 1440);
+                durationText = `${days} day${days > 1 ? 's' : ''}`;
+              }
+
+              // Replace variables in template
+              const smsMessage = MessagingService.replaceVariables(template.message, {
+                code: voucher.voucherInfo.code,
+                package: packageInfo.packageDisplayName || 'WiFi Access',
+                duration: durationText,
+              });
+
+              // Send SMS via MobileSasa
+              const smsResult = await MessagingService.sendSingleSMS(
+                phoneNumber,
+                smsMessage
+              );
+
+              if (smsResult.success) {
+                console.log('✅ [SMS] Voucher code sent successfully');
+                console.log('   Phone:', phoneNumber);
+                console.log('   Message ID:', smsResult.messageId);
+
+                // Increment template usage count
+                await db.collection('message_templates').updateOne(
+                  { _id: template._id },
+                  { 
+                    $inc: { usageCount: 1 },
+                    $set: { updatedAt: new Date() }
+                  }
+                );
+
+                // Log SMS delivery in messages collection
+                await db.collection('messages').insertOne({
+                  userId: packageInfo.routerOwnerId || null,
+                  recipientType: 'individual',
+                  routerId: packageInfo.routerId,
+                  templateId: template._id,
+                  message: smsMessage,
+                  recipientCount: 1,
+                  successfulDeliveries: 1,
+                  failedDeliveries: 0,
+                  recipients: [{
+                    phone: phoneNumber,
+                    status: 'sent',
+                    messageId: smsResult.messageId,
+                  }],
+                  status: 'sent',
+                  sentAt: new Date(),
+                  createdAt: new Date(),
+                  metadata: {
+                    trigger: 'voucher_purchase',
+                    voucherId: voucher._id,
+                    transactionId: TransID,
+                  },
+                });
+              } else {
+                console.error('❌ [SMS] Failed to send voucher code:', smsResult.error);
+                
+                // Log failed SMS attempt
+                await db.collection('webhook_logs').insertOne({
+                  source: 'mpesa_confirmation',
+                  type: 'sms_failed',
+                  status: 'failed',
+                  reason: smsResult.error,
+                  payload: {
+                    phone: phoneNumber,
+                    voucherCode: voucher.voucherInfo.code,
+                    transactionId: TransID,
+                  },
+                  timestamp: new Date(),
+                });
+              }
+            } else {
+              console.warn('⚠ [SMS] Template "Voucher Purchase Confirmation" not found');
+            }
+          } catch (smsError) {
+            console.error('❌ [SMS] Exception sending voucher SMS:', smsError);
+            // Don't fail the webhook - SMS is nice-to-have, not critical
+          }
+        } else {
+          console.warn('⚠ [SMS] No phone number available, skipping SMS notification');
+        }
       } else {
         // OUT OF STOCK - No active vouchers available
         console.error('🚨 [M-Pesa Webhook] OUT OF STOCK - No active vouchers!');
@@ -337,13 +560,56 @@ export async function POST(request: NextRequest) {
         // TODO: Send email/SMS to router owner
         // Message: "URGENT: Router '{name}' is out of {package} vouchers. Payment received: {transactionId}. Customer: {phone}. Please generate vouchers or refund."
 
-        // TODO: SMS NOTIFICATION - CUSTOMER OUT-OF-STOCK MESSAGE
-        console.log('📱 [SMS TODO] Send out-of-stock message to customer');
-        console.log('Phone:', phoneNumber);
-        console.log('Amount:', TransAmount);
-        console.log('Transaction:', TransID);
-        // TODO: Send SMS to customer
-        // Message: "Payment of KES {amount} received successfully. Your voucher code will be sent within 24 hours. Ref: {transactionId}. Thank you for your patience!"
+        // === SEND SMS - OUT-OF-STOCK NOTIFICATION TO CUSTOMER ===
+        if (phoneNumber) {
+          try {
+            console.log('📱 [SMS] Sending out-of-stock message to customer...');
+
+            // Create friendly out-of-stock message
+            const outOfStockMessage = `Payment of KES ${TransAmount} received successfully. Your voucher code will be sent within 24 hours. Ref: ${TransID}. Thank you for your patience!`;
+
+            // Send SMS via MobileSasa
+            const smsResult = await MessagingService.sendSingleSMS(
+              phoneNumber,
+              outOfStockMessage
+            );
+
+            if (smsResult.success) {
+              console.log('✅ [SMS] Out-of-stock notification sent successfully');
+              console.log('   Phone:', phoneNumber);
+              console.log('   Message ID:', smsResult.messageId);
+
+              // Log SMS delivery
+              await db.collection('messages').insertOne({
+                userId: packageInfo.routerOwnerId || null,
+                recipientType: 'individual',
+                routerId: packageInfo.routerId,
+                templateId: null,
+                message: outOfStockMessage,
+                recipientCount: 1,
+                successfulDeliveries: 1,
+                failedDeliveries: 0,
+                recipients: [{
+                  phone: phoneNumber,
+                  status: 'sent',
+                  messageId: smsResult.messageId,
+                }],
+                status: 'sent',
+                sentAt: new Date(),
+                createdAt: new Date(),
+                metadata: {
+                  trigger: 'voucher_out_of_stock',
+                  transactionId: TransID,
+                  amount: TransAmount,
+                },
+              });
+            } else {
+              console.error('❌ [SMS] Failed to send out-of-stock message:', smsResult.error);
+            }
+          } catch (smsError) {
+            console.error('❌ [SMS] Exception sending out-of-stock SMS:', smsError);
+          }
+        }
 
         return NextResponse.json({
           ResultCode: 0,
@@ -605,12 +871,101 @@ export async function POST(request: NextRequest) {
       processingTime: Date.now() - startTime,
     });
 
-    // TODO: Send confirmation SMS/email to customer
-    // - BillRefNumber (voucher code)
-    // - Package details
-    // - Expiry information
-    // - Instructions to contact merchant for voucher code
-    // - Activation instructions
+    // === SEND SMS - MANUAL PAYMENT CONFIRMATION ===
+    if (phoneNumber || MSISDN) {
+      try {
+        const recipientPhone = phoneNumber || String(MSISDN);
+        console.log('📱 [SMS] Sending manual payment confirmation...');
+
+        // Fetch the "Voucher Purchase Confirmation" template
+        const template = await db.collection('message_templates').findOne({
+          name: 'Voucher Purchase Confirmation',
+          isSystem: true,
+          isActive: true,
+        });
+
+        if (template) {
+          // Get voucher details
+          const packageName = voucher.voucherInfo?.packageType || 'WiFi Access';
+          const durationMinutes = voucher.voucherInfo?.durationMinutes || 0;
+          
+          // Format duration
+          let durationText = '';
+          if (durationMinutes < 60) {
+            durationText = `${durationMinutes} minutes`;
+          } else if (durationMinutes === 60) {
+            durationText = '1 hour';
+          } else if (durationMinutes < 1440) {
+            const hours = Math.floor(durationMinutes / 60);
+            durationText = `${hours} hour${hours > 1 ? 's' : ''}`;
+          } else {
+            const days = Math.floor(durationMinutes / 1440);
+            durationText = `${days} day${days > 1 ? 's' : ''}`;
+          }
+
+          // Replace variables in template
+          const smsMessage = MessagingService.replaceVariables(template.message, {
+            code: voucherCode || 'PENDING',
+            package: packageName,
+            duration: durationText || 'as specified',
+          });
+
+          // Send SMS
+          const smsResult = await MessagingService.sendSingleSMS(
+            recipientPhone,
+            smsMessage
+          );
+
+          if (smsResult.success) {
+            console.log('✅ [SMS] Manual payment confirmation sent successfully');
+            console.log('   Phone:', recipientPhone);
+            console.log('   Message ID:', smsResult.messageId);
+
+            // Increment template usage
+            await db.collection('message_templates').updateOne(
+              { _id: template._id },
+              { 
+                $inc: { usageCount: 1 },
+                $set: { updatedAt: new Date() }
+              }
+            );
+
+            // Log SMS delivery
+            await db.collection('messages').insertOne({
+              userId: voucher.userId || null,
+              recipientType: 'individual',
+              routerId: voucher.routerId,
+              templateId: template._id,
+              message: smsMessage,
+              recipientCount: 1,
+              successfulDeliveries: 1,
+              failedDeliveries: 0,
+              recipients: [{
+                phone: recipientPhone,
+                status: 'sent',
+                messageId: smsResult.messageId,
+              }],
+              status: 'sent',
+              sentAt: new Date(),
+              createdAt: new Date(),
+              metadata: {
+                trigger: 'manual_voucher_purchase',
+                voucherId: voucher._id,
+                transactionId: TransID,
+                billRefNumber: BillRefNumber,
+              },
+            });
+          } else {
+            console.error('❌ [SMS] Failed to send manual payment confirmation:', smsResult.error);
+          }
+        } else {
+          console.warn('⚠ [SMS] Template "Voucher Purchase Confirmation" not found');
+        }
+      } catch (smsError) {
+        console.error('❌ [SMS] Exception sending manual payment SMS:', smsError);
+        // Don't fail the webhook
+      }
+    }
 
     // Respond to Safaricom
     return NextResponse.json({

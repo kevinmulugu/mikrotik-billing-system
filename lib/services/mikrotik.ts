@@ -506,8 +506,9 @@ export class MikroTikService {
       const pass = ftpPassword || config.password;
 
       // Use mirror -R to upload tmpDir content to remotePath
-      // EXPLICIT DELETE FIRST: Remove all files in hotspot directory, then upload fresh copy
-      const lftpCmd = `lftp -u ${this.escapeShellArg(user)},${this.escapeShellArg(pass)} ${this.escapeShellArg(ip)} -e \"rm -rf ${this.escapeShellArg(remotePath)}/*; mirror -R ${this.escapeShellArg(tmpDir)} ${this.escapeShellArg(remotePath)}; bye\"`;
+      // EXPLICIT DELETE FIRST (SAFE): Create directory if not exists, remove all files, then upload fresh copy
+      // Using '|| true' to ignore errors if directory doesn't exist or is already empty
+      const lftpCmd = `lftp -u ${this.escapeShellArg(user)},${this.escapeShellArg(pass)} ${this.escapeShellArg(ip)} -e \"mkdir -p ${this.escapeShellArg(remotePath)} || true; cd ${this.escapeShellArg(remotePath)}; rm -rf * || true; cd /; mirror -R ${this.escapeShellArg(tmpDir)} ${this.escapeShellArg(remotePath)}; bye\"`;
 
       const { stdout, stderr } = await exec(lftpCmd, { maxBuffer: 10 * 1024 * 1024 });
 

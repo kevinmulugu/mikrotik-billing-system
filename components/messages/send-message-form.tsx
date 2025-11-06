@@ -92,12 +92,32 @@ export function SendMessageForm({ routers, totalCustomers, templates }: SendMess
         throw new Error(data.error || 'Failed to send message');
       }
 
+      // Show detailed delivery status
+      const successCount = data.sentCount || 0;
+      const failedCount = data.failedCount || 0;
+      const totalCount = data.totalRecipients || successCount + failedCount;
+
+      let resultMessage = '';
+      if (data.status === 'sent') {
+        resultMessage = `✓ Message sent successfully to all ${successCount} customers`;
+      } else if (data.status === 'partial') {
+        resultMessage = `⚠ Partial delivery: ${successCount} sent, ${failedCount} failed out of ${totalCount} recipients`;
+      } else {
+        resultMessage = `✗ Failed to send message to ${failedCount} recipients`;
+      }
+
       setSendResult({
-        success: true,
-        message: `Message sent successfully to ${data.sentCount} customer${data.sentCount !== 1 ? 's' : ''}`,
+        success: data.status === 'sent' || data.status === 'partial',
+        message: resultMessage,
       });
 
-      toast.success(`Message sent to ${data.sentCount} customer${data.sentCount !== 1 ? 's' : ''}`);
+      if (data.status === 'sent') {
+        toast.success(resultMessage);
+      } else if (data.status === 'partial') {
+        toast.warning(resultMessage);
+      } else {
+        toast.error(resultMessage);
+      }
 
       // Reset form
       setMessage('');

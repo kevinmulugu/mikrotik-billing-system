@@ -4,6 +4,7 @@ import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
 import clientPromise from '@/lib/mongodb';
 import { ObjectId } from 'mongodb';
+import { MessagingService } from '@/lib/services/messaging';
 
 export async function POST(request: NextRequest) {
   try {
@@ -66,38 +67,32 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'No customers with phone numbers found' }, { status: 404 });
     }
 
-    // Log the message (for now, just console.log)
-    // In production, integrate with your SMS provider (e.g., Africa's Talking, Twilio, etc.)
-    console.log('='.repeat(60));
-    console.log('MESSAGE SEND REQUEST');
-    console.log('='.repeat(60));
-    console.log('User:', session.user.email);
-    console.log('Recipient Type:', recipientType);
-    console.log('Router ID:', routerId || 'All routers');
-    console.log('Message:', message);
-    console.log('Recipients:', customers.length);
-    console.log('-'.repeat(60));
-    customers.forEach((customer, index) => {
-      console.log(`${index + 1}. ${customer.name || 'Unknown'} - ${customer.phone}`);
-    });
-    console.log('='.repeat(60));
+    console.log(`[Messages] Sending SMS to ${customers.length} customers...`);
+    console.log(`[Messages] Message preview: ${message.substring(0, 100)}...`);
 
-    // TODO: Integrate with SMS provider
-    // Example with Africa's Talking:
-    /*
-    const africastalking = require('africastalking')({
-      apiKey: process.env.AFRICASTALKING_API_KEY,
-      username: process.env.AFRICASTALKING_USERNAME,
-    });
+    // === Send SMS using MobileSasa ===
+    const smsRecipients = customers.map((c) => ({
+      phone: c.phone,
+      name: c.name,
+      customerId: c._id,
+    }));
 
-    const sms = africastalking.SMS;
-    const phoneNumbers = customers.map(c => c.phone).filter(Boolean);
-    
-    const result = await sms.send({
-      to: phoneNumbers,
+    const smsResult = await MessagingService.sendBulkSMS({
+      recipients: smsRecipients,
       message: message,
     });
-    */
+
+    console.log(
+      `[Messages] SMS Result: ${smsResult.successfulDeliveries}/${smsResult.totalRecipients} sent successfully`
+    );
+
+    // Determine overall status
+    let messageStatus: 'sent' | 'partial' | 'failed' = 'failed';
+    if (smsResult.successfulDeliveries === smsResult.totalRecipients) {
+      messageStatus = 'sent';
+    } else if (smsResult.successfulDeliveries > 0) {
+      messageStatus = 'partial';
+    }
 
     // Save message to database for record keeping
     const messageRecord = {
@@ -107,12 +102,20 @@ export async function POST(request: NextRequest) {
       templateId: templateId ? new ObjectId(templateId) : null,
       message,
       recipientCount: customers.length,
-      recipients: customers.map((c) => ({
-        customerId: c._id,
-        phone: c.phone,
-        name: c.name,
-      })),
-      status: 'sent', // In production: 'pending', 'sent', 'failed'
+      successfulDeliveries: smsResult.successfulDeliveries,
+      failedDeliveries: smsResult.failedDeliveries,
+      recipients: smsResult.details.map((detail) => {
+        const customer = customers.find((c) => c.phone === detail.phone);
+        return {
+          customerId: customer?._id,
+          phone: detail.phone,
+          name: detail.name || customer?.name,
+          status: detail.status,
+          messageId: detail.messageId,
+          error: detail.error,
+        };
+      }),
+      status: messageStatus,
       sentAt: new Date(),
       createdAt: new Date(),
     };
@@ -129,8 +132,11 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      sentCount: customers.length,
+      sentCount: smsResult.successfulDeliveries,
+      failedCount: smsResult.failedDeliveries,
+      totalRecipients: smsResult.totalRecipients,
       messageId: result.insertedId,
+      status: messageStatus,
     });
   } catch (error) {
     console.error('Error sending message:', error);

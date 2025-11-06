@@ -43,6 +43,13 @@ async function seedDatabase() {
         role: 'system_admin',
         status: 'active',
         permissions: ['*'], // All permissions
+        smsCredits: {
+          balance: 500, // System admin starts with 500 SMS credits
+          totalPurchased: 500,
+          totalUsed: 0,
+          lastPurchaseDate: new Date(),
+          lastPurchaseAmount: 500,
+        },
         preferences: {
           language: 'en',
           notifications: {
@@ -133,6 +140,13 @@ async function seedDatabase() {
           activeUsers: 0,
           totalRevenue: 0,
           monthlyRevenue: 0,
+        },
+        smsCredits: {
+          balance: 100, // Demo homeowner starts with 100 SMS credits
+          totalPurchased: 100,
+          totalUsed: 0,
+          lastPurchaseDate: new Date(),
+          lastPurchaseAmount: 100,
         },
         preferences: {
           language: 'en',
@@ -518,6 +532,13 @@ async function seedDatabase() {
           totalRevenue: 0,
           monthlyRevenue: 0,
         },
+        smsCredits: {
+          balance: 250, // ISP starts with 250 SMS credits
+          totalPurchased: 250,
+          totalUsed: 0,
+          lastPurchaseDate: new Date(),
+          lastPurchaseAmount: 250,
+        },
         preferences: {
           language: 'en',
           notifications: {
@@ -584,7 +605,7 @@ async function seedDatabase() {
             },
             usage: {
               used: i < 3, // First 3 are used
-              userId: i < 3 ? `user${i + 1}` : null,
+              customerId: i < 3 ? `user${i + 1}` : null,
               deviceMac: i < 3 ? `AA:BB:CC:DD:EE:0${i}` : null,
               startTime: i < 3 ? new Date(Date.now() - 24 * 60 * 60 * 1000) : null,
               endTime: i < 3 ? new Date() : null,
@@ -750,18 +771,18 @@ async function seedDatabase() {
 
     const wifiCustomers = [
       {
-        phone: '+254700111222',
-        name: 'Alice Wanjiku',
-        email: 'alice@example.com',
+        phone: '254707861420',
+        name: 'Kevin Mulug',
+        email: 'kevin@example.com',
       },
       {
-        phone: '+254700333444',
-        name: 'Bob Kamau',
-        email: 'bob@example.com',
+        phone: '254702209337',
+        name: 'King Malik',
+        email: 'malik@example.com',
       },
       {
-        phone: '+254700555666',
-        name: 'Carol Akinyi',
+        phone: '254757096651',
+        name: 'Bobo B',
         email: null,  // Some customers may not provide email
       },
     ];

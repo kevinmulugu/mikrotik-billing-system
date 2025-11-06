@@ -177,6 +177,8 @@ async function initializeDatabase() {
       'tickets',
       'messages',
       'message_templates',
+      'sms_credit_transactions',
+      'sms_plans',
       'audit_logs',
       'notifications',
       'router_health',
@@ -626,6 +628,28 @@ async function initializeDatabase() {
     console.log('    ✓ status');
     await db.collection('stk_initiations').createIndex({ createdAt: -1 });
     console.log('    ✓ createdAt (desc)');
+
+    // SMS Credit Transactions collection indexes
+    console.log('\n  SMS Credit Transactions indexes:');
+    await db.collection('sms_credit_transactions').createIndex({ userId: 1 });
+    console.log('    ✓ userId');
+    await db.collection('sms_credit_transactions').createIndex({ type: 1 });
+    console.log('    ✓ type (purchase, usage, refund)');
+    await db.collection('sms_credit_transactions').createIndex({ createdAt: -1 });
+    console.log('    ✓ createdAt (desc)');
+    await db.collection('sms_credit_transactions').createIndex({ userId: 1, createdAt: -1 });
+    console.log('    ✓ userId + createdAt (compound)');
+    await db.collection('sms_credit_transactions').createIndex({ 'paymentInfo.TransID': 1 });
+    console.log('    ✓ paymentInfo.TransID');
+
+    // SMS Plans collection indexes
+    console.log('\n  SMS Plans indexes:');
+    await db.collection('sms_plans').createIndex({ planId: 1 }, { unique: true });
+    console.log('    ✓ planId (unique)');
+    await db.collection('sms_plans').createIndex({ isActive: 1 });
+    console.log('    ✓ isActive');
+    await db.collection('sms_plans').createIndex({ displayOrder: 1 });
+    console.log('    ✓ displayOrder');
 
     // System config collection indexes
     console.log('\n  System Config indexes:');

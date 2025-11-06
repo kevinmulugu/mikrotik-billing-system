@@ -12,6 +12,8 @@ interface Message {
   routerName?: string | null;
   message: string;
   recipientCount: number;
+  successfulDeliveries?: number;
+  failedDeliveries?: number;
   status: string;
   sentAt: Date;
 }
@@ -77,6 +79,22 @@ export function MessageHistory({ messages }: MessageHistoryProps) {
                       </Badge>
                     </div>
                     <p className="text-sm text-foreground break-words">{message.message}</p>
+                    
+                    {/* Show delivery stats if available */}
+                    {(message.successfulDeliveries !== undefined || message.failedDeliveries !== undefined) && (
+                      <div className="flex items-center gap-3 mt-2 text-xs">
+                        {message.successfulDeliveries !== undefined && message.successfulDeliveries > 0 && (
+                          <span className="text-green-600 dark:text-green-400">
+                            ✓ {message.successfulDeliveries} delivered
+                          </span>
+                        )}
+                        {message.failedDeliveries !== undefined && message.failedDeliveries > 0 && (
+                          <span className="text-red-600 dark:text-red-400">
+                            ✗ {message.failedDeliveries} failed
+                          </span>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
                 <div className="flex items-center gap-4 text-xs text-muted-foreground">
@@ -85,7 +103,13 @@ export function MessageHistory({ messages }: MessageHistoryProps) {
                     {formatDate(message.sentAt)}
                   </div>
                   <Badge
-                    variant={message.status === 'sent' ? 'default' : 'destructive'}
+                    variant={
+                      message.status === 'sent' 
+                        ? 'default' 
+                        : message.status === 'partial'
+                        ? 'secondary'
+                        : 'destructive'
+                    }
                     className="text-xs"
                   >
                     {message.status}

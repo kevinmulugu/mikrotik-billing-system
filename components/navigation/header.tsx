@@ -21,8 +21,10 @@ import {
   Settings, 
   LogOut,
   HelpCircle,
-  CreditCard
+  CreditCard,
+  MessageSquare
 } from 'lucide-react';
+import { useEffect, useState } from 'react';
 
 interface HeaderProps {
   onMenuClick: () => void;
@@ -30,6 +32,21 @@ interface HeaderProps {
 
 export function Header({ onMenuClick }: HeaderProps) {
   const { data: session } = useSession();
+  const [smsCredits, setSmsCredits] = useState<number | null>(null);
+
+  // Fetch SMS credits balance
+  useEffect(() => {
+    if (session?.user?.id) {
+      fetch('/api/sms-credits/balance')
+        .then(res => res.json())
+        .then(data => {
+          if (data.success && data.balance !== undefined) {
+            setSmsCredits(data.balance);
+          }
+        })
+        .catch(err => console.error('Failed to fetch SMS credits:', err));
+    }
+  }, [session?.user?.id]);
 
   const handleSignOut = () => {
     signOut({ callbackUrl: '/signin' });
@@ -72,6 +89,29 @@ export function Header({ onMenuClick }: HeaderProps) {
         </div>
 
         <div className="flex items-center gap-x-4 lg:gap-x-6">
+          {/* SMS Credits */}
+          <Button 
+            variant="outline" 
+            size="sm"
+            className="relative hidden sm:flex"
+            asChild
+          >
+            <Link href="/sms-credits">
+              <MessageSquare className="mr-2 h-4 w-4" />
+              <span className="font-medium">
+                {smsCredits !== null ? smsCredits : '...'} SMS
+              </span>
+              {smsCredits !== null && smsCredits < 10 && (
+                <Badge 
+                  variant="destructive" 
+                  className="ml-2 h-5 px-1 text-[10px]"
+                >
+                  Low
+                </Badge>
+              )}
+            </Link>
+          </Button>
+
           {/* Notifications */}
           <Button 
             variant="ghost" 

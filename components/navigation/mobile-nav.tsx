@@ -1,13 +1,14 @@
 // components/navigation/mobile-nav.tsx
 'use client';
 
-import { Fragment } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import { Dialog, Transition } from '@headlessui/react';
 import { usePathname } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Badge } from '@/components/ui/badge';
 import { 
   X,
   LayoutDashboard,
@@ -38,6 +39,21 @@ interface MobileNavProps {
 export function MobileNav({ isOpen, onClose }: MobileNavProps) {
   const pathname = usePathname();
   const { data: session } = useSession();
+  const [smsCredits, setSmsCredits] = useState<number | null>(null);
+
+  // Fetch SMS credits balance
+  useEffect(() => {
+    if (session?.user?.id) {
+      fetch('/api/sms-credits/balance')
+        .then(res => res.json())
+        .then(data => {
+          if (data.success && data.balance !== undefined) {
+            setSmsCredits(data.balance);
+          }
+        })
+        .catch(err => console.error('Failed to fetch SMS credits:', err));
+    }
+  }, [session?.user?.id]);
 
   // Get user initials for avatar fallback
   const getUserInitials = (name?: string | null) => {
@@ -141,6 +157,28 @@ export function MobileNav({ isOpen, onClose }: MobileNavProps) {
                       </p>
                     </div>
                   </div>
+                  
+                  {/* SMS Credits Display for Mobile */}
+                  <Link 
+                    href="/sms-credits"
+                    onClick={onClose}
+                    className="mt-3 flex items-center justify-between rounded-md bg-muted px-3 py-2"
+                  >
+                    <div className="flex items-center gap-2">
+                      <MessageSquare className="h-4 w-4 text-primary" />
+                      <span className="text-sm font-medium">SMS Credits</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-bold text-primary">
+                        {smsCredits !== null ? smsCredits : '...'}
+                      </span>
+                      {smsCredits !== null && smsCredits < 10 && (
+                        <Badge variant="destructive" className="h-5 px-1 text-[10px]">
+                          Low
+                        </Badge>
+                      )}
+                    </div>
+                  </Link>
                 </div>
 
                 {/* Navigation */}
