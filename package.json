@@ -17,6 +17,7 @@
     "test:router-existing": "tsx scripts/test-router-config-existing.ts",
     "test:router-improved": "tsx scripts/test-router-config-improved.ts",
     "expire:vouchers": "tsx scripts/expire-vouchers.ts",
+    "sync:vouchers": "tsx scripts/sync-vouchers-with-router.ts",
     "refresh:tokens": "tsx scripts/refresh-mpesa-tokens.ts",
     "aggregate:commissions": "tsx scripts/aggregate-commissions.ts"
   },
