@@ -207,17 +207,27 @@ export async function POST(req: NextRequest) {
     }
 
 
-    // Check if router with same IP already exists for this user
+    // Note: localIP is NOT unique across routers (many routers use 192.168.88.1)
+    // Only check for duplicate routers by matching userId + multiple unique identifiers
     const existingRouter = await db
       .collection('routers')
       .findOne({
         userId: new ObjectId(userId),
-        'connection.localIP': body.ipAddress,
+        $or: [
+          { 'routerInfo.serialNumber': body.serialNumber },
+          { 'routerInfo.macAddress': body.ipAddress }, // Will be replaced with actual MAC later
+        ].filter(condition => {
+          // Only check serialNumber if provided
+          if ('routerInfo.serialNumber' in condition) {
+            return body.serialNumber && body.serialNumber.length > 0;
+          }
+          return true;
+        })
       });
 
-    if (existingRouter) {
+    if (existingRouter && body.serialNumber) {
       return NextResponse.json(
-        { error: 'A router with this IP address already exists in your account' },
+        { error: 'A router with this serial number already exists in your account' },
         { status: 409 }
       );
     }

@@ -520,7 +520,32 @@ export const AddRouterWizard: React.FC<AddRouterWizardProps> = ({
   };
 
   return (
-    <div className="w-full max-w-4xl mx-auto">
+    <div className="w-full max-w-4xl mx-auto relative">
+      {/* Loading Overlay - Blocks all interactions during submission */}
+      {isSubmitting && (
+        <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center">
+          <Card className="w-full max-w-md mx-4">
+            <CardContent className="pt-6">
+              <div className="flex flex-col items-center space-y-4">
+                <Loader2 className="h-12 w-12 animate-spin text-primary" />
+                <div className="space-y-2 text-center">
+                  <h3 className="text-lg font-semibold">Adding Your Router</h3>
+                  <p className="text-sm text-muted-foreground">
+                    Please wait while we configure your router. This may take 30-60 seconds...
+                  </p>
+                  <div className="w-full bg-muted rounded-full h-2 mt-4">
+                    <div className="bg-primary h-2 rounded-full animate-pulse" style={{ width: '70%' }} />
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-2">
+                    Configuring VPN, Hotspot, and PPPoE services
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
       {/* Progress Steps */}
       <div className="mb-8">
         <div className="flex items-center justify-between">
