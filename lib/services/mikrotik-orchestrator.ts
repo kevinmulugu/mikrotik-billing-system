@@ -14,7 +14,8 @@ import {
 interface RouterConfigOptions {
   hotspotEnabled: boolean;
   ssid?: string | undefined;
-  wifiPassword?: string | undefined;  // WiFi WPA2-PSK password (min 8 chars)
+  // Note: WiFi password removed - hotspot captive portal requires OPEN WiFi
+  // Security is enforced at hotspot authentication layer (HTTP CHAP)
   pppoeEnabled: boolean;
   pppoeInterfaces?: string[] | undefined;
   wanInterface?: string | undefined;
@@ -321,41 +322,23 @@ export class MikroTikOrchestrator {
 
         // Step 3.2: Configure WiFi (only if hardware is available)
         if (hasWiFi) {
-          console.log('[Orchestrator] Step 3.2: Configuring WiFi with security...');
+          console.log('[Orchestrator] Step 3.2: Configuring WiFi...');
           
-          // Step 3.2a: Create secure WiFi security profile
-          console.log('[Orchestrator] Step 3.2a: Creating secure WiFi security profile...');
-          const wifiPassword = options.wifiPassword || `HotSpot${Math.random().toString(36).substring(2, 10).toUpperCase()}!`;
+          // IMPORTANT: Hotspot captive portal requires OPEN WiFi (no password)
+          // Security is enforced at the hotspot layer (HTTP CHAP authentication)
+          // If we use WPA2-PSK, users connect directly without seeing captive portal
           
-          const securityProfileResult = await MikroTikNetworkConfig.createSecureWiFiSecurityProfile(
-            config,
-            'secure-wifi',
-            wifiPassword
-          );
-
-          if (securityProfileResult.success) {
-            completedSteps.push('WiFi Security Profile (WPA2-PSK/AES)');
-            console.log('[Orchestrator] ✓ WiFi security profile created');
-            console.log(`[Orchestrator]   WiFi Password: ${wifiPassword}`);
-          } else {
-            failedSteps.push({ 
-              step: 'WiFi Security Profile', 
-              error: securityProfileResult.error || 'Unknown error' 
-            });
-            console.error('[Orchestrator] ✗ WiFi security profile failed:', securityProfileResult.error);
-          }
-
-          // Step 3.2b: Configure WiFi interface with secure profile
           const wifiResult = await MikroTikNetworkConfig.configureWiFi(
             config,
             'wlan1',
             options.ssid,
-            'secure-wifi'  // Use secure profile instead of 'default'
+            'default'  // MUST use 'default' (open) for captive portal to work
           );
 
           if (wifiResult.success) {
-            completedSteps.push('WiFi Configuration (WPA2-PSK Protected)');
-            console.log('[Orchestrator] ✓ WiFi configured with WPA2-PSK encryption');
+            completedSteps.push('WiFi Configuration (Open for Captive Portal)');
+            console.log('[Orchestrator] ✓ WiFi configured as open network');
+            console.log('[Orchestrator]   Security: Enforced by hotspot captive portal');
           } else {
             failedSteps.push({ 
               step: 'WiFi Configuration', 
