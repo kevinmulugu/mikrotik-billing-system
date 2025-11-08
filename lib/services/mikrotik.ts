@@ -126,7 +126,8 @@ interface HotspotProfileConfig {
   'keepalive-timeout'?: string;
   'status-autorefresh'?: string;
   'shared-users'?: string;
-  'transparent-proxy'?: string;
+  // Note: 'transparent-proxy' is NOT valid for hotspot profile
+  // It's only valid for hotspot user profiles (/ip/hotspot/user/profile)
 }
 
 interface HotspotServerConfig {
@@ -2578,7 +2579,8 @@ export class MikroTikServiceConfig {
           'use-radius': 'no',             // Local authentication
           // Note: 'shared-users' is not valid for hotspot profile endpoint
           // It should be configured per user profile instead (see createHotspotUserProfiles)
-          'transparent-proxy': 'yes',     // Enable proxy
+          // Note: 'transparent-proxy' is not a hotspot profile parameter
+          // It's configured at /ip/proxy if needed
         }
       );
 
