@@ -2576,7 +2576,8 @@ export class MikroTikServiceConfig {
         {
           'login-by': 'http-chap',       // Username/password only
           'use-radius': 'no',             // Local authentication
-          'shared-users': '1',            // One device per user
+          // Note: 'shared-users' is not valid for hotspot profile endpoint
+          // It should be configured per user profile instead (see createHotspotUserProfiles)
           'transparent-proxy': 'yes',     // Enable proxy
         }
       );
@@ -2586,7 +2587,7 @@ export class MikroTikServiceConfig {
       console.log('  - Cookie auth: Disabled');
       console.log('  - Trial mode: Disabled');
       console.log('  - MAC auth: Disabled');
-      console.log('  - Shared users: 1 (one device per user)');
+      console.log('  - Note: shared-users=1 is configured per user profile');
 
       return {
         success: true,
@@ -2596,7 +2597,7 @@ export class MikroTikServiceConfig {
           server: hotspotServerName,
           profile: profileName,
           loginMethod: 'http-chap',
-          sharedUsers: 1,
+          note: 'shared-users=1 is configured per user profile',
         },
       };
     } catch (error) {
