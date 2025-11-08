@@ -14,6 +14,7 @@ import {
 interface RouterConfigOptions {
   hotspotEnabled: boolean;
   ssid?: string | undefined;
+  wifiPassword?: string | undefined;  // WiFi WPA2-PSK password (min 8 chars)
   pppoeEnabled: boolean;
   pppoeInterfaces?: string[] | undefined;
   wanInterface?: string | undefined;
@@ -283,7 +284,18 @@ export class MikroTikOrchestrator {
         console.log('[Orchestrator] Hotspot SSID:', options.ssid);
         console.log('[Orchestrator] Hotspot subnet:', NETWORK_SUBNETS.HOTSPOT.NETWORK);
 
-        const bridgeInterfaces = options.bridgeInterfaces || ['wlan1', 'ether4'];
+        // Check if router has wireless capability
+        const hasWiFi = await MikroTikNetworkConfig.hasWirelessCapability(config);
+        console.log('[Orchestrator] Wireless capability detected:', hasWiFi);
+
+        // Use appropriate bridge interfaces based on wireless capability
+        let bridgeInterfaces: string[];
+        if (options.bridgeInterfaces) {
+          bridgeInterfaces = options.bridgeInterfaces;
+        } else {
+          // Default: Use wlan1 + ether5 if WiFi available, otherwise just ether5
+          bridgeInterfaces = hasWiFi ? ['wlan1', 'ether5'] : ['ether5'];
+        }
         console.log('[Orchestrator] Bridge interfaces:', bridgeInterfaces);
 
         // Step 3.1: Create bridge for hotspot
@@ -307,25 +319,53 @@ export class MikroTikOrchestrator {
           console.error('[Orchestrator] ✗ Hotspot bridge failed:', bridgeResult.error);
         }
 
-        // Step 3.2: Configure WiFi
-        console.log('[Orchestrator] Step 3.2: Configuring WiFi...');
-        
-        const wifiResult = await MikroTikNetworkConfig.configureWiFi(
-          config,
-          'wlan1',
-          options.ssid,
-          'default'
-        );
+        // Step 3.2: Configure WiFi (only if hardware is available)
+        if (hasWiFi) {
+          console.log('[Orchestrator] Step 3.2: Configuring WiFi with security...');
+          
+          // Step 3.2a: Create secure WiFi security profile
+          console.log('[Orchestrator] Step 3.2a: Creating secure WiFi security profile...');
+          const wifiPassword = options.wifiPassword || `HotSpot${Math.random().toString(36).substring(2, 10).toUpperCase()}!`;
+          
+          const securityProfileResult = await MikroTikNetworkConfig.createSecureWiFiSecurityProfile(
+            config,
+            'secure-wifi',
+            wifiPassword
+          );
 
-        if (wifiResult.success) {
-          completedSteps.push('WiFi Configuration');
-          console.log('[Orchestrator] ✓ WiFi configured');
+          if (securityProfileResult.success) {
+            completedSteps.push('WiFi Security Profile (WPA2-PSK/AES)');
+            console.log('[Orchestrator] ✓ WiFi security profile created');
+            console.log(`[Orchestrator]   WiFi Password: ${wifiPassword}`);
+          } else {
+            failedSteps.push({ 
+              step: 'WiFi Security Profile', 
+              error: securityProfileResult.error || 'Unknown error' 
+            });
+            console.error('[Orchestrator] ✗ WiFi security profile failed:', securityProfileResult.error);
+          }
+
+          // Step 3.2b: Configure WiFi interface with secure profile
+          const wifiResult = await MikroTikNetworkConfig.configureWiFi(
+            config,
+            'wlan1',
+            options.ssid,
+            'secure-wifi'  // Use secure profile instead of 'default'
+          );
+
+          if (wifiResult.success) {
+            completedSteps.push('WiFi Configuration (WPA2-PSK Protected)');
+            console.log('[Orchestrator] ✓ WiFi configured with WPA2-PSK encryption');
+          } else {
+            failedSteps.push({ 
+              step: 'WiFi Configuration', 
+              error: wifiResult.error || 'Unknown error' 
+            });
+            console.error('[Orchestrator] ✗ WiFi configuration failed:', wifiResult.error);
+          }
         } else {
-          failedSteps.push({ 
-            step: 'WiFi Configuration', 
-            error: wifiResult.error || 'Unknown error' 
-          });
-          console.error('[Orchestrator] ✗ WiFi configuration failed:', wifiResult.error);
+          console.log('[Orchestrator] Step 3.2: Skipping WiFi configuration (no wireless hardware)');
+          completedSteps.push('WiFi Configuration (Skipped - No Hardware)');
         }
 
         // Step 3.3: Create hotspot IP pool
@@ -410,6 +450,27 @@ export class MikroTikOrchestrator {
             error: hotspotResult.error || 'Unknown error' 
           });
           console.error('[Orchestrator] ✗ Hotspot server failed:', hotspotResult.error);
+        }
+
+        // Step 3.5a: Secure hotspot authentication
+        console.log('[Orchestrator] Step 3.5a: Securing hotspot authentication...');
+        
+        const hotspotSecurityResult = await MikroTikServiceConfig.configureSecureHotspotAuth(
+          config,
+          'hotspot1'
+        );
+
+        if (hotspotSecurityResult.success) {
+          completedSteps.push('Hotspot Authentication Security (HTTP CHAP Only)');
+          console.log('[Orchestrator] ✓ Hotspot authentication secured');
+          console.log('[Orchestrator]   - Login method: Username/Password only');
+          console.log('[Orchestrator]   - Cookie auth: Disabled');
+          console.log('[Orchestrator]   - Trial mode: Disabled');
+          console.log('[Orchestrator]   - MAC auth: Disabled');
+          console.log('[Orchestrator]   - Device limit: 1 per user');
+        } else {
+          warnings.push('Hotspot security hardening may not have been applied');
+          console.warn('[Orchestrator] ⚠ Hotspot security warning:', hotspotSecurityResult.error);
         }
 
         // Step 3.6: Create hotspot user profiles

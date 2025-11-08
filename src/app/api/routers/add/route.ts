@@ -565,6 +565,16 @@ export async function POST(req: NextRequest) {
         // Decrypt API password for use with FTP if needed
         const decryptedPassword = MikroTikService.decryptPassword(encryptedPassword);
 
+        // Detect storage disk type (flash vs disk)
+        const storageInfo = await MikroTikService.detectStorageDisk({
+          ipAddress: connectionConfig.ipAddress,
+          port: connectionConfig.port,
+          username: connectionConfig.username,
+          password: decryptedPassword,
+        });
+        
+        console.log(`[Router Add] Detected storage: ${storageInfo.disk} (hotspot path: ${storageInfo.disk}/${storageInfo.hotspotPath})`);
+
         const uploadResult = await MikroTikService.uploadCaptivePortalFiles(
           {
             ipAddress: connectionConfig.ipAddress,
@@ -579,7 +589,7 @@ export async function POST(req: NextRequest) {
             location: body.location.name || body.location.county,
             baseUrl: process.env.NEXT_PUBLIC_APP_URL || process.env.BASE_URL || 'http://localhost:3000',
             // ftpUser and ftpPassword omitted to default to API user
-            remotePath: '/hotspot',
+            remotePath: `/${storageInfo.disk}/${storageInfo.hotspotPath}`,  // Correct: /disk/hotspot or /flash/hotspot
           }
         );
 

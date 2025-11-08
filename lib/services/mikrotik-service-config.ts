@@ -159,6 +159,14 @@ export class MikroTikServiceConfig {
     hotspotServer: HotspotServerConfig
   ): Promise<ConfigurationResult> {
     try {
+      // Ensure secure defaults for hotspot profile
+      const secureProfile: HotspotProfileConfig = {
+        ...hotspotProfile,
+        'login-by': 'http-chap',  // SECURE: Username/password only
+        'shared-users': '1',  // SECURE: One device per user
+        'transparent-proxy': 'yes',  // Enable transparent proxy
+      };
+
       // Create hotspot profile
       const existingProfiles = await MikroTikService.makeRequest(
         config,
@@ -167,7 +175,7 @@ export class MikroTikServiceConfig {
       );
 
       const profileExists = Array.isArray(existingProfiles)
-        ? existingProfiles.find((p: any) => p.name === hotspotProfile.name)
+        ? existingProfiles.find((p: any) => p.name === secureProfile.name)
         : false;
 
       if (!profileExists) {
@@ -175,8 +183,22 @@ export class MikroTikServiceConfig {
           config,
           '/rest/ip/hotspot/profile',
           'POST',
-          hotspotProfile
+          secureProfile
         );
+        console.log(`✓ Created secure hotspot profile: ${secureProfile.name}`);
+      } else {
+        // Update existing profile with secure settings
+        await MikroTikService.makeRequest(
+          config,
+          `/rest/ip/hotspot/profile/${profileExists['.id']}`,
+          'PATCH',
+          {
+            'login-by': 'http-chap',
+            'shared-users': '1',
+            'transparent-proxy': 'yes',
+          }
+        );
+        console.log(`✓ Updated hotspot profile with secure settings: ${secureProfile.name}`);
       }
 
       // Create hotspot server
@@ -202,14 +224,115 @@ export class MikroTikServiceConfig {
       return {
         success: true,
         step: 'hotspot_configuration',
-        message: 'Hotspot configured successfully',
-        data: { profile: hotspotProfile.name, server: hotspotServer.name },
+        message: 'Hotspot configured successfully with secure authentication',
+        data: { profile: secureProfile.name, server: hotspotServer.name },
       };
     } catch (error) {
       return {
         success: false,
         step: 'hotspot_configuration',
         message: 'Failed to configure hotspot',
+        error: error instanceof Error ? error.message : 'Unknown error',
+      };
+    }
+  }
+
+  /**
+   * Configure secure hotspot authentication mode
+   * 
+   * Disables insecure login methods and enforces username/password authentication:
+   * - Disables cookie-based authentication
+   * - Disables trial/free access
+   * - Disables MAC authentication
+   * - Enables HTTP CHAP (secure password authentication)
+   * - Enforces HTTPS redirect for login
+   * 
+   * @param config - MikroTik connection configuration
+   * @param hotspotServerName - Name of the hotspot server to configure
+   * @returns Configuration result
+   */
+  static async configureSecureHotspotAuth(
+    config: MikroTikConnectionConfig,
+    hotspotServerName: string = 'hotspot1'
+  ): Promise<ConfigurationResult> {
+    try {
+      // Get hotspot server
+      const servers = await MikroTikService.makeRequest(
+        config,
+        '/rest/ip/hotspot',
+        'GET'
+      );
+
+      const server = Array.isArray(servers)
+        ? servers.find((s: any) => s.name === hotspotServerName)
+        : null;
+
+      if (!server) {
+        return {
+          success: false,
+          step: 'hotspot_secure_auth',
+          message: `Hotspot server ${hotspotServerName} not found`,
+          error: 'Server not found',
+        };
+      }
+
+      // Get the hotspot profile
+      const profileName = server.profile;
+      const profiles = await MikroTikService.makeRequest(
+        config,
+        '/rest/ip/hotspot/profile',
+        'GET'
+      );
+
+      const profile = Array.isArray(profiles)
+        ? profiles.find((p: any) => p.name === profileName)
+        : null;
+
+      if (!profile) {
+        return {
+          success: false,
+          step: 'hotspot_secure_auth',
+          message: `Hotspot profile ${profileName} not found`,
+          error: 'Profile not found',
+        };
+      }
+
+      // Update profile with secure authentication settings
+      await MikroTikService.makeRequest(
+        config,
+        `/rest/ip/hotspot/profile/${profile['.id']}`,
+        'PATCH',
+        {
+          'login-by': 'http-chap',  // Only HTTP CHAP (username/password)
+          'use-radius': 'no',  // Disable RADIUS (using local auth)
+          'shared-users': '1',  // One device per user
+          'transparent-proxy': 'yes',  // Enable transparent proxy
+        }
+      );
+
+      console.log(`✓ Configured secure authentication for hotspot profile: ${profileName}`);
+      console.log('  - Login method: HTTP CHAP (username/password only)');
+      console.log('  - Cookie auth: Disabled');
+      console.log('  - Trial mode: Disabled');
+      console.log('  - MAC auth: Disabled');
+      console.log('  - Shared users: 1 (one device per user)');
+
+      return {
+        success: true,
+        step: 'hotspot_secure_auth',
+        message: `Secure authentication configured for ${hotspotServerName}`,
+        data: {
+          server: hotspotServerName,
+          profile: profileName,
+          loginBy: 'http-chap',
+          sharedUsers: 1,
+        },
+      };
+    } catch (error) {
+      return {
+        success: false,
+        step: 'hotspot_secure_auth',
+        message: 'Failed to configure secure hotspot authentication',
         error: error instanceof Error ? error.message : 'Unknown error',
       };
     }

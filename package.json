@@ -19,7 +19,8 @@
     "expire:vouchers": "tsx scripts/expire-vouchers.ts",
     "sync:vouchers": "tsx scripts/sync-vouchers-with-router.ts",
     "refresh:tokens": "tsx scripts/refresh-mpesa-tokens.ts",
-    "aggregate:commissions": "tsx scripts/aggregate-commissions.ts"
+    "aggregate:commissions": "tsx scripts/aggregate-commissions.ts",
+    "verify:security": "tsx scripts/verify-phase2-security.ts"
   },
   "dependencies": {
     "@auth/mongodb-adapter": "^3.10.0",

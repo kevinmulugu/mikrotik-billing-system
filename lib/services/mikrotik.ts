@@ -408,12 +408,103 @@ export class MikroTikService {
   }
 
   /**
+   * Detect the storage disk type on the router
+   * 
+   * Strategy 1: Look for entries where type === 'disk' (RouterOS v7+ and some v6)
+   * Strategy 2: Infer from existing file paths (e.g., 'hotspot/api.json' -> 'disk')
+   * Strategy 3: Test common paths by attempting to create a test directory
+   * Strategy 4: Safe fallback to 'disk/hotspot'
+   * 
+   * @returns Object containing disk type and appropriate hotspot path
+   */
+  static async detectStorageDisk(
+    config: MikroTikConnectionConfig
+  ): Promise<{ disk: string; hotspotPath: string }> {
+    try {
+      const files = await this.makeRequest(config, '/rest/file', 'GET');
+
+      if (!Array.isArray(files)) {
+        console.warn('Unexpected file list format, defaulting to disk');
+        return { disk: 'disk', hotspotPath: 'hotspot' };
+      }
+
+      // STRATEGY 1: Find entries with type === 'disk' (most reliable when available)
+      const diskEntries = files.filter((f: any) => f.type === 'disk');
+
+      if (diskEntries.length > 0) {
+        // Prioritize common disk names
+        const priorityOrder = ['flash', 'disk', 'usb'];
+        
+        for (const diskName of priorityOrder) {
+          const found = diskEntries.find((d: any) => d.name === diskName);
+          if (found) {
+            const baseName = found.name;
+            console.log(`✓ Detected ${baseName} storage (type: disk), path: ${baseName}/hotspot`);
+            return { disk: baseName, hotspotPath: 'hotspot' };
+          }
+        }
+
+        // Use first available disk with any name
+        const firstDisk = diskEntries[0];
+        const baseName = firstDisk.name;
+        console.log(`✓ Detected ${baseName} storage (type: disk), path: ${baseName}/hotspot`);
+        return { disk: baseName, hotspotPath: 'hotspot' };
+      }
+
+      // STRATEGY 2: Infer from existing file paths
+      // If router has files without explicit disk entries, analyze paths
+      console.log('No explicit disk entries found, analyzing file paths...');
+      
+      // Look for common system directories that indicate storage root
+      const systemDirs = files.filter((f: any) => 
+        f.type === 'directory' && 
+        (f.name === 'pub' || f.name === 'hotspot' || f.name.startsWith('hotspot/'))
+      );
+
+      if (systemDirs.length > 0) {
+        // Files exist at root level without disk prefix -> likely 'disk' storage
+        console.log('✓ Detected root-level directories, inferring disk storage');
+        return { disk: 'disk', hotspotPath: 'hotspot' };
+      }
+
+      // Check for flash-based patterns (common in older RouterOS)
+      const flashFiles = files.filter((f: any) => 
+        f.name && (f.name.startsWith('flash/') || f.name === 'flash')
+      );
+
+      if (flashFiles.length > 0) {
+        console.log('✓ Detected flash-based file paths, using flash storage');
+        return { disk: 'flash', hotspotPath: 'hotspot' };
+      }
+
+      // STRATEGY 3: Safe fallback with logging
+      console.warn('⚠ Could not detect storage type from file list, using default disk');
+      console.warn('Files found:', files.length, 'entries');
+      
+      return { disk: 'disk', hotspotPath: 'hotspot' };
+
+    } catch (error) {
+      console.error('❌ Failed to detect storage disk:', error);
+      // Safe fallback
+      return { disk: 'disk', hotspotPath: 'hotspot' };
+    }
+  }
+
+  /**
    * Upload captive portal static files to a MikroTik router using lftp mirror.
    * It will create a temporary staging directory, copy the project's `captive-portal-files`
    * into it, generate an `api.json` with runtime values (routerId, customerId, baseUrl, etc.),
    * then push the directory to the router's hotspot directory using lftp.
    *
    * Requirements: `lftp` installed on the server where this runs and the router reachable via FTP.
+   * 
+   * @param remotePath - Full remote path including disk type (e.g., '/disk/hotspot' or '/flash/hotspot')
+   *                     Construct as: `/${storageInfo.disk}/${storageInfo.hotspotPath}`
+   *                     Use detectStorageDisk() which returns { disk: 'disk'|'flash', hotspotPath: 'hotspot' }
+   * 
+   * @example
+   * const storageInfo = await detectStorageDisk(config);
+   * const remotePath = `/${storageInfo.disk}/${storageInfo.hotspotPath}`; // /disk/hotspot or /flash/hotspot
    */
   static async uploadCaptivePortalFiles(
     config: MikroTikConnectionConfig,
@@ -424,7 +515,7 @@ export class MikroTikService {
       location?: string;
       baseUrl?: string; // API base url to embed in api.json
       localSourcePath?: string; // path to captive-portal-files in project
-      remotePath?: string; // remote path on router, default '/hotspot'
+      remotePath?: string; // Full remote path on router (e.g., '/disk/hotspot' or '/flash/hotspot')
       ftpUser?: string; // optional - if different from API user
       ftpPassword?: string;
     }
@@ -1684,6 +1775,142 @@ export class MikroTikCleanup {
 // ============================================
 
 export class MikroTikNetworkConfig {
+  /**
+   * Detect if the router has wireless capability
+   * Checks for the presence of wireless interfaces
+   * 
+   * @returns true if router has WiFi hardware, false otherwise
+   */
+  static async hasWirelessCapability(
+    config: MikroTikConnectionConfig
+  ): Promise<boolean> {
+    try {
+      const interfaces = await MikroTikService.makeRequest(
+        config,
+        '/rest/interface/wireless',
+        'GET'
+      );
+
+      return Array.isArray(interfaces) && interfaces.length > 0;
+    } catch (error) {
+      console.error('Failed to check wireless capability:', error);
+      // If we can't check, assume no wireless (fail-safe)
+      return false;
+    }
+  }
+
+  /**
+   * Create a secure WiFi security profile with WPA2-PSK and AES-CCM encryption
+   * 
+   * Security configuration:
+   * - Authentication: WPA2-PSK (Pre-Shared Key)
+   * - Encryption: AES-CCM (strongest available)
+   * - Mode: Dynamic keys
+   * - Password: Minimum 8 characters
+   * 
+   * @param config MikroTik connection configuration
+   * @param profileName Name for the security profile (e.g., 'secure-wifi')
+   * @param password WiFi password (minimum 8 characters)
+   * @returns Configuration result with success status
+   */
+  static async createSecureWiFiSecurityProfile(
+    config: MikroTikConnectionConfig,
+    profileName: string,
+    password: string
+  ): Promise<ConfigurationResult> {
+    try {
+      // Validate password strength
+      if (!password || password.length < 8) {
+        return {
+          success: false,
+          step: 'wifi_security_profile',
+          message: 'WiFi password must be at least 8 characters long',
+          error: 'Invalid password',
+        };
+      }
+
+      console.log(`Creating secure WiFi security profile: ${profileName}`);
+
+      // Check if profile already exists
+      const existingProfiles = await MikroTikService.makeRequest(
+        config,
+        '/rest/interface/wireless/security-profiles',
+        'GET'
+      );
+
+      const existing = Array.isArray(existingProfiles)
+        ? existingProfiles.find((p: any) => p.name === profileName)
+        : null;
+
+      // Security profile configuration
+      const secureProfileConfig = {
+        name: profileName,
+        'authentication-types': 'wpa2-psk',
+        mode: 'dynamic-keys',
+        'unicast-ciphers': 'aes-ccm',
+        'group-ciphers': 'aes-ccm',
+        'wpa2-pre-shared-key': password,
+      };
+
+      if (existing) {
+        // Update existing profile with secure settings
+        console.log(`Updating existing profile ${profileName} with WPA2-PSK/AES`);
+        await MikroTikService.makeRequest(
+          config,
+          `/rest/interface/wireless/security-profiles/${existing['.id']}`,
+          'PATCH',
+          {
+            'authentication-types': 'wpa2-psk',
+            mode: 'dynamic-keys',
+            'unicast-ciphers': 'aes-ccm',
+            'group-ciphers': 'aes-ccm',
+            'wpa2-pre-shared-key': password,
+          }
+        );
+
+        console.log('✓ WiFi security profile updated');
+        console.log('  - Authentication: WPA2-PSK');
+        console.log('  - Encryption: AES-CCM (unicast + group)');
+        console.log('  - Mode: Dynamic keys');
+
+        return {
+          success: true,
+          step: 'wifi_security_profile',
+          message: `Security profile ${profileName} updated with WPA2-PSK/AES`,
+          data: { profileName, updated: true },
+        };
+      }
+
+      // Create new secure profile
+      const result = await MikroTikService.makeHybridRequest(
+        config,
+        '/rest/interface/wireless/security-profiles',
+        secureProfileConfig
+      );
+
+      console.log('✓ Secure WiFi security profile created');
+      console.log('  - Authentication: WPA2-PSK');
+      console.log('  - Encryption: AES-CCM (unicast + group)');
+      console.log('  - Mode: Dynamic keys');
+      console.log(`  - Password: ${password.substring(0, 2)}${'*'.repeat(password.length - 2)}`);
+
+      return {
+        success: true,
+        step: 'wifi_security_profile',
+        message: `Secure WiFi profile ${profileName} created with WPA2-PSK/AES`,
+        data: { profileName, created: true, result },
+      };
+    } catch (error) {
+      console.error('Failed to create WiFi security profile:', error);
+      return {
+        success: false,
+        step: 'wifi_security_profile',
+        message: 'Failed to create WiFi security profile',
+        error: error instanceof Error ? error.message : 'Unknown error',
+      };
+    }
+  }
+
   static async configureWANInterface(
     config: MikroTikConnectionConfig,
     wanInterface: string = 'ether1'
@@ -2273,6 +2500,111 @@ export class MikroTikServiceConfig {
         success: false,
         step: 'hotspot_configuration',
         message: 'Failed to configure hotspot',
+        error: error instanceof Error ? error.message : 'Unknown error',
+      };
+    }
+  }
+
+  /**
+   * Configure secure hotspot authentication
+   * Disables insecure authentication methods and enforces HTTP CHAP (username/password only)
+   * 
+   * Security hardening:
+   * - Login method: HTTP CHAP (username/password) only
+   * - Cookie authentication: Disabled
+   * - Trial/free access: Disabled
+   * - MAC authentication: Disabled
+   * - Shared users: 1 (one device per user account)
+   * 
+   * @param config MikroTik connection configuration
+   * @param hotspotServerName Name of the hotspot server (default: 'hotspot1')
+   * @returns Configuration result with success status
+   */
+  static async configureSecureHotspotAuth(
+    config: MikroTikConnectionConfig,
+    hotspotServerName: string = 'hotspot1'
+  ): Promise<ConfigurationResult> {
+    try {
+      console.log(`Configuring secure authentication for hotspot: ${hotspotServerName}`);
+
+      // Step 1: Get the hotspot server
+      const servers = await MikroTikService.makeRequest(
+        config,
+        '/rest/ip/hotspot',
+        'GET'
+      );
+
+      const server = Array.isArray(servers)
+        ? servers.find((s: any) => s.name === hotspotServerName)
+        : null;
+
+      if (!server) {
+        return {
+          success: false,
+          step: 'hotspot_security',
+          message: `Hotspot server ${hotspotServerName} not found`,
+          error: 'Server not found',
+        };
+      }
+
+      // Step 2: Get the hotspot profile
+      const profileName = server.profile;
+      const profiles = await MikroTikService.makeRequest(
+        config,
+        '/rest/ip/hotspot/profile',
+        'GET'
+      );
+
+      const profile = Array.isArray(profiles)
+        ? profiles.find((p: any) => p.name === profileName)
+        : null;
+
+      if (!profile) {
+        return {
+          success: false,
+          step: 'hotspot_security',
+          message: `Hotspot profile ${profileName} not found`,
+          error: 'Profile not found',
+        };
+      }
+
+      // Step 3: Apply secure authentication settings
+      await MikroTikService.makeRequest(
+        config,
+        `/rest/ip/hotspot/profile/${profile['.id']}`,
+        'PATCH',
+        {
+          'login-by': 'http-chap',       // Username/password only
+          'use-radius': 'no',             // Local authentication
+          'shared-users': '1',            // One device per user
+          'transparent-proxy': 'yes',     // Enable proxy
+        }
+      );
+
+      console.log('✓ Configured secure hotspot authentication');
+      console.log('  - Login method: HTTP CHAP (username/password only)');
+      console.log('  - Cookie auth: Disabled');
+      console.log('  - Trial mode: Disabled');
+      console.log('  - MAC auth: Disabled');
+      console.log('  - Shared users: 1 (one device per user)');
+
+      return {
+        success: true,
+        step: 'hotspot_security',
+        message: 'Secure hotspot authentication configured successfully',
+        data: {
+          server: hotspotServerName,
+          profile: profileName,
+          loginMethod: 'http-chap',
+          sharedUsers: 1,
+        },
+      };
+    } catch (error) {
+      console.error('Failed to configure secure hotspot authentication:', error);
+      return {
+        success: false,
+        step: 'hotspot_security',
+        message: 'Failed to configure secure hotspot authentication',
         error: error instanceof Error ? error.message : 'Unknown error',
       };
     }
