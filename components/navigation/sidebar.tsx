@@ -3,6 +3,7 @@
 
 import { usePathname } from 'next/navigation';
 import { useSession } from 'next-auth/react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { 
@@ -56,7 +57,45 @@ const navigation = [
 
 export function Sidebar() {
   const pathname = usePathname();
-  const { data: session } = useSession();
+  const { data: session, update } = useSession();
+  const [paymentMethod, setPaymentMethod] = useState<string | null>(null);
+
+  // Fetch fresh payment method from database
+  useEffect(() => {
+    const fetchPaymentMethod = async () => {
+      if (!session?.user?.id) return;
+
+      try {
+        const response = await fetch('/api/user/payment-method');
+        if (response.ok) {
+          const data = await response.json();
+          setPaymentMethod(data.method || 'company_paybill');
+        }
+      } catch (error) {
+        console.error('Failed to fetch payment method:', error);
+        // Fallback to session data
+        setPaymentMethod(
+          (session.user as any).paymentSettings?.method || 'company_paybill'
+        );
+      }
+    };
+
+    fetchPaymentMethod();
+
+    // Refresh when window gains focus (user comes back from another tab)
+    const handleFocus = () => fetchPaymentMethod();
+    
+    // Refresh when payment method is changed (custom event from payment-setup)
+    const handlePaymentChange = () => fetchPaymentMethod();
+    
+    window.addEventListener('focus', handleFocus);
+    window.addEventListener('paymentMethodChanged', handlePaymentChange);
+    
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+      window.removeEventListener('paymentMethodChanged', handlePaymentChange);
+    };
+  }, [session?.user?.id]);
 
   // Get user initials for avatar fallback
   const getUserInitials = (name?: string | null) => {
@@ -142,8 +181,8 @@ export function Sidebar() {
             </ul>
           </li>
 
-          {/* Payment Method Indicator - Fetch from customer data */}
-          {session?.user?.id && (
+          {/* Payment Method Indicator - Fetch from database */}
+          {session?.user?.id && paymentMethod && (
             <li className="mt-auto">
               <div className="rounded-lg bg-muted p-3">
                 <div className="mb-2 flex items-center gap-2">
@@ -151,7 +190,7 @@ export function Sidebar() {
                   <span className="text-sm font-medium">Payment Method</span>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  {session.user.paymentMethod === 'customer' 
+                  {paymentMethod === 'own_paybill' 
                     ? 'Your Paybill' 
                     : 'Company Paybill'}
                 </p>

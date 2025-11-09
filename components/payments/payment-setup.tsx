@@ -1,3 +1,4 @@
+// components/payments/payment-setup.tsx
 "use client";
 
 import React, { useState, useEffect } from "react";
@@ -178,6 +179,10 @@ export const PaymentSetup: React.FC<PaymentSetupProps> = ({
       }
 
       toast.success("Company paybill activated successfully!");
+      
+      // Trigger window event to notify sidebar to refresh
+      window.dispatchEvent(new Event('paymentMethodChanged'));
+      
       onComplete?.("company_paybill");
     } catch (error) {
       toast.error("Failed to activate company paybill");
@@ -221,6 +226,10 @@ export const PaymentSetup: React.FC<PaymentSetupProps> = ({
 
       toast.success("Paybill submitted successfully! You can start receiving payments.");
       setShowCustomerForm(false);
+      
+      // Trigger window event to notify sidebar to refresh
+      window.dispatchEvent(new Event('paymentMethodChanged'));
+      
       onComplete?.("own_paybill");
     } catch (error) {
       toast.error("Failed to submit paybill details");
