@@ -20,6 +20,7 @@ import {
   Sparkles
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
 
 interface Plan {
   planId: string;
@@ -47,8 +48,6 @@ export function SMSCreditsContent() {
   const [balance, setBalance] = useState<Balance | null>(null);
   const [loading, setLoading] = useState(true);
   const [purchasing, setPurchasing] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
   
   // Custom amount state (for enterprise plan)
   const [customAmount, setCustomAmount] = useState('');
@@ -67,10 +66,12 @@ export function SMSCreditsContent() {
       
       if (data.success) {
         setPlans(data.plans);
+      } else {
+        toast.error('Failed to load SMS plans');
       }
     } catch (err) {
       console.error('Failed to fetch plans:', err);
-      setError('Failed to load SMS plans');
+      toast.error('Failed to load SMS plans');
     }
   };
 
@@ -103,8 +104,6 @@ export function SMSCreditsContent() {
   };
 
   const handlePurchase = async (plan: Plan, credits: number) => {
-    setError(null);
-    setSuccess(null);
     setPurchasing(plan.planId);
 
     const amount = credits * plan.pricePerCredit;
@@ -123,19 +122,26 @@ export function SMSCreditsContent() {
       const data = await response.json();
 
       if (data.success) {
-        setSuccess(
-          `STK Push sent to your phone! Please enter your M-Pesa PIN to complete the purchase of ${credits} SMS credits.`
-        );
+        toast.success('STK Push Sent!', {
+          description: `Please enter your M-Pesa PIN to complete the purchase of ${credits} SMS credits (KES ${amount.toFixed(2)})`,
+          duration: 8000,
+        });
         
         // Refresh balance after a few seconds
         setTimeout(() => {
           fetchBalance();
         }, 5000);
       } else {
-        setError(data.error || 'Failed to initiate payment');
+        toast.error('Payment Failed', {
+          description: data.error || 'Failed to initiate payment. Please try again.',
+          duration: 6000,
+        });
       }
     } catch (err) {
-      setError('An error occurred. Please try again.');
+      toast.error('Request Failed', {
+        description: 'An error occurred while processing your request. Please try again.',
+        duration: 6000,
+      });
       console.error('Purchase error:', err);
     } finally {
       setPurchasing(null);
@@ -147,19 +153,21 @@ export function SMSCreditsContent() {
     const enterprisePlan = plans.find(p => p.isCustom);
     
     if (!enterprisePlan) {
-      setError('Enterprise plan not available');
+      toast.error('Enterprise Plan Unavailable', {
+        description: 'Enterprise plan is not currently available. Please try again later.',
+      });
       return;
     }
 
     const minimumAmount = enterprisePlan.minimumCredits * enterprisePlan.pricePerCredit;
     
     if (isNaN(amount) || amount < minimumAmount) {
-      setError(`Minimum amount for custom purchase is KES ${minimumAmount.toFixed(2)}`);
+      toast.error('Invalid Amount', {
+        description: `Minimum amount for custom purchase is KES ${minimumAmount.toFixed(2)}`,
+      });
       return;
     }
 
-    setError(null);
-    setSuccess(null);
     setPurchasing('enterprise');
 
     try {
@@ -176,9 +184,10 @@ export function SMSCreditsContent() {
       const data = await response.json();
 
       if (data.success) {
-        setSuccess(
-          `STK Push sent to your phone! Please enter your M-Pesa PIN to complete the purchase of ${customCredits} SMS credits.`
-        );
+        toast.success('STK Push Sent!', {
+          description: `Please enter your M-Pesa PIN to complete the purchase of ${customCredits} SMS credits (KES ${amount.toFixed(2)})`,
+          duration: 8000,
+        });
         
         // Clear custom amount
         setCustomAmount('');
@@ -188,10 +197,16 @@ export function SMSCreditsContent() {
           fetchBalance();
         }, 5000);
       } else {
-        setError(data.error || 'Failed to initiate payment');
+        toast.error('Payment Failed', {
+          description: data.error || 'Failed to initiate payment. Please try again.',
+          duration: 6000,
+        });
       }
     } catch (err) {
-      setError('An error occurred. Please try again.');
+      toast.error('Request Failed', {
+        description: 'An error occurred while processing your request. Please try again.',
+        duration: 6000,
+      });
       console.error('Purchase error:', err);
     } finally {
       setPurchasing(null);
@@ -217,23 +232,6 @@ export function SMSCreditsContent() {
           Purchase SMS credits to send notifications to your customers
         </p>
       </div>
-
-      {/* Success/Error Messages */}
-      {success && (
-        <Alert className="border-green-500 bg-green-50 dark:bg-green-950">
-          <Check className="h-4 w-4 text-green-600" />
-          <AlertDescription className="text-green-800 dark:text-green-200">
-            {success}
-          </AlertDescription>
-        </Alert>
-      )}
-
-      {error && (
-        <Alert variant="destructive">
-          <AlertCircle className="h-4 w-4" />
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      )}
 
       {/* Current Balance Card */}
       <Card className={cn(isLowBalance && 'border-orange-500')}>
