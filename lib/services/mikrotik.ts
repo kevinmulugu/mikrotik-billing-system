@@ -409,70 +409,33 @@ export class MikroTikService {
   }
 
   /**
-   * Confirm hotspot directory exists on the router by checking /rest/file
-   * This verifies that captive portal files have been successfully uploaded
+   * Confirm hotspot directory exists on the router
+   * Simple check: GET /rest/file/hotspot should return directory info
    * 
    * @param config MikroTik connection configuration
-   * @returns Object with exists flag, file count, and list of files
+   * @returns true if hotspot directory exists, false otherwise
    */
   static async confirmHotspotDirectory(
     config: MikroTikConnectionConfig
-  ): Promise<{ exists: boolean; fileCount: number; files: string[] }> {
+  ): Promise<boolean> {
     try {
       console.log('🔍 Checking hotspot directory...');
 
-      // Query the file system
-      const files = await this.makeRequest(config, '/rest/file', 'GET');
+      // Simple query: /rest/file/hotspot
+      const result = await this.makeRequest(config, '/rest/file/hotspot', 'GET');
 
-      if (!Array.isArray(files)) {
-        console.warn('⚠ Unexpected file list format');
-        return { exists: false, fileCount: 0, files: [] };
+      // If we get a response with type 'directory', hotspot exists
+      if (result && result.type === 'directory' && result.name === 'hotspot') {
+        console.log(`✓ Hotspot directory found (created: ${result['creation-time'] || 'unknown'})`);
+        return true;
       }
 
-      // Look for hotspot directory and files within it
-      const hotspotFiles = files.filter((f: any) => 
-        f.name === 'hotspot' || 
-        (typeof f.name === 'string' && f.name.startsWith('hotspot/'))
-      );
-
-      if (hotspotFiles.length === 0) {
-        console.warn('⚠ Hotspot directory not found');
-        return { exists: false, fileCount: 0, files: [] };
-      }
-
-      // Extract file names
-      const fileNames = hotspotFiles
-        .filter((f: any) => f.type !== 'directory')
-        .map((f: any) => f.name);
-
-      const hasDirectory = hotspotFiles.some((f: any) => f.name === 'hotspot' && f.type === 'directory');
-      const htmlFiles = fileNames.filter((name: string) => name.endsWith('.html'));
-
-      console.log(`✓ Hotspot directory found`);
-      console.log(`  - Total files: ${fileNames.length}`);
-      console.log(`  - HTML files: ${htmlFiles.length}`);
-      
-      // Verify key files exist
-      const requiredFiles = ['login.html', 'error.html', 'logout.html', 'status.html'];
-      const missingFiles = requiredFiles.filter(req => 
-        !fileNames.some(name => name.endsWith(req))
-      );
-
-      if (missingFiles.length > 0) {
-        console.warn(`⚠ Missing key files: ${missingFiles.join(', ')}`);
-      } else {
-        console.log(`✓ All key captive portal files present`);
-      }
-
-      return {
-        exists: hasDirectory || fileNames.length > 0,
-        fileCount: fileNames.length,
-        files: fileNames
-      };
+      console.warn('⚠ Hotspot directory not found');
+      return false;
 
     } catch (error) {
       console.error('❌ Failed to check hotspot directory:', error);
-      return { exists: false, fileCount: 0, files: [] };
+      return false;
     }
   }
 

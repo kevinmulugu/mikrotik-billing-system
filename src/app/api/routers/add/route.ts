@@ -602,15 +602,15 @@ export async function POST(req: NextRequest) {
           // === Verify upload before restarting ===
           console.log(`[Router Add] Verifying captive portal files...`);
           
-          const verification = await MikroTikService.confirmHotspotDirectory({
+          const hotspotExists = await MikroTikService.confirmHotspotDirectory({
             ipAddress: connectionConfig.ipAddress,
             port: connectionConfig.port,
             username: connectionConfig.username,
             password: decryptedPassword,
           });
 
-          if (verification.exists && verification.fileCount > 0) {
-            console.log(`[Router Add] ✓ Upload verified: ${verification.fileCount} files in hotspot directory`);
+          if (hotspotExists) {
+            console.log(`[Router Add] ✓ Upload verified: hotspot directory exists`);
             
             // === Restart router to apply captive portal changes ===
             try {
@@ -647,10 +647,7 @@ export async function POST(req: NextRequest) {
           } else {
             // Upload verification failed - skip restart
             console.warn(`[Router Add] ⚠ Upload verification failed, skipping router restart`);
-            console.warn(`[Router Add]   Files found: ${verification.fileCount}`);
-            if (verification.files.length > 0) {
-              console.warn(`[Router Add]   Files: ${verification.files.join(', ')}`);
-            }
+            console.warn(`[Router Add]   Hotspot directory not found on router`);
           }
         }
       } catch (uploadErr) {
