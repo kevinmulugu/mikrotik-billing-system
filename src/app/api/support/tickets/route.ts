@@ -5,6 +5,7 @@ import { authOptions } from '@/lib/auth'
 import { TicketHelpers, RouterHelpers, toObjectId, isValidObjectId } from '@/lib/mongodb-helpers'
 import { uploadFile } from '@/lib/storage'
 import { z } from 'zod'
+import { NotificationService } from '@/lib/services/notification'
 
 // Validation schema
 const createTicketSchema = z.object({
@@ -270,6 +271,27 @@ export async function POST(request: NextRequest) {
         }
       }
     ]).toArray()
+
+    // Create notification for user
+    try {
+      await NotificationService.createNotification({
+        userId: session.user.id,
+        type: 'info',
+        category: 'support',
+        priority: 'normal',
+        title: 'Support Ticket Created',
+        message: `Your ticket "${validated.title}" has been submitted. We'll respond within ${sla?.responseTime || 24} hours.`,
+        metadata: {
+          resourceType: 'ticket',
+          resourceId: result.insertedId.toString(),
+          link: `/support/tickets/${result.insertedId}`,
+        },
+        sendEmail: false, // User initiated, no email needed
+      });
+    } catch (notifError) {
+      console.error('Failed to create ticket notification:', notifError);
+      // Don't fail the ticket creation if notification fails
+    }
 
     // TODO: Send notification to support team
     // await sendTicketNotification(createdTicket[0])

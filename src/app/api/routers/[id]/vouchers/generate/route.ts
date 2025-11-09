@@ -6,6 +6,7 @@ import clientPromise from '@/lib/mongodb';
 import { ObjectId } from 'mongodb';
 import { MikroTikService } from '@/lib/services/mikrotik';
 import { getRouterConnectionConfig } from '@/lib/services/router-connection';
+import { NotificationService } from '@/lib/services/notification';
 
 interface RouteParams {
   params: Promise<{
@@ -396,6 +397,29 @@ export async function POST(
       mikrotikUserId: v.mikrotikUserId, // Include in response for transparency
       syncedToRouter: v.mikrotikUserId !== null,
     }));
+
+    // Create notification for user
+    try {
+      const routerName = router.routerInfo?.name || 'Router';
+      await NotificationService.createNotification({
+        userId,
+        type: 'success',
+        category: 'voucher',
+        priority: 'normal',
+        title: 'Vouchers Generated Successfully',
+        message: `${quantity} ${displayName} voucher(s) generated for ${routerName}. Total value: KES ${quantity * price}`,
+        metadata: {
+          resourceType: 'router',
+          resourceId: routerId,
+          link: `/routers/${routerId}`,
+          amount: quantity * price,
+        },
+        sendEmail: false, // User initiated action, no email needed
+      });
+    } catch (notifError) {
+      console.error('Failed to create voucher generation notification:', notifError);
+      // Don't fail the voucher generation if notification fails
+    }
 
     return NextResponse.json({
       success: true,

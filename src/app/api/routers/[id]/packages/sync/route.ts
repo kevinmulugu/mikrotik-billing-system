@@ -6,6 +6,7 @@ import clientPromise from '@/lib/mongodb';
 import { ObjectId } from 'mongodb';
 import { MikroTikService } from '@/lib/services/mikrotik';
 import { getRouterConnectionConfig } from '@/lib/services/router-connection';
+import { NotificationService } from '@/lib/services/notification';
 
 interface RouteParams {
   params: Promise<{
@@ -256,6 +257,34 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       },
       timestamp: new Date(),
     });
+
+    // Create notification for user if there are changes
+    try {
+      if (syncResults.newOnRouter > 0 || syncResults.outOfSync > 0) {
+        const routerName = router.routerInfo?.name || 'Router';
+        const changes: string[] = [];
+        if (syncResults.newOnRouter > 0) changes.push(`${syncResults.newOnRouter} new`);
+        if (syncResults.outOfSync > 0) changes.push(`${syncResults.outOfSync} updated`);
+        
+        await NotificationService.createNotification({
+          userId,
+          type: 'info',
+          category: 'router',
+          priority: 'low',
+          title: 'Packages Synced',
+          message: `${routerName}: ${changes.join(', ')} package(s) synced from MikroTik.`,
+          metadata: {
+            resourceType: 'router',
+            resourceId: routerId,
+            link: `/routers/${routerId}`,
+          },
+          sendEmail: false, // Background operation, no email needed
+        });
+      }
+    } catch (notifError) {
+      console.error('Failed to create package sync notification:', notifError);
+      // Don't fail the sync if notification fails
+    }
 
     return NextResponse.json({
       success: true,

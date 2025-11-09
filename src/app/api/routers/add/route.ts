@@ -656,6 +656,28 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // Send success notification to user
+    try {
+      await NotificationService.createNotification({
+        userId: session.user.id,
+        type: 'success',
+        category: 'router',
+        priority: 'normal',
+        title: 'Router Added Successfully',
+        message: `Router "${body.name}" (${body.model}) connected and synced. ${vpnProvisioningSuccess ? 'Secure remote access enabled.' : 'Ready for voucher generation.'}`,
+        metadata: {
+          resourceType: 'router',
+          resourceId: routerId.toString(),
+          link: `/routers/${routerId}`,
+        },
+        sendEmail: false,
+      });
+      
+      console.log('✅ [Notification] Router added notification created');
+    } catch (notifError) {
+      console.error('❌ [Notification] Failed to create router added notification:', notifError);
+    }
+
     // Prepare response
     const responseData = {
       success: true,
@@ -679,34 +701,6 @@ export async function POST(req: NextRequest) {
         enabled: vpnProvisioningSuccess,
         status: vpnTunnel?.status,
         vpnIP: vpnTunnel?.assignedVPNIP,
-      },
-      bridgeSetup: bridgeSetupData,
-      warnings: uploadWarning ? [uploadWarning] : [],
-    };
-
-    // Send success notification to user
-    try {
-      await NotificationService.createNotification({
-        userId: session.user.id,
-        type: 'success',
-        category: 'router',
-        priority: 'normal',
-        title: 'Router Added Successfully',
-        message: `Router "${body.name}" (${body.model}) connected and synced. ${vpnProvisioningSuccess ? 'Secure remote access enabled.' : 'Ready for voucher generation.'}`,
-        metadata: {
-          resourceType: 'router',
-          resourceId: routerId.toString(),
-          link: `/routers/${routerId}`,
-        },
-        sendEmail: false,
-      });
-      
-      console.log('✅ [Notification] Router added notification created');
-    } catch (notifError) {
-      console.error('❌ [Notification] Failed to create router added notification:', notifError);
-    }
-
-    return NextResponse.json(responseData);
       },
       configuration: {
         success: configResult.success,
