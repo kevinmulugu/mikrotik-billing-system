@@ -1,6 +1,7 @@
 // lib/services/sms-credits.ts
 import { ObjectId, Db } from 'mongodb';
 import clientPromise from '@/lib/mongodb';
+import { NotificationService } from './notification';
 
 /**
  * SMS Credits Service
@@ -324,6 +325,41 @@ export class SMSCreditsService {
 
       console.log(`[SMS Credits] ✓ Deducted ${amount} credits from user ${userObjectId}`);
       console.log(`[SMS Credits]   Balance: ${currentBalance.balance} → ${newBalance}`);
+
+      // Check if balance is now low (< 10 credits) and send warning
+      if (newBalance < 10 && newBalance < currentBalance.balance) {
+        try {
+          // Check if we already sent a low credits warning recently (within 24 hours)
+          const recentWarning = await db.collection('notifications').findOne({
+            userId: userObjectId,
+            'notification.category': 'sms',
+            'notification.title': 'Low SMS Credits',
+            createdAt: { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) }, // Last 24 hours
+          });
+
+          if (!recentWarning) {
+            await NotificationService.createNotification({
+              userId: userObjectId,
+              type: 'warning',
+              category: 'sms',
+              priority: 'normal',
+              title: 'Low SMS Credits',
+              message: `Only ${newBalance} SMS credits remaining. Purchase more to avoid service interruption.`,
+              metadata: {
+                resourceType: 'sms',
+                action: 'purchase_credits',
+                link: '/sms-credits',
+              },
+              sendEmail: true,
+            });
+            
+            console.log(`[SMS Credits] ⚠️ Low balance notification sent (${newBalance} credits remaining)`);
+          }
+        } catch (notifError) {
+          console.error('[SMS Credits] Failed to send low balance notification:', notifError);
+          // Don't fail the deduction
+        }
+      }
 
       return {
         success: true,

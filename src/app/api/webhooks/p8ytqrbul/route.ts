@@ -7,6 +7,7 @@ import MikroTikService from '@/lib/services/mikrotik';
 import { getRouterConnectionConfig } from '@/lib/services/router-connection';
 import { MessagingService } from '@/lib/services/messaging';
 import { SMSCreditsService } from '@/lib/services/sms-credits';
+import { NotificationService } from '@/lib/services/notification';
 
 /**
  * M-Pesa C2B Confirmation Webhook
@@ -181,6 +182,31 @@ export async function POST(request: NextRequest) {
         if (creditsResult.success) {
           console.log(`[M-Pesa Webhook] ✓ SMS Credits added successfully. New balance: ${creditsResult.newBalance}`);
 
+          // Send success notification to user
+          try {
+            await NotificationService.createNotification({
+              userId,
+              type: 'success',
+              category: 'sms',
+              priority: 'normal',
+              title: 'SMS Credits Added',
+              message: `${totalCredits} SMS credits added successfully. New balance: ${creditsResult.newBalance} credits.`,
+              metadata: {
+                resourceType: 'sms',
+                link: '/sms-credits',
+                amount: parseFloat(TransAmount),
+              },
+              sendEmail: false,
+            });
+            
+            console.log('✅ [Notification] SMS credits success notification created');
+            
+            // Check if balance is now above low threshold (no longer low)
+            // If it was low before, this is a good outcome
+          } catch (notifError) {
+            console.error('❌ [Notification] Failed to create SMS credits success notification:', notifError);
+          }
+
           // Update STK initiation status
           await db.collection('stk_initiations').updateOne(
             { _id: stkInitiation._id },
@@ -224,6 +250,29 @@ export async function POST(request: NextRequest) {
           });
         } else {
           console.error('[M-Pesa Webhook] Failed to add SMS credits:', creditsResult.error);
+
+          // Send notification to user about failure
+          try {
+            await NotificationService.createNotification({
+              userId,
+              type: 'error',
+              category: 'sms',
+              priority: 'high',
+              title: 'SMS Credits Purchase Failed',
+              message: `Payment of KES ${TransAmount} received but credits could not be added. Support has been notified. Reference: ${TransID}`,
+              metadata: {
+                resourceType: 'payment',
+                transactionId: TransID,
+                amount: parseFloat(TransAmount),
+                link: '/sms-credits',
+              },
+              sendEmail: true,
+            });
+            
+            console.log('✅ [Notification] SMS credits failure notification created');
+          } catch (notifError) {
+            console.error('❌ [Notification] Failed to create SMS credits failure notification:', notifError);
+          }
 
           // Log failure
           await db.collection('webhook_logs').insertOne({
@@ -419,6 +468,33 @@ export async function POST(request: NextRequest) {
 
         console.log('✅ [M-Pesa Webhook] Voucher successfully linked to payment and STK');
 
+        // Send success notification to router owner
+        try {
+          const router = await db.collection('routers').findOne({ _id: packageInfo.routerId });
+          const routerName = router?.routerInfo?.name || 'Router';
+          
+          await NotificationService.createNotification({
+            userId: packageInfo.userId,
+            type: 'success',
+            category: 'payment',
+            priority: 'normal',
+            title: `Voucher Sold - KES ${TransAmount}`,
+            message: `Customer purchased ${packageInfo.packageDisplayName} voucher on ${routerName}. Revenue: KES ${TransAmount}.`,
+            metadata: {
+              resourceType: 'voucher',
+              resourceId: voucher._id,
+              amount: parseFloat(TransAmount),
+              transactionId: TransID,
+              link: `/routers/${packageInfo.routerId}`,
+            },
+            sendEmail: false,
+          });
+          
+          console.log('✅ [Notification] Voucher purchase notification created for router owner');
+        } catch (notifError) {
+          console.error('❌ [Notification] Failed to create voucher purchase notification:', notifError);
+        }
+
         // === SEND SMS NOTIFICATION - VOUCHER CODE TO CUSTOMER ===
         if (phoneNumber) {
           try {
@@ -575,6 +651,34 @@ export async function POST(request: NextRequest) {
         console.log('Payment ID:', packageInfo.paymentId);
         console.log('Transaction:', TransID);
         console.log('Customer Phone:', phoneNumber);
+        
+        // Send notification to router owner
+        try {
+          const router = await db.collection('routers').findOne({ _id: packageInfo.routerId });
+          
+          await NotificationService.createNotification({
+            userId: packageInfo.userId,
+            type: 'error',
+            category: 'voucher',
+            priority: 'urgent',
+            title: 'OUT OF STOCK: Vouchers Depleted',
+            message: `Payment received (KES ${TransAmount}) but no ${packageInfo.packageDisplayName} vouchers available. Customer: ${phoneNumber || 'Unknown'}. Transaction: ${TransID}. Generate vouchers or refund immediately.`,
+            metadata: {
+              resourceType: 'router',
+              resourceId: packageInfo.routerId,
+              action: 'generate_vouchers',
+              link: `/routers/${packageInfo.routerId}`,
+              transactionId: TransID,
+              amount: parseFloat(TransAmount),
+            },
+            sendEmail: true,
+          });
+          
+          console.log('✅ [Notification] Out-of-stock notification created for router owner');
+        } catch (notifError) {
+          console.error('❌ [Notification] Failed to create out-of-stock notification:', notifError);
+        }
+        
         // TODO: Send email/SMS to router owner
         // Message: "URGENT: Router '{name}' is out of {package} vouchers. Payment received: {transactionId}. Customer: {phone}. Please generate vouchers or refund."
 

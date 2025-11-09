@@ -33,6 +33,7 @@ interface HeaderProps {
 export function Header({ onMenuClick }: HeaderProps) {
   const { data: session } = useSession();
   const [smsCredits, setSmsCredits] = useState<number | null>(null);
+  const [unreadCount, setUnreadCount] = useState<number>(0);
 
   // Fetch SMS credits balance
   useEffect(() => {
@@ -46,6 +47,43 @@ export function Header({ onMenuClick }: HeaderProps) {
         })
         .catch(err => console.error('Failed to fetch SMS credits:', err));
     }
+  }, [session?.user?.id]);
+
+  // Fetch unread notifications count with polling (every 30 seconds)
+  useEffect(() => {
+    if (!session?.user?.id) return;
+
+    // Initial fetch
+    const fetchUnreadCount = async () => {
+      try {
+        const res = await fetch('/api/notifications/unread-count');
+        if (res.ok) {
+          const data = await res.json();
+          setUnreadCount(data.count || 0);
+        }
+      } catch (error) {
+        console.error('Failed to fetch unread count:', error);
+      }
+    };
+
+    fetchUnreadCount();
+
+    // Poll every 30 seconds
+    const interval = setInterval(fetchUnreadCount, 30000);
+
+    // Listen for notification events (from notifications page)
+    const handleNotificationEvent = () => {
+      fetchUnreadCount();
+    };
+    
+    window.addEventListener('notificationRead', handleNotificationEvent);
+    window.addEventListener('focus', fetchUnreadCount);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('notificationRead', handleNotificationEvent);
+      window.removeEventListener('focus', fetchUnreadCount);
+    };
   }, [session?.user?.id]);
 
   const handleSignOut = () => {
@@ -62,9 +100,6 @@ export function Header({ onMenuClick }: HeaderProps) {
       .toUpperCase()
       .slice(0, 2);
   };
-
-  // Get unread notifications count from session
-  const unreadCount = session?.user?.unreadNotifications || 0;
 
   return (
     <div className="sticky top-0 z-40 flex h-16 shrink-0 items-center gap-x-4 border-b bg-background px-4 shadow-sm sm:gap-x-6 sm:px-6 lg:px-8">

@@ -4,6 +4,7 @@ import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
 import { getDatabase } from '@/lib/database';
 import { ObjectId } from 'mongodb';
+import { NotificationService } from '@/lib/services/notification';
 
 export async function POST(request: NextRequest) {
   try {
@@ -44,6 +45,25 @@ export async function POST(request: NextRequest) {
           },
         }
       );
+
+      // Send notification
+      try {
+        await NotificationService.createNotification({
+          userId: session.user.id,
+          type: 'info',
+          category: 'system',
+          priority: 'low',
+          title: 'Payment Method Updated',
+          message: `Payment method changed to Company Paybill (${companyPaybillNumber}).`,
+          metadata: {
+            resourceType: 'payment',
+            link: '/payments/setup',
+          },
+          sendEmail: false,
+        });
+      } catch (notifError) {
+        console.error('[Payments] Failed to send notification:', notifError);
+      }
 
       return NextResponse.json({
         success: true,
@@ -137,6 +157,25 @@ export async function POST(request: NextRequest) {
           },
         }
       );
+
+      // Send notification
+      try {
+        await NotificationService.createNotification({
+          userId: session.user.id,
+          type: 'info',
+          category: 'system',
+          priority: 'low',
+          title: 'Payment Method Updated',
+          message: `Payment method changed to Own Paybill (${paybillData.number} - ${paybillData.name}).`,
+          metadata: {
+            resourceType: 'payment',
+            link: '/payments/setup',
+          },
+          sendEmail: false,
+        });
+      } catch (notifError) {
+        console.error('[Payments] Failed to send notification:', notifError);
+      }
 
       return NextResponse.json({
         success: true,

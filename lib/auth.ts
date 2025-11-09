@@ -230,6 +230,23 @@ export const authOptions: NextAuthOptions = {
         if (userData.statistics) {
           (session.user as any).statistics = userData.statistics;
         }
+        
+        // Fetch unread notifications count
+        try {
+          const client = await clientPromise;
+          const db = client.db();
+          const { ObjectId } = await import('mongodb');
+          
+          const unreadCount = await db.collection('notifications').countDocuments({
+            userId: new ObjectId(user.id),
+            'status.read': false,
+          });
+          
+          session.user.unreadNotifications = unreadCount;
+        } catch (error) {
+          console.error('[Auth] Failed to fetch unread notifications:', error);
+          session.user.unreadNotifications = 0;
+        }
       }
       return session;
     },
