@@ -409,85 +409,70 @@ export class MikroTikService {
   }
 
   /**
-   * Detect the storage disk type on the router
+   * Confirm hotspot directory exists on the router by checking /rest/file
+   * This verifies that captive portal files have been successfully uploaded
    * 
-   * Strategy 1: Look for entries where type === 'disk' (RouterOS v7+ and some v6)
-   * Strategy 2: Infer from existing file paths (e.g., 'hotspot/api.json' -> 'disk')
-   * Strategy 3: Test common paths by attempting to create a test directory
-   * Strategy 4: Safe fallback to 'disk/hotspot'
-   * 
-   * @returns Object containing disk type and appropriate hotspot path
+   * @param config MikroTik connection configuration
+   * @returns Object with exists flag, file count, and list of files
    */
-  static async detectStorageDisk(
+  static async confirmHotspotDirectory(
     config: MikroTikConnectionConfig
-  ): Promise<{ disk: string; hotspotPath: string }> {
+  ): Promise<{ exists: boolean; fileCount: number; files: string[] }> {
     try {
+      console.log('🔍 Checking hotspot directory...');
+
+      // Query the file system
       const files = await this.makeRequest(config, '/rest/file', 'GET');
 
       if (!Array.isArray(files)) {
-        console.warn('Unexpected file list format, defaulting to disk');
-        return { disk: 'disk', hotspotPath: 'hotspot' };
+        console.warn('⚠ Unexpected file list format');
+        return { exists: false, fileCount: 0, files: [] };
       }
 
-      // STRATEGY 1: Find entries with type === 'disk' (most reliable when available)
-      const diskEntries = files.filter((f: any) => f.type === 'disk');
-
-      if (diskEntries.length > 0) {
-        // Prioritize common disk names
-        const priorityOrder = ['flash', 'disk', 'usb'];
-        
-        for (const diskName of priorityOrder) {
-          const found = diskEntries.find((d: any) => d.name === diskName);
-          if (found) {
-            const baseName = found.name;
-            console.log(`✓ Detected ${baseName} storage (type: disk), path: ${baseName}/hotspot`);
-            return { disk: baseName, hotspotPath: 'hotspot' };
-          }
-        }
-
-        // Use first available disk with any name
-        const firstDisk = diskEntries[0];
-        const baseName = firstDisk.name;
-        console.log(`✓ Detected ${baseName} storage (type: disk), path: ${baseName}/hotspot`);
-        return { disk: baseName, hotspotPath: 'hotspot' };
-      }
-
-      // STRATEGY 2: Infer from existing file paths
-      // If router has files without explicit disk entries, analyze paths
-      console.log('No explicit disk entries found, analyzing file paths...');
-      
-      // Look for common system directories that indicate storage root
-      const systemDirs = files.filter((f: any) => 
-        f.type === 'directory' && 
-        (f.name === 'pub' || f.name === 'hotspot' || f.name.startsWith('hotspot/'))
+      // Look for hotspot directory and files within it
+      const hotspotFiles = files.filter((f: any) => 
+        f.name === 'hotspot' || 
+        (typeof f.name === 'string' && f.name.startsWith('hotspot/'))
       );
 
-      if (systemDirs.length > 0) {
-        // Files exist at root level without disk prefix -> likely 'disk' storage
-        console.log('✓ Detected root-level directories, inferring disk storage');
-        return { disk: 'disk', hotspotPath: 'hotspot' };
+      if (hotspotFiles.length === 0) {
+        console.warn('⚠ Hotspot directory not found');
+        return { exists: false, fileCount: 0, files: [] };
       }
 
-      // Check for flash-based patterns (common in older RouterOS)
-      const flashFiles = files.filter((f: any) => 
-        f.name && (f.name.startsWith('flash/') || f.name === 'flash')
+      // Extract file names
+      const fileNames = hotspotFiles
+        .filter((f: any) => f.type !== 'directory')
+        .map((f: any) => f.name);
+
+      const hasDirectory = hotspotFiles.some((f: any) => f.name === 'hotspot' && f.type === 'directory');
+      const htmlFiles = fileNames.filter((name: string) => name.endsWith('.html'));
+
+      console.log(`✓ Hotspot directory found`);
+      console.log(`  - Total files: ${fileNames.length}`);
+      console.log(`  - HTML files: ${htmlFiles.length}`);
+      
+      // Verify key files exist
+      const requiredFiles = ['login.html', 'error.html', 'logout.html', 'status.html'];
+      const missingFiles = requiredFiles.filter(req => 
+        !fileNames.some(name => name.endsWith(req))
       );
 
-      if (flashFiles.length > 0) {
-        console.log('✓ Detected flash-based file paths, using flash storage');
-        return { disk: 'flash', hotspotPath: 'hotspot' };
+      if (missingFiles.length > 0) {
+        console.warn(`⚠ Missing key files: ${missingFiles.join(', ')}`);
+      } else {
+        console.log(`✓ All key captive portal files present`);
       }
 
-      // STRATEGY 3: Safe fallback with logging
-      console.warn('⚠ Could not detect storage type from file list, using default disk');
-      console.warn('Files found:', files.length, 'entries');
-      
-      return { disk: 'disk', hotspotPath: 'hotspot' };
+      return {
+        exists: hasDirectory || fileNames.length > 0,
+        fileCount: fileNames.length,
+        files: fileNames
+      };
 
     } catch (error) {
-      console.error('❌ Failed to detect storage disk:', error);
-      // Safe fallback
-      return { disk: 'disk', hotspotPath: 'hotspot' };
+      console.error('❌ Failed to check hotspot directory:', error);
+      return { exists: false, fileCount: 0, files: [] };
     }
   }
 

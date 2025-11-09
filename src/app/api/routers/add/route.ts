@@ -572,19 +572,10 @@ export async function POST(req: NextRequest) {
       try {
         console.log(`[Router Add] Pushing captive portal files to router ${routerId}...`);
 
-        // Decrypt API password for use with FTP if needed
+        // Decrypt API password for use
         const decryptedPassword = MikroTikService.decryptPassword(encryptedPassword);
 
-        // Detect storage disk type (flash vs disk)
-        const storageInfo = await MikroTikService.detectStorageDisk({
-          ipAddress: connectionConfig.ipAddress,
-          port: connectionConfig.port,
-          username: connectionConfig.username,
-          password: decryptedPassword,
-        });
-        
-        console.log(`[Router Add] Detected storage: ${storageInfo.disk} (hotspot path: ${storageInfo.disk}/${storageInfo.hotspotPath})`);
-
+        // Upload to simple /hotspot path (works on all MikroTik routers)
         const uploadResult = await MikroTikService.uploadCaptivePortalFiles(
           {
             ipAddress: connectionConfig.ipAddress,
@@ -599,7 +590,7 @@ export async function POST(req: NextRequest) {
             location: body.location.name || body.location.county,
             baseUrl: process.env.NEXT_PUBLIC_APP_URL || process.env.BASE_URL || 'http://localhost:3000',
             // ftpUser and ftpPassword omitted to default to API user
-            remotePath: `/${storageInfo.disk}/${storageInfo.hotspotPath}`,  // Correct: /disk/hotspot or /flash/hotspot
+            remotePath: '/hotspot',  // Simple path that works on all routers
           }
         );
 
@@ -608,37 +599,58 @@ export async function POST(req: NextRequest) {
         } else {
           console.log(`[Router Add] ✓ Captive portal files uploaded: ${uploadResult.stdout?.slice(0, 200)}`);
 
-          // === Restart router to apply captive portal changes ===
-          try {
-            console.log(`[Router Add] Restarting router to apply captive portal changes...`);
-            
-            const restartResult = await MikroTikService.restartRouter({
-              ipAddress: connectionConfig.ipAddress,
-              port: connectionConfig.port,
-              username: connectionConfig.username,
-              password: decryptedPassword,
-            });
+          // === Verify upload before restarting ===
+          console.log(`[Router Add] Verifying captive portal files...`);
+          
+          const verification = await MikroTikService.confirmHotspotDirectory({
+            ipAddress: connectionConfig.ipAddress,
+            port: connectionConfig.port,
+            username: connectionConfig.username,
+            password: decryptedPassword,
+          });
 
-            if (restartResult) {
-              console.log(`[Router Add] ✓ Router restart initiated successfully`);
-              
-              // Update router status to indicate restart
-              await db.collection('routers').updateOne(
-                { _id: insertResult.insertedId },
-                {
-                  $set: {
-                    'health.status': 'restarting',
-                    'health.lastSeen': new Date(),
-                    'updatedAt': new Date(),
-                  },
-                }
-              );
-            } else {
-              console.warn(`[Router Add] ⚠ Router restart command may have failed`);
+          if (verification.exists && verification.fileCount > 0) {
+            console.log(`[Router Add] ✓ Upload verified: ${verification.fileCount} files in hotspot directory`);
+            
+            // === Restart router to apply captive portal changes ===
+            try {
+              console.log(`[Router Add] Restarting router to apply captive portal changes...`);
+            
+              const restartResult = await MikroTikService.restartRouter({
+                ipAddress: connectionConfig.ipAddress,
+                port: connectionConfig.port,
+                username: connectionConfig.username,
+                password: decryptedPassword,
+              });
+
+              if (restartResult) {
+                console.log(`[Router Add] ✓ Router restart initiated successfully`);
+                
+                // Update router status to indicate restart
+                await db.collection('routers').updateOne(
+                  { _id: insertResult.insertedId },
+                  {
+                    $set: {
+                      'health.status': 'restarting',
+                      'health.lastSeen': new Date(),
+                      'updatedAt': new Date(),
+                    },
+                  }
+                );
+              } else {
+                console.warn(`[Router Add] ⚠ Router restart command may have failed`);
+              }
+            } catch (restartErr) {
+              console.warn(`[Router Add] ⚠ Router restart error (this is often expected):`, restartErr);
+              // Don't fail the entire operation - router disconnect during restart is normal
             }
-          } catch (restartErr) {
-            console.warn(`[Router Add] ⚠ Router restart error (this is often expected):`, restartErr);
-            // Don't fail the entire operation - router disconnect during restart is normal
+          } else {
+            // Upload verification failed - skip restart
+            console.warn(`[Router Add] ⚠ Upload verification failed, skipping router restart`);
+            console.warn(`[Router Add]   Files found: ${verification.fileCount}`);
+            if (verification.files.length > 0) {
+              console.warn(`[Router Add]   Files: ${verification.files.join(', ')}`);
+            }
           }
         }
       } catch (uploadErr) {
