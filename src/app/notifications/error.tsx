@@ -1,0 +1,45 @@
+'use client';
+
+import { useEffect } from 'react';
+import { Button } from '@/components/ui/button';
+import { AlertTriangle, RefreshCw } from 'lucide-react';
+
+export default function NotificationsError({
+  error,
+  reset,
+}: {
+  error: Error & { digest?: string };
+  reset: () => void;
+}) {
+  useEffect(() => {
+    console.error('Notifications page error:', error);
+  }, [error]);
+
+  return (
+    <div className="flex items-center justify-center min-h-[400px]">
+      <div className="text-center max-w-md">
+        <div className="bg-destructive/10 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-6">
+          <AlertTriangle className="w-8 h-8 text-destructive" />
+        </div>
+
+        <h2 className="text-xl font-semibold text-foreground mb-4">
+          Failed to load notifications
+        </h2>
+
+        <p className="text-muted-foreground mb-8">
+          We couldn't load your notifications. This might be a temporary issue.
+        </p>
+
+        <div className="flex flex-col sm:flex-row gap-4 justify-center">
+          <Button onClick={reset}>
+            <RefreshCw className="h-4 w-4 mr-2" />
+            Try Again
+          </Button>
+          <Button variant="outline" asChild>
+            <a href="/dashboard">Go to Dashboard</a>
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
