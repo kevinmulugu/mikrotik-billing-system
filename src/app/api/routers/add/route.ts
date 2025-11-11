@@ -302,9 +302,11 @@ export async function POST(req: NextRequest) {
     // Encrypt API password
     const encryptedPassword = MikroTikService.encryptPassword(body.apiPassword);
 
-    // Create router document
+    // Create router document with multi-router schema
     const routerDocument = {
       userId: new ObjectId(userId),
+      // NEW: Router type (defaults to mikrotik)
+      routerType: 'mikrotik',
       routerInfo: {
         name: body.name,
         model: body.model,
@@ -336,6 +338,38 @@ export async function POST(req: NextRequest) {
         sshEnabled: false,
       },
       vpnTunnel: vpnTunnel,
+      // NEW: Service-aware configuration
+      services: {
+        hotspot: {
+          enabled: body.hotspotEnabled,
+          packages: [], // Will be synced later
+          lastSynced: null,
+        },
+        ...(body.pppoeEnabled && {
+          pppoe: {
+            enabled: true,
+            interface: body.pppoeInterface || 'ether1',
+            packages: [], // Will be synced later
+            lastSynced: null,
+          },
+        }),
+      },
+      // NEW: Router capabilities
+      capabilities: {
+        supportsVPN: true,
+        supportedServices: body.pppoeEnabled ? ['hotspot', 'pppoe'] : ['hotspot'],
+        captivePortalMethod: 'http_upload',
+        voucherFormat: 'username_password',
+      },
+      // NEW: Vendor-specific config
+      vendorConfig: {
+        mikrotik: {
+          firmwareVersion: firmwareVersion,
+          identity: identity,
+          architecture: 'unknown', // Will be updated on first sync
+        },
+      },
+      // Legacy configuration (kept for backward compatibility)
       configuration: {
         hotspot: {
           enabled: body.hotspotEnabled,
