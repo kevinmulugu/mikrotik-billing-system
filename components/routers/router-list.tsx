@@ -13,7 +13,9 @@ import {
   Clock,
   Cpu,
   HardDrive,
-  Thermometer
+  Thermometer,
+  Router as RouterIcon,
+  Signal
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -21,6 +23,7 @@ interface Router {
   id: string;
   name: string;
   model: string;
+  routerType?: 'mikrotik' | 'unifi'; // NEW: Router vendor type
   serialNumber?: string;
   location: string;
   ipAddress?: string;
@@ -123,6 +126,22 @@ export function RouterList({ routers }: RouterListProps) {
                 <p className="text-sm text-muted-foreground mt-1">
                   {router.model}
                 </p>
+                {/* Router Type Badge */}
+                <div className="mt-2">
+                  <Badge variant="outline" className="text-xs">
+                    {router.routerType === 'unifi' ? (
+                      <>
+                        <Wifi className="h-3 w-3 mr-1" />
+                        UniFi
+                      </>
+                    ) : (
+                      <>
+                        <RouterIcon className="h-3 w-3 mr-1" />
+                        MikroTik
+                      </>
+                    )}
+                  </Badge>
+                </div>
               </div>
               {getStatusBadge(router.status)}
             </div>
@@ -199,12 +218,14 @@ export function RouterList({ routers }: RouterListProps) {
             {/* Configuration Badges */}
             <div className="flex gap-2 flex-wrap">
               {router.configuration.hotspotEnabled && (
-                <Badge variant="outline" className="text-xs">
+                <Badge variant="outline" className="text-xs bg-blue-50">
+                  <Wifi className="h-3 w-3 mr-1" />
                   Hotspot
                 </Badge>
               )}
               {router.configuration.pppoeEnabled && (
-                <Badge variant="outline" className="text-xs">
+                <Badge variant="outline" className="text-xs bg-green-50">
+                  <Signal className="h-3 w-3 mr-1" />
                   PPPoE
                 </Badge>
               )}

@@ -98,6 +98,7 @@ interface RouterInfo {
 interface Router {
   _id: string
   customerId: string
+  routerType?: 'mikrotik' | 'unifi'; // NEW: Router vendor type
   routerInfo: RouterInfo
   connection: {
     ipAddress: string
@@ -119,6 +120,14 @@ interface Router {
       interface: string
       ipPool: string
       defaultProfile: string
+    }
+  }
+  services?: {
+    hotspot?: {
+      enabled: boolean
+    }
+    pppoe?: {
+      enabled: boolean
     }
   }
   health: RouterHealth
@@ -254,6 +263,34 @@ export function RouterCard({ router, onUpdate, onDelete }: RouterCardProps) {
             <CardDescription>
               {router.routerInfo.model} • {router.routerInfo.location.name}
             </CardDescription>
+            {/* Router Type and Services */}
+            <div className="flex flex-wrap gap-1 mt-2">
+              <Badge variant="outline" className="text-xs">
+                {router.routerType === 'unifi' ? (
+                  <>
+                    <Wifi className="h-3 w-3 mr-1" />
+                    UniFi
+                  </>
+                ) : (
+                  <>
+                    <Router className="h-3 w-3 mr-1" />
+                    MikroTik
+                  </>
+                )}
+              </Badge>
+              {(router.services?.hotspot?.enabled || router.configuration?.hotspot?.enabled) && (
+                <Badge variant="outline" className="text-xs bg-blue-50">
+                  <Wifi className="h-3 w-3 mr-1" />
+                  Hotspot
+                </Badge>
+              )}
+              {(router.services?.pppoe?.enabled || router.configuration?.pppoe?.enabled) && (
+                <Badge variant="outline" className="text-xs bg-green-50">
+                  <Signal className="h-3 w-3 mr-1" />
+                  PPPoE
+                </Badge>
+              )}
+            </div>
           </div>
           <div className="flex items-center gap-2">
             <Badge variant={getStatusVariant(router.health.status)}>
