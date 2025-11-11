@@ -10,6 +10,7 @@
     "db:init": "tsx scripts/init-database.ts",
     "db:seed": "tsx scripts/seed-database.ts",
     "db:reset": "tsx scripts/reset-database.ts",
+    "db:migrate:multi-router": "tsx scripts/migrate-to-multi-router.ts",
     "db:init-sms-plans": "tsx scripts/init-sms-plans.ts",
     "db:init-vpn-collections": "tsx scripts/init-vpn-collections.ts",
     "db:setup": "npm run db:init && npm run db:seed && npm run db:init-sms-plans",
