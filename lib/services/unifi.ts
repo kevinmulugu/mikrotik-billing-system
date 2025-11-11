@@ -128,8 +128,8 @@ interface UniFiApiResponse<T = any> {
 export class UniFiService {
   private client: AxiosInstance;
   private config: UniFiConnectionConfig;
-  private cookie?: string;
-  private csrfToken?: string;
+  private cookie: string | undefined;
+  private csrfToken: string | undefined;
   private isUnifiOS: boolean = false; // UniFi OS uses different API paths
 
   constructor(config: UniFiConnectionConfig) {
@@ -149,8 +149,8 @@ export class UniFiService {
 
     // Add response interceptor for error handling
     this.client.interceptors.response.use(
-      (response) => response,
-      (error) => {
+      (response: any) => response,
+      (error: any) => {
         if (error.response?.status === 401) {
           // Session expired, clear cookie
           this.cookie = undefined;
@@ -168,7 +168,7 @@ export class UniFiService {
     try {
       // Try UniFi OS endpoint
       const response = await this.client.get('/api/system', {
-        validateStatus: (status) => status < 500,
+        validateStatus: (status: number) => status < 500,
       });
       
       if (response.status === 200) {
@@ -219,14 +219,17 @@ export class UniFiService {
       if (cookies && cookies.length > 0) {
         // Store the session cookie
         this.cookie = cookies
-          .map((cookie) => cookie.split(';')[0])
+          .map((cookie: string) => cookie.split(';')[0])
           .join('; ');
       }
 
       // Extract CSRF token if present
-      const csrfCookie = cookies?.find((c) => c.startsWith('csrf_token='));
+      const csrfCookie = cookies?.find((c: string) => c.startsWith('csrf_token='));
       if (csrfCookie) {
-        this.csrfToken = csrfCookie.split('=')[1].split(';')[0];
+        const tokenParts = csrfCookie.split('=');
+        if (tokenParts[1]) {
+          this.csrfToken = tokenParts[1].split(';')[0];
+        }
       }
 
       return response.data?.meta?.rc === 'ok';
