@@ -51,7 +51,29 @@ export class RouterSyncService {
         };
       }
 
-      // Prepare connection config
+      // UniFi routers are synced via controller API, not direct connection
+      if (router.routerType === 'unifi') {
+        // Update last seen timestamp and maintain online status
+        // UniFi controller connectivity should be checked separately via UniFi API
+        await db.collection('routers').updateOne(
+          { _id: new ObjectId(routerId) },
+          {
+            $set: {
+              'health.status': 'online', // UniFi routers are considered online if they exist
+              'health.lastSeen': new Date(),
+              updatedAt: new Date(),
+            },
+          }
+        );
+        
+        return {
+          success: true,
+          message: 'UniFi routers sync from controller automatically',
+          changes: [],
+        };
+      }
+
+      // Prepare connection config (MikroTik only)
       const config = {
         ipAddress: router.connection.ipAddress,
         port: router.connection.port || 8728,
