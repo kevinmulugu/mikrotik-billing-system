@@ -285,7 +285,7 @@ export const AddRouterWizard: React.FC<AddRouterWizardProps> = ({
       }
     }
 
-    if (step === 3 && formData.hotspotEnabled) {
+    if (step === 3 && formData.routerType === 'mikrotik' && formData.hotspotEnabled) {
       if (!formData.ssid || formData.ssid.length < 3) {
         newErrors.ssid = "SSID must be at least 3 characters";
       }
@@ -301,8 +301,13 @@ export const AddRouterWizard: React.FC<AddRouterWizardProps> = ({
   const handleNext = () => {
     if (validateStep(currentStep)) {
       if (currentStep === 1) {
-        // Moving from step 1 to step 2 (VPN setup)
-        handleGenerateVPNScript();
+        // UniFi routers don't need VPN setup - skip to service configuration
+        if (formData.routerType === 'unifi') {
+          setCurrentStep(3); // Skip step 2 (VPN Setup)
+        } else {
+          // MikroTik routers need VPN setup
+          handleGenerateVPNScript();
+        }
       } else if (currentStep < steps.length) {
         setCurrentStep(currentStep + 1);
       }
@@ -322,8 +327,13 @@ export const AddRouterWizard: React.FC<AddRouterWizardProps> = ({
         setScriptCopied(false);
         setVerificationAttempts(0);
       }
-
-      setCurrentStep(currentStep - 1);
+      
+      // For UniFi routers, skip VPN step when going back from service config
+      if (currentStep === 3 && formData.routerType === 'unifi') {
+        setCurrentStep(1); // Skip step 2 (VPN Setup)
+      } else {
+        setCurrentStep(currentStep - 1);
+      }
     }
   };
 
@@ -471,7 +481,7 @@ export const AddRouterWizard: React.FC<AddRouterWizardProps> = ({
   };
 
   /**
-   * Submit router with VPN configuration
+   * Submit router with VPN configuration (MikroTik) or direct connection (UniFi)
    */
   const handleSubmit = async () => {
     if (!validateStep(currentStep)) {
@@ -479,7 +489,8 @@ export const AddRouterWizard: React.FC<AddRouterWizardProps> = ({
       return;
     }
 
-    if (!vpnVerification?.verified) {
+    // Only MikroTik routers require VPN verification
+    if (formData.routerType === 'mikrotik' && !vpnVerification?.verified) {
       toast.error("Please verify VPN connection first");
       return;
     }
@@ -487,17 +498,49 @@ export const AddRouterWizard: React.FC<AddRouterWizardProps> = ({
     setIsSubmitting(true);
 
     try {
-      const payload = {
-        ...formData,
-        // Include VPN configuration
-        vpnConfigured: true,
-        vpnIP: vpnVerification.vpnIP,
-        vpnPublicKey: vpnVerification.publicKey,
+      // Build router-specific payload
+      const basePayload = {
+        name: formData.name,
+        routerType: formData.routerType,
+        model: formData.model,
+        serialNumber: formData.serialNumber,
+        location: formData.location,
+        apiUser: formData.apiUser,
+        apiPassword: formData.apiPassword,
+        hotspotEnabled: formData.hotspotEnabled,
+        pppoeEnabled: formData.pppoeEnabled,
+        pppoeInterface: formData.pppoeInterface,
+        defaultProfile: formData.defaultProfile,
         // Include plan if customer needs to select one
         ...(needsPlanSelection && formData.plan ? { plan: formData.plan } : {}),
       };
 
-      console.log("[Wizard] Submitting router with VPN config...");
+      const payload = formData.routerType === 'mikrotik' 
+        ? {
+            ...basePayload,
+            ipAddress: formData.ipAddress,
+            port: formData.port,
+            ssid: formData.ssid,
+            hotspotPassword: formData.hotspotPassword,
+            maxUsers: formData.maxUsers,
+            // Include VPN configuration for MikroTik
+            ...(vpnVerification ? {
+              vpnConfigured: true,
+              vpnIP: vpnVerification.vpnIP,
+              vpnPublicKey: vpnVerification.publicKey,
+            } : {
+              vpnConfigured: false,
+            }),
+          }
+        : {
+            ...basePayload,
+            // Map ipAddress field to controllerUrl for UniFi
+            controllerUrl: formData.ipAddress,
+            siteId: formData.siteId,
+            vpnConfigured: false,
+          };
+
+      console.log(`[Wizard] Submitting ${formData.routerType} router...`);
 
       const response = await fetch("/api/routers/add", {
         method: "POST",
@@ -516,17 +559,26 @@ export const AddRouterWizard: React.FC<AddRouterWizardProps> = ({
       console.log("[Wizard] ✅ Router added successfully:", data.routerId);
 
       // Show success message with trial info if applicable
-      const successMessage = data.subscription?.isNewPlan
-        ? `Router added successfully! Your 15-day free trial starts now and ends on ${new Date(data.subscription.trialEndsAt).toLocaleDateString()}.`
-        : "Router added successfully with secure remote access!";
-
-      toast.success(successMessage, { duration: 7000 });
-
-      if (onComplete) {
-        onComplete(data.routerId);
-      } else {
-        router.push(`/routers/${data.routerId}`);
+      let successMessage = "Router added successfully!";
+      
+      if (data.subscription?.isNewPlan) {
+        successMessage = `Router added successfully! Your 15-day free trial starts now and ends on ${new Date(data.subscription.trialEndsAt).toLocaleDateString()}.`;
+      } else if (formData.routerType === 'mikrotik') {
+        successMessage = "Router added successfully with secure remote access!";
+      } else if (formData.routerType === 'unifi') {
+        successMessage = "UniFi router connected successfully!";
       }
+
+      toast.success(successMessage, { duration: 3000 });
+
+      // Redirect after a short delay to ensure user sees the success message
+      setTimeout(() => {
+        if (onComplete) {
+          onComplete(data.routerId);
+        } else {
+          router.push(`/routers/${data.routerId}`);
+        }
+      }, 1500);
     } catch (error) {
       console.error("[Wizard] Submit error:", error);
 
@@ -573,6 +625,11 @@ export const AddRouterWizard: React.FC<AddRouterWizardProps> = ({
             const StepIcon = step.icon;
             const isActive = currentStep === step.id;
             const isCompleted = currentStep > step.id || (step.id === 2 && setupStatus === "verified");
+            // For UniFi routers, skip VPN step visually
+            const isSkipped = step.id === 2 && formData.routerType === 'unifi';
+
+            // Don't render skipped steps
+            if (isSkipped) return null;
 
             return (
               <React.Fragment key={step.id}>
@@ -603,7 +660,7 @@ export const AddRouterWizard: React.FC<AddRouterWizardProps> = ({
                     {step.title}
                   </span>
                 </div>
-                {index < steps.length - 1 && (
+                {index < steps.length - 1 && !isSkipped && (
                   <div
                     className={`
                       h-1 flex-1 mx-2 rounded transition-colors
@@ -856,50 +913,110 @@ export const AddRouterWizard: React.FC<AddRouterWizardProps> = ({
 
                 <Separator />
 
-                <Alert>
-                  <Info className="h-4 w-4" />
-                  <AlertTitle>Router Connection Details</AlertTitle>
-                  <AlertDescription>
-                    <p className="text-sm mb-2">
-                      After factory reset, MikroTik routers default to:
-                    </p>
-                    <ul className="text-xs space-y-1 list-disc list-inside">
-                      <li>IP Address: 192.168.88.1</li>
-                      <li>Username: admin</li>
-                      <li>Password: (blank)</li>
-                    </ul>
-                  </AlertDescription>
-                </Alert>
+                {/* Router-specific connection info */}
+                {formData.routerType === 'mikrotik' ? (
+                  <Alert>
+                    <Info className="h-4 w-4" />
+                    <AlertTitle>MikroTik Default Credentials</AlertTitle>
+                    <AlertDescription>
+                      <p className="text-sm mb-2">
+                        After factory reset, MikroTik routers default to:
+                      </p>
+                      <ul className="text-xs space-y-1 list-disc list-inside">
+                        <li>IP Address: 192.168.88.1</li>
+                        <li>Username: admin</li>
+                        <li>Password: (blank)</li>
+                        <li>API Port: 8728</li>
+                      </ul>
+                    </AlertDescription>
+                  </Alert>
+                ) : (
+                  <Alert>
+                    <Info className="h-4 w-4" />
+                    <AlertTitle>UniFi Controller Access</AlertTitle>
+                    <AlertDescription>
+                      <p className="text-sm mb-2">
+                        Enter your UniFi Controller details:
+                      </p>
+                      <ul className="text-xs space-y-1 list-disc list-inside">
+                        <li>Controller URL: Include https:// and port (e.g., https://192.168.1.1:8443)</li>
+                        <li>Username: Your UniFi admin username</li>
+                        <li>Password: Your UniFi admin password (required)</li>
+                      </ul>
+                      <p className="text-xs mt-2 text-muted-foreground">
+                        Works with Dream Machine, Cloud Key, or self-hosted controllers
+                      </p>
+                    </AlertDescription>
+                  </Alert>
+                )}
+
+                {/* Router Connection Fields - Dynamic based on router type */}
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">
+                    {formData.routerType === 'mikrotik' ? 'Router IP Address *' : 'Controller URL *'}
+                  </label>
+                  <Input
+                    placeholder={formData.routerType === 'mikrotik' ? '192.168.88.1' : 'https://192.168.1.1:8443'}
+                    value={formData.ipAddress}
+                    onChange={(e) => {
+                      // Clean the input: remove backticks, quotes, and trim whitespace
+                      const cleanValue = e.target.value.replace(/[`'"]/g, '').trim();
+                      handleInputChange("ipAddress", cleanValue);
+                    }}
+                  />
+                  {errors.ipAddress && (
+                    <p className="text-sm text-destructive">{errors.ipAddress}</p>
+                  )}
+                  <p className="text-xs text-muted-foreground">
+                    {formData.routerType === 'mikrotik' 
+                      ? 'The local IP address of your MikroTik router' 
+                      : 'The HTTPS URL of your UniFi Controller (e.g., https://192.168.1.1:8443)'}
+                  </p>
+                </div>
 
                 <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Router IP Address *</label>
-                    <Input
-                      placeholder="192.168.88.1"
-                      value={formData.ipAddress}
-                      onChange={(e) => handleInputChange("ipAddress", e.target.value)}
-                    />
-                    {errors.ipAddress && (
-                      <p className="text-sm text-destructive">{errors.ipAddress}</p>
-                    )}
-                  </div>
+                  {/* Only show port field for MikroTik */}
+                  {formData.routerType === 'mikrotik' && (
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">API Port</label>
+                      <Input
+                        placeholder="8728"
+                        value={formData.port}
+                        onChange={(e) => handleInputChange("port", e.target.value)}
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Default RouterOS API port: 8728
+                      </p>
+                    </div>
+                  )}
 
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">API User</label>
+                  <div className={`space-y-2 ${formData.routerType === 'mikrotik' ? '' : 'col-span-2'}`}>
+                    <label className="text-sm font-medium">
+                      {formData.routerType === 'mikrotik' ? 'API Username' : 'Controller Username *'}
+                    </label>
                     <Input
                       placeholder="admin"
                       value={formData.apiUser}
                       onChange={(e) => handleInputChange("apiUser", e.target.value)}
                     />
+                    <p className="text-xs text-muted-foreground">
+                      {formData.routerType === 'mikrotik' 
+                        ? 'Default: admin' 
+                        : 'Your UniFi Controller admin username'}
+                    </p>
                   </div>
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">Admin Password *</label>
+                  <label className="text-sm font-medium">
+                    {formData.routerType === 'mikrotik' ? 'Admin Password *' : 'Controller Password *'}
+                  </label>
                   <div className="relative">
                     <Input
                       type={showPassword ? "text" : "password"}
-                      placeholder="Router admin password (blank if factory reset)"
+                      placeholder={formData.routerType === 'mikrotik' 
+                        ? 'Router admin password (blank if factory reset)' 
+                        : 'UniFi Controller password (required)'}
                       value={formData.apiPassword}
                       onChange={(e) => handleInputChange("apiPassword", e.target.value)}
                     />
@@ -917,7 +1034,9 @@ export const AddRouterWizard: React.FC<AddRouterWizardProps> = ({
                     <p className="text-sm text-destructive">{errors.apiPassword}</p>
                   )}
                   <p className="text-xs text-muted-foreground">
-                    Leave blank if router was just factory reset
+                    {formData.routerType === 'mikrotik' 
+                      ? 'Leave blank if router was just factory reset' 
+                      : 'Password for your UniFi Controller admin account'}
                   </p>
                 </div>
               </div>
@@ -1129,99 +1248,99 @@ export const AddRouterWizard: React.FC<AddRouterWizardProps> = ({
           {/* Step 3: Service Configuration */}
           {currentStep === 3 && (
             <div className="space-y-6">
-              <Alert>
-                <Info className="h-4 w-4" />
-                <AlertDescription>
-                  Configure the services you want to enable on this {formData.routerType === 'mikrotik' ? 'MikroTik' : 'UniFi'} router. 
-                  You can enable multiple services simultaneously.
-                </AlertDescription>
-              </Alert>
-
-              <div className="flex items-center space-x-2">
-                <Checkbox
-                  id="hotspotEnabled"
-                  checked={formData.hotspotEnabled}
-                  onCheckedChange={(checked) => handleInputChange("hotspotEnabled", checked === true)}
-                />
-                <label
-                  htmlFor="hotspotEnabled"
-                  className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                >
-                  Enable Hotspot Service
-                </label>
-              </div>
-
-              {formData.hotspotEnabled && (
-                <div className="space-y-4 pl-6 border-l-2 border-primary/20">
-                  <Alert>
-                    <Wifi className="h-4 w-4" />
-                    <AlertDescription>
-                      Hotspot will allow customers to connect and purchase internet packages
-                      through a captive portal. Your WiFi will be named "PAY N BROWSE".
-                    </AlertDescription>
-                  </Alert>
-
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">WiFi Network Name (SSID) *</label>
-                    <Input
-                      placeholder="PAY N BROWSE"
-                      value={formData.ssid}
-                      onChange={(e) => handleInputChange("ssid", e.target.value)}
-                    />
-                    {errors.ssid && <p className="text-sm text-destructive">{errors.ssid}</p>}
-                    <p className="text-xs text-muted-foreground">
-                      Default: PAY N BROWSE (recommended for brand consistency)
-                    </p>
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Hotspot Password *</label>
-                    <div className="relative">
-                      <Input
-                        type={showHotspotPassword ? "text" : "password"}
-                        placeholder="Minimum 8 characters"
-                        value={formData.hotspotPassword}
-                        onChange={(e) => handleInputChange("hotspotPassword", e.target.value)}
-                      />
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="absolute right-0 top-0 h-full"
-                        onClick={() => setShowHotspotPassword(!showHotspotPassword)}
-                      >
-                        {showHotspotPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                      </Button>
-                    </div>
-                    {errors.hotspotPassword && (
-                      <p className="text-sm text-destructive">{errors.hotspotPassword}</p>
-                    )}
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Maximum Users</label>
-                    <Input
-                      type="number"
-                      placeholder="50"
-                      value={formData.maxUsers}
-                      onChange={(e) => handleInputChange("maxUsers", e.target.value)}
-                    />
-                  </div>
-
-                  <Alert>
-                    <Shield className="h-4 w-4" />
-                    <AlertDescription>
-                      Your hotspot will be secured with WPA2 encryption for safe connections.
-                    </AlertDescription>
-                  </Alert>
-                </div>
-              )}
-
-              <Separator />
-
-              {/* PPPoE Service - Only for MikroTik */}
-              {formData.routerType === 'mikrotik' && (
+              {formData.routerType === 'mikrotik' ? (
                 <>
+                  <Alert>
+                    <Info className="h-4 w-4" />
+                    <AlertDescription>
+                      Configure the services you want to enable on this MikroTik router. 
+                      You can enable multiple services simultaneously.
+                    </AlertDescription>
+                  </Alert>
+
+                  <div className="flex items-center space-x-2">
+                    <Checkbox
+                      id="hotspotEnabled"
+                      checked={formData.hotspotEnabled}
+                      onCheckedChange={(checked) => handleInputChange("hotspotEnabled", checked === true)}
+                    />
+                    <label
+                      htmlFor="hotspotEnabled"
+                      className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                    >
+                      Enable Hotspot Service
+                    </label>
+                  </div>
+
+                  {formData.hotspotEnabled && (
+                    <div className="space-y-4 pl-6 border-l-2 border-primary/20">
+                      <Alert>
+                        <Wifi className="h-4 w-4" />
+                        <AlertDescription>
+                          Hotspot will allow customers to connect and purchase internet packages
+                          through a captive portal. Your WiFi will be named "PAY N BROWSE".
+                        </AlertDescription>
+                      </Alert>
+
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium">WiFi Network Name (SSID) *</label>
+                        <Input
+                          placeholder="PAY N BROWSE"
+                          value={formData.ssid}
+                          onChange={(e) => handleInputChange("ssid", e.target.value)}
+                        />
+                        {errors.ssid && <p className="text-sm text-destructive">{errors.ssid}</p>}
+                        <p className="text-xs text-muted-foreground">
+                          Default: PAY N BROWSE (recommended for brand consistency)
+                        </p>
+                      </div>
+
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium">Hotspot Password *</label>
+                        <div className="relative">
+                          <Input
+                            type={showHotspotPassword ? "text" : "password"}
+                            placeholder="Minimum 8 characters"
+                            value={formData.hotspotPassword}
+                            onChange={(e) => handleInputChange("hotspotPassword", e.target.value)}
+                          />
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="absolute right-0 top-0 h-full"
+                            onClick={() => setShowHotspotPassword(!showHotspotPassword)}
+                          >
+                            {showHotspotPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                          </Button>
+                        </div>
+                        {errors.hotspotPassword && (
+                          <p className="text-sm text-destructive">{errors.hotspotPassword}</p>
+                        )}
+                      </div>
+
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium">Maximum Users</label>
+                        <Input
+                          type="number"
+                          placeholder="50"
+                          value={formData.maxUsers}
+                          onChange={(e) => handleInputChange("maxUsers", e.target.value)}
+                        />
+                      </div>
+
+                      <Alert>
+                        <Shield className="h-4 w-4" />
+                        <AlertDescription>
+                          Your hotspot will be secured with WPA2 encryption for safe connections.
+                        </AlertDescription>
+                      </Alert>
+                    </div>
+                  )}
+
+                  <Separator />
+
+                  {/* PPPoE Service - Only for MikroTik */}
                   <div className="flex items-center space-x-2">
                     <Checkbox
                       id="pppoeEnabled"
@@ -1259,15 +1378,51 @@ export const AddRouterWizard: React.FC<AddRouterWizardProps> = ({
                     </div>
                   )}
                 </>
-              )}
+              ) : (
+                <>
+                  {/* UniFi - Connection Test Only */}
+                  <Alert>
+                    <Info className="h-4 w-4" />
+                    <AlertDescription>
+                      For UniFi routers, WiFi settings (SSID, password, guest networks) are managed through your UniFi Controller. 
+                      We'll test the connection to your controller and enable voucher management.
+                    </AlertDescription>
+                  </Alert>
 
-              {formData.routerType === 'unifi' && (
-                <Alert>
-                  <Info className="h-4 w-4" />
-                  <AlertDescription>
-                    UniFi routers currently support Hotspot service only. PPPoE support will be added in a future update.
-                  </AlertDescription>
-                </Alert>
+                  <Card>
+                    <CardContent className="pt-6">
+                      <div className="space-y-4">
+                        <div className="flex items-start gap-3">
+                          <CheckCircle2 className="h-5 w-5 text-green-500 mt-0.5" />
+                          <div className="flex-1">
+                            <p className="font-medium">Hotspot Service</p>
+                            <p className="text-sm text-muted-foreground">
+                              Will be enabled automatically for voucher generation
+                            </p>
+                          </div>
+                        </div>
+                        
+                        <div className="p-3 bg-muted rounded-lg">
+                          <p className="text-xs font-medium mb-2">What happens next:</p>
+                          <ul className="text-xs text-muted-foreground space-y-1 list-disc list-inside">
+                            <li>Test connection to UniFi Controller</li>
+                            <li>Sync available sites from controller</li>
+                            <li>Enable voucher management for selected site</li>
+                            <li>Manage WiFi settings through UniFi Controller</li>
+                          </ul>
+                        </div>
+
+                        <Alert className="border-blue-200 bg-blue-50 dark:bg-blue-950 dark:border-blue-800">
+                          <Wifi className="h-4 w-4 text-blue-600" />
+                          <AlertDescription className="text-sm">
+                            Configure your guest networks and WiFi settings in the UniFi Controller interface as usual. 
+                            This platform will only manage voucher codes for your hotspot.
+                          </AlertDescription>
+                        </Alert>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </>
               )}
             </div>
           )}
@@ -1425,7 +1580,13 @@ export const AddRouterWizard: React.FC<AddRouterWizardProps> = ({
                 )}
               </Button>
             ) : (
-              <Button onClick={handleSubmit} disabled={isSubmitting || !vpnVerification?.verified}>
+              <Button 
+                onClick={handleSubmit} 
+                disabled={
+                  isSubmitting || 
+                  (formData.routerType === 'mikrotik' && !vpnVerification?.verified)
+                }
+              >
                 {isSubmitting ? (
                   <>
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />

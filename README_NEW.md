@@ -1,6 +1,8 @@
 # MikroTik & UniFi Billing Portal 🚀
 
-A comprehensive multi-router billing and hotspot management system for ISPs and WiFi service providers. Supports both **MikroTik** and **UniFi** routers with automated voucher generation, M-Pesa payments, and real-time monitoring.
+A comprehensive multi-router billing and hotspot management system for ISPs and WiFi service
+providers. Supports both **MikroTik** and **UniFi** routers with automated voucher generation,
+M-Pesa payments, and real-time monitoring.
 
 [![Next.js](https://img.shields.io/badge/Next.js-15-black)](https://nextjs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0-blue)](https://www.typescriptlang.org/)
@@ -12,23 +14,27 @@ A comprehensive multi-router billing and hotspot management system for ISPs and 
 ## 🌟 Features
 
 ### Multi-Router Support
+
 - ✅ **MikroTik RouterOS** - Full hotspot and PPPoE support
 - ✅ **UniFi Controller** - Hotspot voucher management
 - ✅ **Extensible Architecture** - Easy to add new router types
 
 ### Service Management
+
 - 🔥 **Hotspot Service** - WiFi captive portal with voucher system
 - 🌐 **PPPoE Service** - Internet service via PPPoE credentials (MikroTik only)
 - 📊 **Package Management** - Sync packages from routers automatically
 - 🎫 **Voucher Generation** - Bulk voucher creation for both services
 
 ### Payment Integration
+
 - 💰 **M-Pesa STK Push** - Instant mobile payments
 - 💳 **KopoKopo** - Payment gateway integration
 - 🔔 **Real-time Webhooks** - Automatic voucher assignment after payment
 - 💵 **Multi-currency Support** - KES primary, extensible to others
 
 ### Admin Dashboard
+
 - 📈 **Real-time Analytics** - Revenue, users, and usage statistics
 - 🎛️ **Router Management** - Add, configure, and monitor routers
 - 👥 **User Management** - Customer accounts and subscriptions
@@ -36,6 +42,7 @@ A comprehensive multi-router billing and hotspot management system for ISPs and 
 - 📱 **Responsive Design** - Works on desktop, tablet, and mobile
 
 ### Security & Authentication
+
 - 🔐 **NextAuth.js** - Secure authentication with credentials and OAuth
 - 🛡️ **Role-based Access** - Admin, ISP, and Customer roles
 - 🔒 **API Security** - Protected endpoints with JWT tokens
@@ -64,12 +71,12 @@ const packages = await provider.syncPackagesFromRouter('hotspot');
 
 ### Supported Router Types
 
-| Router Type | Hotspot | PPPoE | VPN | Status |
-|-------------|---------|-------|-----|--------|
+| Router Type | Hotspot | PPPoE | VPN | Status     |
+| ----------- | ------- | ----- | --- | ---------- |
 | MikroTik    | ✅      | ✅    | ✅  | Production |
 | UniFi       | ✅      | ⏳    | ⏳  | Production |
-| pfSense     | ⏳      | ⏳    | ⏳  | Planned |
-| OpenWRT     | ⏳      | ⏳    | ⏳  | Planned |
+| pfSense     | ⏳      | ⏳    | ⏳  | Planned    |
+| OpenWRT     | ⏳      | ⏳    | ⏳  | Planned    |
 
 ---
 
@@ -137,6 +144,7 @@ Open [http://localhost:3000](http://localhost:3000) to see the application.
 ## 📖 Documentation
 
 ### Core Documentation
+
 - [**PHASE_6_TESTING.md**](./PHASE_6_TESTING.md) - Testing and migration guide
 - [**AUTHENTICATION.md**](./AUTHENTICATION.md) - Auth setup and security
 - [**VOUCHER_PURCHASE_FLOW.md**](./VOUCHER_PURCHASE_FLOW.md) - Purchase workflow
@@ -264,6 +272,7 @@ POST /api/routers/{id}/vouchers/generate?service=hotspot
 ## 🛠️ Technology Stack
 
 ### Frontend
+
 - **Next.js 15** - React framework with App Router
 - **TypeScript** - Type safety and better DX
 - **Tailwind CSS** - Utility-first styling
@@ -272,17 +281,20 @@ POST /api/routers/{id}/vouchers/generate?service=hotspot
 - **Zustand** - State management
 
 ### Backend
+
 - **Next.js API Routes** - Serverless API endpoints
 - **MongoDB** - NoSQL database
 - **NextAuth.js** - Authentication
 - **Zod** - Schema validation
 
 ### Router Integration
+
 - **RouterOS API** - MikroTik communication
 - **UniFi Controller API** - UniFi communication
 - **SSH2** - Backup communication method
 
 ### Payment Processing
+
 - **M-Pesa Daraja API** - STK Push and C2B
 - **KopoKopo API** - Payment gateway
 - **Africa's Talking** - SMS notifications
@@ -320,17 +332,20 @@ NODE_TLS_REJECT_UNAUTHORIZED=0
 ### MikroTik Router Setup
 
 1. **Enable API**
+
    ```
    /ip service enable api
    /ip service set api port=8728
    ```
 
 2. **Create API User**
+
    ```
    /user add name=api password=secure-password group=full
    ```
 
 3. **Configure Hotspot** (if using hotspot)
+
    ```
    /ip hotspot setup
    # Follow wizard

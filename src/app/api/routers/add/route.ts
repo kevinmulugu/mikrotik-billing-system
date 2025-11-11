@@ -12,6 +12,7 @@ import { NotificationService } from '@/lib/services/notification';
 
 interface AddRouterRequest {
   name: string;
+  routerType: 'mikrotik' | 'unifi'; // Router vendor type
   model: string;
   serialNumber?: string;
   location: {
@@ -31,6 +32,9 @@ interface AddRouterRequest {
   pppoeEnabled: boolean;
   pppoeInterface?: string;
   defaultProfile?: string;
+  // UniFi-specific fields
+  controllerUrl?: string;
+  siteId?: string;
   // NEW: VPN configuration from client
   vpnConfigured?: boolean;
   vpnIP?: string;
@@ -50,6 +54,9 @@ export async function POST(req: NextRequest) {
     const userId = session.user.id;
     const body: AddRouterRequest = await req.json();
 
+    // Default to mikrotik if not specified
+    const routerType = body.routerType || 'mikrotik';
+
     // Validate required fields
     if (!body.name || body.name.length < 3) {
       return NextResponse.json(
@@ -62,32 +69,60 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Router model is required' }, { status: 400 });
     }
 
-    if (!body.ipAddress || !MikroTikService.validateIpAddress(body.ipAddress)) {
-      return NextResponse.json({ error: 'Valid IP address is required' }, { status: 400 });
-    }
-
-    if (!body.apiPassword) {
-      return NextResponse.json({ error: 'API password is required' }, { status: 400 });
-    }
-
     if (!body.location.county) {
       return NextResponse.json({ error: 'County is required' }, { status: 400 });
     }
 
-    // Validate hotspot settings if enabled
-    if (body.hotspotEnabled) {
-      if (!body.ssid || body.ssid.length < 3) {
-        return NextResponse.json(
-          { error: 'SSID must be at least 3 characters when hotspot is enabled' },
-          { status: 400 }
-        );
+    // Router-type specific validation
+    if (routerType === 'mikrotik') {
+      // MikroTik-specific validation
+      if (!body.ipAddress || !MikroTikService.validateIpAddress(body.ipAddress)) {
+        return NextResponse.json({ error: 'Valid IP address is required' }, { status: 400 });
       }
-      if (!body.hotspotPassword || body.hotspotPassword.length < 8) {
-        return NextResponse.json(
-          { error: 'Hotspot password must be at least 8 characters' },
-          { status: 400 }
-        );
+
+      if (!body.apiPassword) {
+        return NextResponse.json({ error: 'API password is required' }, { status: 400 });
       }
+
+      // Validate hotspot settings if enabled
+      if (body.hotspotEnabled) {
+        if (!body.ssid || body.ssid.length < 3) {
+          return NextResponse.json(
+            { error: 'SSID must be at least 3 characters when hotspot is enabled' },
+            { status: 400 }
+          );
+        }
+        if (!body.hotspotPassword || body.hotspotPassword.length < 8) {
+          return NextResponse.json(
+            { error: 'Hotspot password must be at least 8 characters' },
+            { status: 400 }
+          );
+        }
+      }
+    } else if (routerType === 'unifi') {
+      // UniFi-specific validation
+      if (!body.controllerUrl) {
+        return NextResponse.json({ error: 'UniFi Controller URL is required' }, { status: 400 });
+      }
+
+      // Clean the controller URL: remove backticks, quotes, and trim
+      body.controllerUrl = body.controllerUrl.replace(/[`'"]/g, '').trim();
+
+      // Validate URL format
+      try {
+        const url = new URL(body.controllerUrl);
+        if (!url.protocol.startsWith('http')) {
+          return NextResponse.json({ error: 'Controller URL must start with http:// or https://' }, { status: 400 });
+        }
+      } catch (error) {
+        return NextResponse.json({ error: 'Invalid Controller URL format. Expected format: https://192.168.1.1:8443' }, { status: 400 });
+      }
+
+      if (!body.apiUser || !body.apiPassword) {
+        return NextResponse.json({ error: 'UniFi Controller credentials are required' }, { status: 400 });
+      }
+
+      // UniFi doesn't need SSID/password validation - managed in controller
     }
 
     // Connect to MongoDB
@@ -233,86 +268,158 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // SKIP server-side connection test if client already did it
-    // (Client-side bridge approach)
+    // Router info variables
     let macAddress = 'Unknown';
     let identity = 'Unknown';
     let firmwareVersion = 'Unknown';
+    let controllerVersion = 'Unknown';
+    let selectedSite = body.siteId || '';
+    let sites: any[] = [];
 
-    // Connection config - will use VPN IP if provided
-    const connectionConfig = {
-      ipAddress: body.vpnConfigured && body.vpnIP ? body.vpnIP : body.ipAddress,
-      port: parseInt(body.port) || 8728,
-      username: body.apiUser || 'admin',
-      password: body.apiPassword,
-    };
-
-    // If VPN was configured by client, verify it's working
-    if (body.vpnConfigured && body.vpnIP) {
-      console.log(`[Router Add] VPN pre-configured by client, testing connection...`);
-
-      try {
-        const vpnTest = await MikroTikService.testConnection(connectionConfig);
-        if (vpnTest.success) {
-          console.log(`[Router Add] ✓ VPN connection verified`);
-          macAddress = await MikroTikService.getRouterMacAddress(connectionConfig);
-          const identityResult = await MikroTikService.getIdentity(connectionConfig);
-          identity = identityResult || 'Unknown';
-          firmwareVersion = vpnTest.data?.routerInfo?.version || 'Unknown';
-        } else {
-          console.warn(`[Router Add] ⚠ VPN connection test failed, will retry`);
+    // Connection config - router-type specific
+    const connectionConfig = routerType === 'mikrotik' 
+      ? {
+          ipAddress: body.vpnConfigured && body.vpnIP ? body.vpnIP : body.ipAddress,
+          port: parseInt(body.port) || 8728,
+          username: body.apiUser || 'admin',
+          password: body.apiPassword,
         }
-      } catch (vpnTestError) {
-        console.error(`[Router Add] VPN test error:`, vpnTestError);
+      : {
+          // UniFi connection config
+          controllerUrl: body.controllerUrl || '',
+          username: body.apiUser,
+          password: body.apiPassword,
+          siteId: body.siteId,
+        };
+
+    // Router-type specific connection testing
+    if (routerType === 'mikrotik') {
+      // MikroTik: Test VPN connection if configured
+      if (body.vpnConfigured && body.vpnIP) {
+        console.log(`[Router Add] VPN pre-configured by client, testing connection...`);
+
+        try {
+          const vpnTest = await MikroTikService.testConnection(connectionConfig as any);
+          if (vpnTest.success) {
+            console.log(`[Router Add] ✓ VPN connection verified`);
+            macAddress = await MikroTikService.getRouterMacAddress(connectionConfig as any);
+            const identityResult = await MikroTikService.getIdentity(connectionConfig as any);
+            identity = identityResult || 'Unknown';
+            firmwareVersion = vpnTest.data?.routerInfo?.version || 'Unknown';
+          } else {
+            console.warn(`[Router Add] ⚠ VPN connection test failed, will retry`);
+          }
+        } catch (vpnTestError) {
+          console.error(`[Router Add] VPN test error:`, vpnTestError);
+        }
+      }
+    } else if (routerType === 'unifi') {
+      // UniFi: Test controller connection
+      console.log(`[Router Add] Testing UniFi Controller connection...`);
+      
+      try {
+        const { UniFiService } = await import('@/lib/services/unifi');
+        const unifiService = new UniFiService({
+          controllerUrl: body.controllerUrl!,
+          username: body.apiUser,
+          password: body.apiPassword,
+          ...(body.siteId && { site: body.siteId }),
+        });
+
+        // Login to get controller info
+        await unifiService.login();
+        
+        // Get available sites
+        sites = await unifiService.getSites();
+        if (sites.length > 0) {
+          if (!selectedSite) {
+            // Auto-select first site if not specified
+            selectedSite = sites[0].name;
+          }
+          controllerVersion = 'Connected'; // Simplified version check
+          console.log(`[Router Add] ✓ UniFi Controller connected, found ${sites.length} sites`);
+        } else {
+          throw new Error('No sites found in UniFi Controller');
+        }
+
+      } catch (unifiError) {
+        console.error(`[Router Add] UniFi connection test failed:`, unifiError);
+        return NextResponse.json(
+          { 
+            error: 'Failed to connect to UniFi Controller', 
+            details: unifiError instanceof Error ? unifiError.message : 'Unknown error'
+          },
+          { status: 400 }
+        );
       }
     }
 
     // ============================================
-    // VPN TUNNEL OBJECT
+    // VPN TUNNEL OBJECT (MikroTik only)
     // ============================================
 
     let vpnTunnel: any = null;
-    let vpnProvisioningSuccess = body.vpnConfigured || false;
+    let vpnProvisioningSuccess = false;
 
-    if (body.vpnConfigured && body.vpnIP && body.vpnPublicKey) {
-      // VPN was configured by client-side bridge
-      vpnTunnel = {
-        enabled: true,
-        clientPublicKey: body.vpnPublicKey,
-        serverPublicKey: process.env.VPN_SERVER_PUBLIC_KEY || '',
-        assignedVPNIP: body.vpnIP,
-        status: 'connected',
-        lastHandshake: new Date(),
-        provisionedAt: new Date(),
-      };
+    if (routerType === 'mikrotik') {
+      vpnProvisioningSuccess = body.vpnConfigured || false;
 
-      console.log(`[Router Add] ✓ Using client-configured VPN: ${body.vpnIP}`);
+      if (body.vpnConfigured && body.vpnIP && body.vpnPublicKey) {
+        // VPN was configured by client-side bridge
+        vpnTunnel = {
+          enabled: true,
+          clientPublicKey: body.vpnPublicKey,
+          serverPublicKey: process.env.VPN_SERVER_PUBLIC_KEY || '',
+          assignedVPNIP: body.vpnIP,
+          status: 'connected',
+          lastHandshake: new Date(),
+          provisionedAt: new Date(),
+        };
+
+        console.log(`[Router Add] ✓ Using client-configured VPN: ${body.vpnIP}`);
+      } else {
+        // VPN not configured - mark as pending
+        vpnTunnel = {
+          enabled: false,
+          status: 'pending',
+          error: 'VPN configuration pending',
+          lastAttempt: new Date(),
+        };
+
+        console.log(`[Router Add] ⚠ VPN not configured, marked as pending`);
+      }
     } else {
-      // VPN not configured - mark as pending
+      // UniFi routers don't use VPN
       vpnTunnel = {
         enabled: false,
-        status: 'pending',
-        error: 'VPN configuration pending',
-        lastAttempt: new Date(),
+        status: 'disconnected',  // Use 'disconnected' instead of 'not_applicable' for schema compatibility
+        error: 'VPN not used for UniFi controllers',
+        clientPublicKey: null,
+        serverPublicKey: null,
+        assignedVPNIP: null,
+        lastHandshake: null,
+        provisionedAt: null,
+        lastAttempt: null,
       };
-
-      console.log(`[Router Add] ⚠ VPN not configured, marked as pending`);
+      console.log(`[Router Add] UniFi router - VPN not applicable`);
     }
 
-    // Encrypt API password
-    const encryptedPassword = MikroTikService.encryptPassword(body.apiPassword);
+    // Encrypt API password (for MikroTik)
+    const encryptedPassword = routerType === 'mikrotik' 
+      ? MikroTikService.encryptPassword(body.apiPassword)
+      : body.apiPassword; // UniFi passwords stored as-is (consider encrypting in production)
 
     // Create router document with multi-router schema
     const routerDocument = {
       userId: new ObjectId(userId),
-      // NEW: Router type (defaults to mikrotik)
-      routerType: 'mikrotik',
+      // Router type
+      routerType: routerType,
       routerInfo: {
         name: body.name,
         model: body.model,
         serialNumber: body.serialNumber || '',
         macAddress: macAddress,
-        firmwareVersion: firmwareVersion,
+        firmwareVersion: routerType === 'mikrotik' ? firmwareVersion : controllerVersion,
         location: {
           name: body.location.name || '',
           coordinates: {
@@ -324,28 +431,43 @@ export async function POST(req: NextRequest) {
             .join(', '),
         },
       },
-      connection: {
-        localIP: body.ipAddress,
-        vpnIP: vpnTunnel?.assignedVPNIP,
-        preferVPN: vpnProvisioningSuccess,
-        ipAddress: vpnProvisioningSuccess
-          ? vpnTunnel.assignedVPNIP
-          : body.ipAddress,
-        port: parseInt(body.port) || 8728,
-        apiUser: body.apiUser || 'admin',
-        apiPassword: encryptedPassword,
-        restApiEnabled: true,
-        sshEnabled: false,
-      },
+      connection: routerType === 'mikrotik' 
+        ? {
+            localIP: body.ipAddress,
+            vpnIP: vpnTunnel?.assignedVPNIP,
+            preferVPN: vpnProvisioningSuccess,
+            ipAddress: vpnProvisioningSuccess
+              ? vpnTunnel.assignedVPNIP
+              : body.ipAddress,
+            port: parseInt(body.port) || 8728,
+            apiUser: body.apiUser || 'admin',
+            apiPassword: encryptedPassword,
+            restApiEnabled: true,
+            sshEnabled: false,
+          }
+        : {
+            // UniFi connection details
+            controllerUrl: body.controllerUrl,
+            siteId: selectedSite,
+            apiUser: body.apiUser,
+            apiPassword: encryptedPassword,
+            localIP: body.controllerUrl || '',  // Use controller URL as localIP for schema compatibility
+            vpnIP: null,  // UniFi doesn't use VPN
+            preferVPN: false,  // UniFi doesn't use VPN
+            ipAddress: body.controllerUrl || '',
+            port: 443,
+            restApiEnabled: true,
+            sshEnabled: false,
+          },
       vpnTunnel: vpnTunnel,
-      // NEW: Service-aware configuration
+      // Service-aware configuration
       services: {
         hotspot: {
           enabled: body.hotspotEnabled,
           packages: [], // Will be synced later
           lastSynced: null,
         },
-        ...(body.pppoeEnabled && {
+        ...(routerType === 'mikrotik' && body.pppoeEnabled && {
           pppoe: {
             enabled: true,
             interface: body.pppoeInterface || 'ether1',
@@ -354,46 +476,82 @@ export async function POST(req: NextRequest) {
           },
         }),
       },
-      // NEW: Router capabilities
+      // Router capabilities
       capabilities: {
-        supportsVPN: true,
-        supportedServices: body.pppoeEnabled ? ['hotspot', 'pppoe'] : ['hotspot'],
-        captivePortalMethod: 'http_upload',
-        voucherFormat: 'username_password',
+        supportsVPN: routerType === 'mikrotik',
+        supportedServices: routerType === 'mikrotik' && body.pppoeEnabled 
+          ? ['hotspot', 'pppoe'] 
+          : ['hotspot'],
+        captivePortalMethod: routerType === 'mikrotik' ? 'http_upload' : 'controller_managed',
+        voucherFormat: routerType === 'mikrotik' ? 'username_password' : 'numeric_code',
       },
-      // NEW: Vendor-specific config
-      vendorConfig: {
-        mikrotik: {
-          firmwareVersion: firmwareVersion,
-          identity: identity,
-          architecture: 'unknown', // Will be updated on first sync
-        },
-      },
-      // Legacy configuration (kept for backward compatibility)
-      configuration: {
-        hotspot: {
-          enabled: body.hotspotEnabled,
-          ssid: body.ssid || '',
-          password: body.hotspotPassword || '',
-          interface: 'wlan1',
-          ipPool: '10.5.50.0/24',
-          dnsServers: ['8.8.8.8', '8.8.4.4'],
-          maxUsers: parseInt(body.maxUsers || '50'),
-        },
-        pppoe: {
-          enabled: body.pppoeEnabled,
-          interface: body.pppoeInterface || 'ether1',
-          ipPool: '10.10.10.0/24',
-          dnsServers: ['8.8.8.8', '8.8.4.4'],
-          defaultProfile: body.defaultProfile || 'default',
-        },
-        network: {
-          lanInterface: 'bridge',
-          wanInterface: 'ether1',
-          lanSubnet: '192.168.88.0/24',
-          dhcpRange: '192.168.88.10-192.168.88.254',
-        },
-      },
+      // Vendor-specific config
+      vendorConfig: routerType === 'mikrotik'
+        ? {
+            mikrotik: {
+              firmwareVersion: firmwareVersion,
+              identity: identity,
+              architecture: 'unknown', // Will be updated on first sync
+            },
+          }
+        : {
+            unifi: {
+              controllerVersion: controllerVersion,
+              selectedSite: selectedSite,
+              sites: sites.map((s: any) => ({ name: s.name, desc: s.desc })),
+            },
+          },
+      // Legacy configuration (kept for backward compatibility with MikroTik)
+      configuration: routerType === 'mikrotik'
+        ? {
+            hotspot: {
+              enabled: body.hotspotEnabled,
+              ssid: body.ssid || '',
+              password: body.hotspotPassword || '',
+              interface: 'wlan1',
+              ipPool: '10.5.50.0/24',
+              dnsServers: ['8.8.8.8', '8.8.4.4'],
+              maxUsers: parseInt(body.maxUsers || '50'),
+            },
+            pppoe: {
+              enabled: body.pppoeEnabled,
+              interface: body.pppoeInterface || 'ether1',
+              ipPool: '10.10.10.0/24',
+              dnsServers: ['8.8.8.8', '8.8.4.4'],
+              defaultProfile: body.defaultProfile || 'default',
+            },
+            network: {
+              lanInterface: 'bridge',
+              wanInterface: 'ether1',
+              lanSubnet: '192.168.88.0/24',
+              dhcpRange: '192.168.88.10-192.168.88.254',
+            },
+          }
+        : {
+            // UniFi configuration (minimal - managed in controller)
+            hotspot: {
+              enabled: body.hotspotEnabled,
+              ssid: 'Managed in UniFi Controller',
+              password: '',
+              interface: '',
+              ipPool: '',
+              dnsServers: [],
+              maxUsers: 0,
+            },
+            pppoe: {
+              enabled: false,
+              interface: '',
+              ipPool: '',
+              dnsServers: [],
+              defaultProfile: '',
+            },
+            network: {
+              lanInterface: '',
+              wanInterface: '',
+              lanSubnet: '',
+              dhcpRange: '',
+            },
+          },
       health: {
         status: 'online',
         lastSeen: new Date(),
@@ -427,10 +585,10 @@ export async function POST(req: NextRequest) {
     console.log(`[Router Add] ✓ Router created with ID: ${routerId}`);
 
     // ============================================
-    // SAVE VPN TUNNEL TO DATABASE (FIXED)
+    // SAVE VPN TUNNEL TO DATABASE (MikroTik only)
     // ============================================
 
-    if (vpnProvisioningSuccess && body.vpnPublicKey && body.vpnIP) {
+    if (routerType === 'mikrotik' && vpnProvisioningSuccess && body.vpnPublicKey && body.vpnIP) {
       try {
         console.log(`[Router Add] Saving VPN tunnel configuration...`);
 
@@ -515,34 +673,53 @@ export async function POST(req: NextRequest) {
     }
 
     // ============================================
-    // EXECUTE ROUTER CONFIGURATION
+    // EXECUTE ROUTER CONFIGURATION (MikroTik only)
     // ============================================
 
-    console.log(`[Router Add] Starting router configuration...`);
+    let configResult: any = {
+      success: true,
+      completedSteps: [],
+      failedSteps: [],
+      warnings: [],
+    };
 
-    let configResult;
-    try {
-      configResult = await MikroTikOrchestrator.configureRouter(connectionConfig, {
-        hotspotEnabled: body.hotspotEnabled,
-        ssid: body.ssid,
-        pppoeEnabled: body.pppoeEnabled,
-        pppoeInterfaces: ['ether2', 'ether3'],
-        wanInterface: 'ether1',
-        bridgeInterfaces: ['wlan1', 'ether4'],
-      });
+    if (routerType === 'mikrotik') {
+      console.log(`[Router Add] Starting MikroTik router configuration...`);
 
-      console.log(`[Router Add] Configuration result:`, {
-        success: configResult.success,
-        completedSteps: configResult.completedSteps,
-        failedSteps: configResult.failedSteps,
-      });
-    } catch (configError) {
-      console.error(`[Router Add] Configuration error:`, configError);
+      try {
+        const mikrotikConfig = connectionConfig as { ipAddress: string; port: number; username: string; password: string };
+        
+        configResult = await MikroTikOrchestrator.configureRouter(mikrotikConfig, {
+          hotspotEnabled: body.hotspotEnabled,
+          ssid: body.ssid,
+          pppoeEnabled: body.pppoeEnabled,
+          pppoeInterfaces: ['ether2', 'ether3'],
+          wanInterface: 'ether1',
+          bridgeInterfaces: ['wlan1', 'ether4'],
+        });
+
+        console.log(`[Router Add] Configuration result:`, {
+          success: configResult.success,
+          completedSteps: configResult.completedSteps,
+          failedSteps: configResult.failedSteps,
+        });
+      } catch (configError) {
+        console.error(`[Router Add] Configuration error:`, configError);
+        configResult = {
+          success: false,
+          completedSteps: [],
+          failedSteps: ['all'],
+          warnings: [configError instanceof Error ? configError.message : 'Unknown configuration error'],
+        };
+      }
+    } else {
+      // UniFi routers don't need server-side configuration
+      console.log(`[Router Add] UniFi router - skipping server-side configuration`);
       configResult = {
-        success: false,
-        completedSteps: [],
-        failedSteps: ['all'],
-        warnings: [configError instanceof Error ? configError.message : 'Unknown configuration error'],
+        success: true,
+        completedSteps: ['controller_connected'],
+        failedSteps: [],
+        warnings: ['Configuration managed through UniFi Controller'],
       };
     }
 
@@ -602,20 +779,22 @@ export async function POST(req: NextRequest) {
       timestamp: new Date(),
     });
 
-    // === Push captive portal files to router (if hotspot enabled) ===
-    if (body.hotspotEnabled) {
+    // === Push captive portal files to router (MikroTik hotspot only) ===
+    if (routerType === 'mikrotik' && body.hotspotEnabled) {
       try {
-        console.log(`[Router Add] Pushing captive portal files to router ${routerId}...`);
+        console.log(`[Router Add] Pushing captive portal files to MikroTik router ${routerId}...`);
 
+        const mikrotikConfig = connectionConfig as { ipAddress: string; port: number; username: string; password: string };
+        
         // Decrypt API password for use
         const decryptedPassword = MikroTikService.decryptPassword(encryptedPassword);
 
         // Upload to simple /hotspot path (works on all MikroTik routers)
         const uploadResult = await MikroTikService.uploadCaptivePortalFiles(
           {
-            ipAddress: connectionConfig.ipAddress,
-            port: connectionConfig.port,
-            username: connectionConfig.username,
+            ipAddress: mikrotikConfig.ipAddress,
+            port: mikrotikConfig.port,
+            username: mikrotikConfig.username,
             password: decryptedPassword,
           },
           {
@@ -637,10 +816,12 @@ export async function POST(req: NextRequest) {
           // === Verify upload before restarting ===
           console.log(`[Router Add] Verifying captive portal files...`);
           
+          const mikrotikConfig = connectionConfig as { ipAddress: string; port: number; username: string; password: string };
+          
           const hotspotExists = await MikroTikService.confirmHotspotDirectory({
-            ipAddress: connectionConfig.ipAddress,
-            port: connectionConfig.port,
-            username: connectionConfig.username,
+            ipAddress: mikrotikConfig.ipAddress,
+            port: mikrotikConfig.port,
+            username: mikrotikConfig.username,
             password: decryptedPassword,
           });
 
@@ -651,10 +832,12 @@ export async function POST(req: NextRequest) {
             try {
               console.log(`[Router Add] Restarting router to apply captive portal changes...`);
             
+              const mikrotikConfig = connectionConfig as { ipAddress: string; port: number; username: string; password: string };
+              
               const restartResult = await MikroTikService.restartRouter({
-                ipAddress: connectionConfig.ipAddress,
-                port: connectionConfig.port,
-                username: connectionConfig.username,
+                ipAddress: mikrotikConfig.ipAddress,
+                port: mikrotikConfig.port,
+                username: mikrotikConfig.username,
                 password: decryptedPassword,
               });
 
