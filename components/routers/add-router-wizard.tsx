@@ -43,6 +43,7 @@ import { toast } from "sonner";
 
 interface RouterFormData {
   name: string;
+  routerType: 'mikrotik' | 'unifi'; // NEW: Router vendor type
   model: string;
   serialNumber: string;
   location: {
@@ -55,6 +56,10 @@ interface RouterFormData {
   port: string;
   apiUser: string;
   apiPassword: string;
+  // UniFi-specific fields
+  controllerUrl?: string;
+  siteId?: string;
+  // Service configuration
   hotspotEnabled: boolean;
   ssid: string;
   hotspotPassword: string;
@@ -92,7 +97,7 @@ interface VPNVerification {
 const steps = [
   { id: 1, title: "Basic Information", icon: Wifi },
   { id: 2, title: "VPN Setup", icon: Lock },
-  { id: 3, title: "Hotspot Setup", icon: Shield },
+  { id: 3, title: "Service Configuration", icon: Shield },
   { id: 4, title: "Review & Connect", icon: CheckCircle2 },
 ];
 
@@ -118,6 +123,7 @@ export const AddRouterWizard: React.FC<AddRouterWizardProps> = ({
 
   const [formData, setFormData] = useState<RouterFormData>({
     name: "",
+    routerType: "mikrotik", // Default to MikroTik
     model: "",
     serialNumber: "",
     location: {
@@ -201,7 +207,7 @@ export const AddRouterWizard: React.FC<AddRouterWizardProps> = ({
     "Kisumu", "Homa Bay", "Migori", "Kisii", "Nyamira", "Nairobi",
   ];
 
-  const routerModels = [
+  const mikrotikModels = [
     "MikroTik hAP ac²",
     "MikroTik hAP ac³",
     "MikroTik hAP lite",
@@ -211,6 +217,20 @@ export const AddRouterWizard: React.FC<AddRouterWizardProps> = ({
     "MikroTik CCR2004",
     "Other",
   ];
+
+  const unifiModels = [
+    "UniFi Dream Machine",
+    "UniFi Dream Machine Pro",
+    "UniFi Dream Machine SE",
+    "UniFi Dream Router",
+    "UniFi Security Gateway",
+    "UniFi Security Gateway Pro",
+    "Other",
+  ];
+
+  const getRouterModels = () => {
+    return formData.routerType === 'mikrotik' ? mikrotikModels : unifiModels;
+  };
 
   const handleInputChange = (field: string, value: string | boolean) => {
     setFormData((prev) => {
@@ -706,6 +726,53 @@ export const AddRouterWizard: React.FC<AddRouterWizardProps> = ({
                 </div>
 
                 <div className="space-y-2">
+                  <label className="text-sm font-medium">Router Type *</label>
+                  <Select
+                    value={formData.routerType}
+                    onValueChange={(value) => {
+                      handleInputChange("routerType", value);
+                      // Reset model and service-specific fields when router type changes
+                      handleInputChange("model", "");
+                      if (value === 'unifi') {
+                        // UniFi defaults
+                        handleInputChange("ipAddress", "");
+                        handleInputChange("port", "443");
+                        handleInputChange("pppoeEnabled", false);
+                      } else {
+                        // MikroTik defaults
+                        handleInputChange("ipAddress", "192.168.88.1");
+                        handleInputChange("port", "8728");
+                      }
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select router type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="mikrotik">
+                        <div className="flex items-center gap-2">
+                          <Network className="h-4 w-4" />
+                          <div>
+                            <div className="font-medium">MikroTik</div>
+                            <div className="text-xs text-muted-foreground">RouterOS-based routers</div>
+                          </div>
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="unifi">
+                        <div className="flex items-center gap-2">
+                          <Wifi className="h-4 w-4" />
+                          <div>
+                            <div className="font-medium">UniFi</div>
+                            <div className="text-xs text-muted-foreground">Ubiquiti UniFi controllers</div>
+                          </div>
+                        </div>
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {errors.routerType && <p className="text-sm text-destructive">{errors.routerType}</p>}
+                </div>
+
+                <div className="space-y-2">
                   <label className="text-sm font-medium">Router Model *</label>
                   <Select
                     value={formData.model}
@@ -715,7 +782,7 @@ export const AddRouterWizard: React.FC<AddRouterWizardProps> = ({
                       <SelectValue placeholder="Select router model" />
                     </SelectTrigger>
                     <SelectContent>
-                      {routerModels.map((model) => (
+                      {getRouterModels().map((model) => (
                         <SelectItem key={model} value={model}>
                           {model}
                         </SelectItem>
@@ -1059,9 +1126,17 @@ export const AddRouterWizard: React.FC<AddRouterWizardProps> = ({
             </div>
           )}
 
-          {/* Step 3: Hotspot Setup */}
+          {/* Step 3: Service Configuration */}
           {currentStep === 3 && (
             <div className="space-y-6">
+              <Alert>
+                <Info className="h-4 w-4" />
+                <AlertDescription>
+                  Configure the services you want to enable on this {formData.routerType === 'mikrotik' ? 'MikroTik' : 'UniFi'} router. 
+                  You can enable multiple services simultaneously.
+                </AlertDescription>
+              </Alert>
+
               <div className="flex items-center space-x-2">
                 <Checkbox
                   id="hotspotEnabled"
@@ -1144,25 +1219,53 @@ export const AddRouterWizard: React.FC<AddRouterWizardProps> = ({
 
               <Separator />
 
-              <div className="flex items-center space-x-2">
-                <Checkbox
-                  id="pppoeEnabled"
-                  checked={formData.pppoeEnabled}
-                  onCheckedChange={(checked) => handleInputChange("pppoeEnabled", checked === true)}
-                />
-                <label
-                  htmlFor="pppoeEnabled"
-                  className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                >
-                  Enable PPPoE Service
-                </label>
-              </div>
+              {/* PPPoE Service - Only for MikroTik */}
+              {formData.routerType === 'mikrotik' && (
+                <>
+                  <div className="flex items-center space-x-2">
+                    <Checkbox
+                      id="pppoeEnabled"
+                      checked={formData.pppoeEnabled}
+                      onCheckedChange={(checked) => handleInputChange("pppoeEnabled", checked === true)}
+                    />
+                    <label
+                      htmlFor="pppoeEnabled"
+                      className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                    >
+                      Enable PPPoE Service
+                    </label>
+                  </div>
 
-              {formData.pppoeEnabled && (
+                  {formData.pppoeEnabled && (
+                    <div className="space-y-4 pl-6 border-l-2 border-primary/20">
+                      <Alert>
+                        <Info className="h-4 w-4" />
+                        <AlertDescription>
+                          PPPoE service allows customers to connect using PPPoE clients. You can manage PPPoE profiles and users after router setup.
+                        </AlertDescription>
+                      </Alert>
+
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium">PPPoE Interface</label>
+                        <Input
+                          placeholder="e.g., ether1"
+                          value={formData.pppoeInterface}
+                          onChange={(e) => handleInputChange("pppoeInterface", e.target.value)}
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          The network interface where PPPoE server will listen (default: ether1)
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+
+              {formData.routerType === 'unifi' && (
                 <Alert>
                   <Info className="h-4 w-4" />
                   <AlertDescription>
-                    PPPoE service will be configured automatically. You can manage users after router setup.
+                    UniFi routers currently support Hotspot service only. PPPoE support will be added in a future update.
                   </AlertDescription>
                 </Alert>
               )}
