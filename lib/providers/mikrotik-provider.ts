@@ -183,13 +183,49 @@ export class MikroTikProvider implements RouterProvider {
   private async generatePPPoEVouchers(
     params: VoucherGenerationParams
   ): Promise<VoucherGenerationResult> {
-    // TODO: Implement PPPoE secret generation
-    // This will be implemented in Phase 2.4
-    return {
-      success: false,
-      vouchers: [],
-      error: 'PPPoE voucher generation not implemented yet',
+    const vouchers: GeneratedVoucher[] = [];
+    
+    for (let i = 0; i < params.quantity; i++) {
+      const username = this.generateVoucherCode(8);
+      const password = this.generateVoucherCode(8);
+
+      // Create PPPoE secret on MikroTik
+      try {
+        await MikroTikService.createPPPoESecret(this.connectionConfig, {
+          name: username,
+          password: password,
+          service: 'pppoe',
+          profile: params.packageName,
+          comment: `Generated via API - ${params.packageName}`,
+        });
+
+        vouchers.push({
+          code: username,
+          password: password,
+          packageName: params.packageName,
+          duration: params.duration,
+          price: params.price,
+          vendorData: {
+            profile: params.packageName,
+            service: 'pppoe',
+          },
+        });
+      } catch (error) {
+        console.error(`Failed to create PPPoE secret ${username}:`, error);
+        // Continue with other vouchers
+      }
+    }
+
+    const result: VoucherGenerationResult = {
+      success: vouchers.length > 0,
+      vouchers,
     };
+    
+    if (vouchers.length === 0) {
+      result.error = 'Failed to create any PPPoE vouchers';
+    }
+    
+    return result;
   }
 
   async activateVoucher(
@@ -212,8 +248,7 @@ export class MikroTikProvider implements RouterProvider {
       if (service === 'hotspot') {
         await MikroTikService.deleteHotspotUser(this.connectionConfig, code);
       } else if (service === 'pppoe') {
-        // TODO: Implement PPPoE secret removal
-        throw new Error('PPPoE deactivation not implemented yet');
+        await MikroTikService.deletePPPoESecret(this.connectionConfig, code);
       }
     } catch (error) {
       console.error(`Failed to deactivate voucher ${code}:`, error);
@@ -240,6 +275,20 @@ export class MikroTikProvider implements RouterProvider {
           code,
           status: user.disabled ? 'disabled' : 'active',
           bytesUsed: parseInt(user['bytes-in'] || '0') + parseInt(user['bytes-out'] || '0'),
+        };
+      } else if (service === 'pppoe') {
+        const secret = await MikroTikService.getPPPoESecret(this.connectionConfig, code);
+
+        if (!secret) {
+          return {
+            code,
+            status: 'expired',
+          };
+        }
+
+        return {
+          code,
+          status: secret.disabled === 'true' ? 'disabled' : 'active',
         };
       }
 
@@ -306,14 +355,75 @@ export class MikroTikProvider implements RouterProvider {
   }
 
   private async syncPPPoEPackages(): Promise<PackageSyncResult> {
-    // TODO: Implement PPPoE profile sync
+    try {
+      const profiles = await MikroTikService.getPPPProfiles(this.connectionConfig);
+      
+      const packages: SyncedPackage[] = profiles
+        .filter((p: any) => p.name !== 'default' && p.name !== 'default-encryption')
+        .map((profile: any) => this.parsePPPoEProfile(profile));
+
+      return {
+        success: true,
+        packages,
+        added: packages.length,
+        updated: 0,
+        removed: 0,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        packages: [],
+        added: 0,
+        updated: 0,
+        removed: 0,
+        error: error instanceof Error ? error.message : 'PPPoE package sync failed',
+      };
+    }
+  }
+
+  private parsePPPoEProfile(profile: any): SyncedPackage {
+    // Extract pricing from profile name (e.g., "monthly-500ksh" -> 500)
+    const priceMatch = profile.name.match(/(\d+)ksh/i);
+    const price = priceMatch ? parseInt(priceMatch[1]) : 0;
+
+    // PPPoE profiles typically use session-timeout for duration
+    let duration = 0;
+    const sessionTimeout = profile['session-timeout'] || '0';
+    if (sessionTimeout.includes('d')) {
+      duration = parseInt(sessionTimeout) * 1440; // days to minutes
+    } else if (sessionTimeout.includes('w')) {
+      duration = parseInt(sessionTimeout) * 10080; // weeks to minutes
+    } else {
+      duration = parseInt(sessionTimeout); // assume minutes
+    }
+
+    // Extract bandwidth from rate-limit
+    const rateLimit = profile['rate-limit'] || '';
+    const [upload, download] = rateLimit.split('/').map((s: string) => {
+      const match = s.match(/(\d+)([KMG]?)/i);
+      if (!match) return 0;
+      const value = parseInt(match[1] || '0');
+      const unit = match[2]?.toUpperCase();
+      if (unit === 'M') return value * 1024;
+      if (unit === 'G') return value * 1024 * 1024;
+      return value;
+    });
+
     return {
-      success: false,
-      packages: [],
-      added: 0,
-      updated: 0,
-      removed: 0,
-      error: 'PPPoE package sync not implemented yet',
+      mikrotikId: profile['.id'],
+      name: profile.name,
+      displayName: profile.name.replace(/-/g, ' ').toUpperCase(),
+      price,
+      duration,
+      bandwidth: {
+        upload: upload || 0,
+        download: download || 0,
+      },
+      sessionTimeout: profile['session-timeout'],
+      idleTimeout: profile['idle-timeout'],
+      rateLimit: profile['rate-limit'],
+      disabled: false,
+      lastSynced: new Date(),
     };
   }
 

@@ -113,6 +113,19 @@ interface PPPProfileConfig {
   'idle-timeout'?: string;
 }
 
+interface PPPoESecretConfig {
+  name: string;
+  password: string;
+  service: 'pppoe' | 'any';
+  profile: string;
+  'local-address'?: string;
+  'remote-address'?: string;
+  'limit-bytes-in'?: number;
+  'limit-bytes-out'?: number;
+  comment?: string;
+  disabled?: string;
+}
+
 interface HotspotProfileConfig {
   name: string;
   'hotspot-address': string;
@@ -921,6 +934,331 @@ export class MikroTikService {
 
     return results;
   }
+
+  // ============================================
+  // PPPOE SECRET MANAGEMENT (Vouchers)
+  // ============================================
+
+  /**
+   * Create PPPoE secret (user account)
+   * Used for PPPoE voucher-based authentication
+   */
+  static async createPPPoESecret(
+    config: MikroTikConnectionConfig,
+    secretConfig: PPPoESecretConfig
+  ): Promise<any> {
+    try {
+      // Validate required fields
+      if (!secretConfig.name || !secretConfig.password || !secretConfig.profile) {
+        throw new Error('name, password, and profile are required for PPPoE secrets');
+      }
+
+      // Build MikroTik API payload
+      const mikrotikPayload: any = {
+        name: secretConfig.name,
+        password: secretConfig.password,
+        service: secretConfig.service || 'pppoe',
+        profile: secretConfig.profile,
+        comment: secretConfig.comment || `PPPoE voucher - ${secretConfig.profile}`,
+      };
+
+      // Add optional fields if provided
+      if (secretConfig['local-address']) {
+        mikrotikPayload['local-address'] = secretConfig['local-address'];
+      }
+      if (secretConfig['remote-address']) {
+        mikrotikPayload['remote-address'] = secretConfig['remote-address'];
+      }
+      if (secretConfig['limit-bytes-in']) {
+        mikrotikPayload['limit-bytes-in'] = secretConfig['limit-bytes-in'];
+      }
+      if (secretConfig['limit-bytes-out']) {
+        mikrotikPayload['limit-bytes-out'] = secretConfig['limit-bytes-out'];
+      }
+      if (secretConfig.disabled) {
+        mikrotikPayload.disabled = secretConfig.disabled;
+      }
+
+      return await this.makeHybridRequest(
+        config,
+        '/rest/ppp/secret',
+        mikrotikPayload
+      );
+    } catch (error) {
+      console.error('Failed to create PPPoE secret:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get all PPPoE secrets
+   */
+  static async getPPPoESecrets(config: MikroTikConnectionConfig): Promise<any[]> {
+    try {
+      const secrets = await this.makeRequest(
+        config,
+        '/rest/ppp/secret',
+        'GET'
+      );
+      return Array.isArray(secrets) ? secrets : [];
+    } catch (error) {
+      console.error('Failed to fetch PPPoE secrets:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Get specific PPPoE secret by username
+   */
+  static async getPPPoESecret(
+    config: MikroTikConnectionConfig,
+    username: string
+  ): Promise<any | null> {
+    try {
+      const secrets = await this.getPPPoESecrets(config);
+      return secrets.find((s: any) => s.name === username) || null;
+    } catch (error) {
+      console.error('Failed to get PPPoE secret:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Delete PPPoE secret
+   */
+  static async deletePPPoESecret(
+    config: MikroTikConnectionConfig,
+    username: string
+  ): Promise<boolean> {
+    try {
+      const secret = await this.getPPPoESecret(config, username);
+      if (!secret) return false;
+
+      await this.makeRequest(
+        config,
+        `/rest/ppp/secret/${secret['.id']}`,
+        'DELETE'
+      );
+      return true;
+    } catch (error) {
+      console.error('Failed to delete PPPoE secret:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Update PPPoE secret
+   */
+  static async updatePPPoESecret(
+    config: MikroTikConnectionConfig,
+    username: string,
+    updates: Partial<PPPoESecretConfig>
+  ): Promise<boolean> {
+    try {
+      const secret = await this.getPPPoESecret(config, username);
+      if (!secret) return false;
+
+      // Build update payload
+      const payload: any = {};
+      if (updates.password) payload.password = updates.password;
+      if (updates.profile) payload.profile = updates.profile;
+      if (updates.service) payload.service = updates.service;
+      if (updates['local-address']) payload['local-address'] = updates['local-address'];
+      if (updates['remote-address']) payload['remote-address'] = updates['remote-address'];
+      if (updates['limit-bytes-in']) payload['limit-bytes-in'] = updates['limit-bytes-in'];
+      if (updates['limit-bytes-out']) payload['limit-bytes-out'] = updates['limit-bytes-out'];
+      if (updates.comment) payload.comment = updates.comment;
+      if (updates.disabled !== undefined) payload.disabled = updates.disabled;
+
+      await this.makeRequest(
+        config,
+        `/rest/ppp/secret/${secret['.id']}`,
+        'PATCH',
+        payload
+      );
+      return true;
+    } catch (error) {
+      console.error('Failed to update PPPoE secret:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Check if PPPoE secret exists
+   */
+  static async pppoeSecretExists(
+    config: MikroTikConnectionConfig,
+    username: string
+  ): Promise<boolean> {
+    const secret = await this.getPPPoESecret(config, username);
+    return secret !== null;
+  }
+
+  /**
+   * Bulk create PPPoE secrets
+   */
+  static async bulkCreatePPPoESecrets(
+    config: MikroTikConnectionConfig,
+    secrets: Array<{
+      name: string;
+      password: string;
+      profile: string;
+      comment?: string;
+    }>
+  ): Promise<{ success: number; failed: number; errors: any[] }> {
+    const results = { success: 0, failed: 0, errors: [] as any[] };
+
+    for (const secret of secrets) {
+      try {
+        const secretConfig: PPPoESecretConfig = {
+          name: secret.name,
+          password: secret.password,
+          service: 'pppoe',
+          profile: secret.profile,
+        };
+        
+        if (secret.comment) {
+          secretConfig.comment = secret.comment;
+        }
+        
+        await this.createPPPoESecret(config, secretConfig);
+        results.success++;
+      } catch (error) {
+        results.failed++;
+        results.errors.push({
+          user: secret.name,
+          error: error instanceof Error ? error.message : 'Unknown error',
+        });
+      }
+    }
+
+    return results;
+  }
+
+  // ============================================
+  // PPPOE PROFILE MANAGEMENT
+  // ============================================
+
+  /**
+   * Get all PPP profiles
+   */
+  static async getPPPProfiles(config: MikroTikConnectionConfig): Promise<any[]> {
+    try {
+      const profiles = await this.makeRequest(
+        config,
+        '/rest/ppp/profile',
+        'GET'
+      );
+      return Array.isArray(profiles) ? profiles : [];
+    } catch (error) {
+      console.error('Failed to fetch PPP profiles:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Get specific PPP profile by name
+   */
+  static async getPPPProfile(
+    config: MikroTikConnectionConfig,
+    profileName: string
+  ): Promise<any | null> {
+    try {
+      const profiles = await this.getPPPProfiles(config);
+      return profiles.find((p: any) => p.name === profileName) || null;
+    } catch (error) {
+      console.error('Failed to get PPP profile:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Create PPP profile for PPPoE service
+   */
+  static async createPPPProfile(
+    config: MikroTikConnectionConfig,
+    profileConfig: PPPProfileConfig
+  ): Promise<any> {
+    try {
+      const mikrotikPayload: any = {
+        name: profileConfig.name,
+        'local-address': profileConfig['local-address'],
+        'remote-address': profileConfig['remote-address'],
+        'dns-server': profileConfig['dns-server'],
+      };
+
+      // Add optional fields
+      if (profileConfig['rate-limit']) {
+        mikrotikPayload['rate-limit'] = profileConfig['rate-limit'];
+      }
+      if (profileConfig['session-timeout']) {
+        mikrotikPayload['session-timeout'] = profileConfig['session-timeout'];
+      }
+      if (profileConfig['idle-timeout']) {
+        mikrotikPayload['idle-timeout'] = profileConfig['idle-timeout'];
+      }
+
+      return await this.makeHybridRequest(
+        config,
+        '/rest/ppp/profile',
+        mikrotikPayload
+      );
+    } catch (error) {
+      console.error('Failed to create PPP profile:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Delete PPP profile
+   */
+  static async deletePPPProfile(
+    config: MikroTikConnectionConfig,
+    profileName: string
+  ): Promise<boolean> {
+    try {
+      const profile = await this.getPPPProfile(config, profileName);
+      if (!profile) return false;
+
+      await this.makeRequest(
+        config,
+        `/rest/ppp/profile/${profile['.id']}`,
+        'DELETE'
+      );
+      return true;
+    } catch (error) {
+      console.error('Failed to delete PPP profile:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Get active PPPoE sessions with details
+   */
+  static async getActivePPPoESessions(config: MikroTikConnectionConfig): Promise<any[]> {
+    try {
+      const activeUsers = await this.getActivePPPoEUsers(config);
+      
+      // Enrich with secret information
+      const secrets = await this.getPPPoESecrets(config);
+      
+      return activeUsers.map((active: any) => {
+        const secret = secrets.find((s: any) => s.name === active.name);
+        return {
+          ...active,
+          profile: secret?.profile,
+          comment: secret?.comment,
+        };
+      });
+    } catch (error) {
+      console.error('Failed to fetch active PPPoE sessions:', error);
+      return [];
+    }
+  }
+
+  // ============================================
+  // IP POOLS (existing methods continue below)
+  // ============================================
 
   /**
    * Get all IP pools
@@ -2732,6 +3070,7 @@ export type {
   DHCPNetworkConfig,
   NATRuleConfig,
   PPPoEServerConfig,
+  PPPoESecretConfig,
   PPPProfileConfig,
   HotspotProfileConfig,
   HotspotServerConfig,
