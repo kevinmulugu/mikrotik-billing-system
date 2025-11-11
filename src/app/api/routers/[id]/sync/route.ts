@@ -61,7 +61,21 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       );
     }
 
-    // Prepare connection config
+    // UniFi routers are synced differently (via controller API)
+    if (router.routerType === 'unifi') {
+      return NextResponse.json({
+        success: true,
+        message: 'UniFi routers sync from the controller automatically. Status updated.',
+        router: {
+          id: routerId,
+          name: router.routerInfo?.name,
+          status: router.health?.status || 'offline',
+          lastSeen: router.health?.lastSeen || new Date(),
+        },
+      });
+    }
+
+    // Prepare connection config (MikroTik only)
     const connectionConfig = getRouterConnectionConfig(router, {
       forceLocal: false,
       forceVPN: true,
