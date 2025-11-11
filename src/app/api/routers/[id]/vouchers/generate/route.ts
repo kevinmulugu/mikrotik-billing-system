@@ -7,6 +7,8 @@ import { ObjectId } from 'mongodb';
 import { MikroTikService } from '@/lib/services/mikrotik';
 import { getRouterConnectionConfig } from '@/lib/services/router-connection';
 import { NotificationService } from '@/lib/services/notification';
+import { RouterProviderFactory } from '@/lib/factories/router-provider.factory';
+import type { ServiceType } from '@/lib/interfaces/router-provider.interface';
 
 interface RouteParams {
   params: Promise<{
@@ -88,6 +90,7 @@ export async function POST(
     const {
       quantity = 10,
       packageName, // Package name from router (e.g., "3hours-25ksh")
+      serviceType = 'hotspot' as ServiceType, // NEW: Service type (hotspot or pppoe)
       // Auto-expire controls activation expiry (unused vouchers). Default true for batches.
       autoExpire = true,
       expiryDays = 30,
@@ -155,14 +158,33 @@ export async function POST(
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
 
-    // Find the package in router's packages
-    const packageData = router.packages?.hotspot?.find(
+    // Get router type (defaults to mikrotik for backward compatibility)
+    const routerType = router.routerType || 'mikrotik';
+
+    // Check if service is enabled
+    const serviceConfig = router.services?.[serviceType];
+    if (!serviceConfig?.enabled) {
+      return NextResponse.json(
+        { error: `${serviceType} service is not enabled on this router` },
+        { status: 400 }
+      );
+    }
+
+    // Find the package in router's service packages (NEW: service-aware)
+    let packageData = serviceConfig.packages?.find(
       (pkg: any) => pkg.name === packageName
     );
 
+    // Fallback to legacy packages.hotspot for backward compatibility
+    if (!packageData && serviceType === 'hotspot') {
+      packageData = router.packages?.hotspot?.find(
+        (pkg: any) => pkg.name === packageName
+      );
+    }
+
     if (!packageData) {
       return NextResponse.json(
-        { error: `Package "${packageName}" not found on router` },
+        { error: `Package "${packageName}" not found for ${serviceType} service` },
         { status: 404 }
       );
     }
@@ -173,157 +195,211 @@ export async function POST(
     const bandwidth = packageData.bandwidth || { upload: 512, download: 1024 };
     const displayName = packageData.displayName || packageName;
 
-    // Convert duration to MikroTik format
-    const limitUptime = convertMinutesToMikroTikFormat(duration);
-
     // Generate batch ID
     const batchId = `BATCH-${Date.now()}`;
 
-    // Calculate activation expiry date (when an unused voucher can no longer be activated).
-    // Auto Expire controls this independently of whether usageTimedOnPurchase is enabled.
-    // If autoExpire is false we leave activationExpiresAt as null (no automatic activation expiry).
+    // Calculate activation expiry date
     const activationExpiresAt = autoExpire
       ? new Date(Date.now() + expiryDays * 24 * 60 * 60 * 1000)
       : null;
 
-    // Prepare router config if sync is enabled
-    let routerConfig = null;
-    if (syncToRouter && router.health?.status === 'online') {
-      routerConfig = getRouterConnectionConfig(router, {
-        forceLocal: false,
-        forceVPN: true,
-      });
-    }
-
-    // Determine commission rate: default 20% for personal/homeowner, 0% for ISPs if detected
+    // Determine commission rate
     const commissionRate = (user.subscription?.plan === 'isp' || user.businessInfo?.type === 'isp')
       ? 0
       : (user.paymentSettings?.commissionRate ?? 20);
 
-    // Generate vouchers
-    const vouchers = [];
-    const voucherCodes = new Set<string>();
-    const mikrotikCreationResults = [];
+    // Prepare connection config and router provider
+    let provider = null;
+    let voucherResult = null;
+    
+    if (syncToRouter && router.health?.status === 'online') {
+      const connectionConfig = getRouterConnectionConfig(router, {
+        forceLocal: false,
+        forceVPN: true,
+      });
 
-    for (let i = 0; i < quantity; i++) {
-      // Generate unique code
-      let code = generateVoucherCode();
-      while (voucherCodes.has(code)) {
-        code = generateVoucherCode();
+      // Create router provider instance
+      provider = RouterProviderFactory.create(routerType, connectionConfig);
+
+      // Check if provider supports this service
+      if (!provider.supportsService(serviceType)) {
+        return NextResponse.json(
+          { error: `${routerType} router does not support ${serviceType} service` },
+          { status: 400 }
+        );
       }
-      voucherCodes.add(code);
 
-      // Initialize mikrotikUserId (will be populated if sync succeeds)
-      let mikrotikUserId: string | null = null;
+      // Generate vouchers using provider abstraction
+      try {
+        console.log(`[Batch ${batchId}] Generating ${quantity} vouchers for ${serviceType} service...`);
+        
+        voucherResult = await provider.generateVouchersForService!(serviceType, {
+          packageId: packageName,
+          packageName,
+          quantity,
+          duration,
+          price,
+          serviceType,
+        });
 
-      // Create user on MikroTik router if syncToRouter is enabled and router is online
-      if (routerConfig) {
-        try {
-          console.log(`[Voucher ${code}] Creating MikroTik user...`);
-
-          const userResult = await MikroTikService.createHotspotUser(
-            routerConfig,
-            {
-              name: code,
-              password: code,
-              profile: packageName,
-              limitUptime: limitUptime, // Critical: Session duration
-              server: 'hotspot1',
-              comment: `${displayName} - Generated automatically`,
-            }
+        if (!voucherResult.success) {
+          console.error(`[Batch ${batchId}] Provider voucher generation failed:`, voucherResult.error);
+          return NextResponse.json(
+            { error: voucherResult.error || 'Failed to generate vouchers on router' },
+            { status: 500 }
           );
-
-          // CRITICAL FIX: ret field is the .id contrary to other API responses
-          mikrotikUserId = userResult?.['ret'] || null;
-
-          console.log(`[Voucher ${code}] MikroTik user created successfully. ID: ${mikrotikUserId}`);
-
-          mikrotikCreationResults.push({
-            code: code,
-            success: true,
-            mikrotikUserId: mikrotikUserId,
-          });
-        } catch (mikrotikError) {
-          console.error(`[Voucher ${code}] Failed to create MikroTik user:`, mikrotikError);
-
-          mikrotikCreationResults.push({
-            code: code,
-            success: false,
-            mikrotikUserId: null,
-            error: mikrotikError instanceof Error ? mikrotikError.message : 'Unknown error',
-          });
         }
+
+        console.log(`[Batch ${batchId}] Successfully generated ${voucherResult.vouchers.length} vouchers on router`);
+      } catch (error) {
+        console.error(`[Batch ${batchId}] Provider error:`, error);
+        return NextResponse.json(
+          {
+            error: 'Failed to generate vouchers on router',
+            details: error instanceof Error ? error.message : 'Unknown error',
+          },
+          { status: 500 }
+        );
       }
+    }
 
-      // Generate unique payment reference (separate from voucher code for security). Capped to 12 characters
-      // This will be used for initiating M-PESA STK Push.
-      // AccountReference displayed to the customer in the STK Pin Prompt message.  Maximum of 12 characters.
-      const paymentReference = `VCH${(Date.now().toString(36) + Math.random().toString(36).slice(2, 4)).toUpperCase().slice(-9)}`;
+    // Build voucher documents from provider result or generate codes manually
+    const vouchers = [];
+    
+    if (voucherResult && voucherResult.vouchers.length > 0) {
+      // Use vouchers generated by provider
+      for (const genVoucher of voucherResult.vouchers) {
+        const paymentReference = `VCH${(Date.now().toString(36) + Math.random().toString(36).slice(2, 4)).toUpperCase().slice(-9)}`;
 
+        const voucher = {
+          _id: new ObjectId(),
+          routerId: new ObjectId(routerId),
+          userId: new ObjectId(userId),
+          reference: paymentReference,
+          // NEW: Router type and service type
+          routerType,
+          serviceType,
+          voucherInfo: {
+            code: genVoucher.code,
+            password: genVoucher.password,
+            packageType: packageName,
+            packageDisplayName: displayName,
+            duration: duration,
+            dataLimit: packageData.dataLimit || 0,
+            bandwidth: bandwidth,
+            price: price,
+            currency: 'KES',
+          },
+          usage: {
+            used: false,
+            customerId: null,
+            deviceMac: null,
+            startTime: null,
+            endTime: null,
+            dataUsed: 0,
+            timeUsed: 0,
+            maxDurationMinutes: duration,
+            expectedEndTime: null,
+            timedOnPurchase: !!usageTimedOnPurchase,
+            purchaseExpiresAt: null,
+          },
+          payment: {
+            method: null,
+            transactionId: null,
+            phoneNumber: null,
+            amount: price,
+            commission: price * (commissionRate / 100),
+            paymentDate: null,
+          },
+          batch: {
+            batchId: batchId,
+            batchSize: quantity,
+            generatedBy: new ObjectId(userId),
+          },
+          expiry: {
+            expiresAt: activationExpiresAt,
+            autoDelete: autoExpire,
+          },
+          // NEW: Vendor-specific data
+          vendorSpecific: genVoucher.vendorData || {},
+          status: 'active',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        };
 
-      // Create voucher document with mikrotikUserId
-      const voucher = {
-        _id: new ObjectId(),
-        routerId: new ObjectId(routerId),
-        userId: new ObjectId(userId),
-        reference: paymentReference, // Public reference for M-Pesa payments (NOT the password)
-        voucherInfo: {
-          code: code,
-          password: code, // Same as code for simplicity
-          packageType: packageName,
-          packageDisplayName: displayName,
-          duration: duration, // Store in minutes
-          dataLimit: packageData.dataLimit || 0, // 0 = Unlimited
-          bandwidth: bandwidth,
-          price: price,
-          currency: 'KES',
-        },
-        usage: {
-          used: false,
-          customerId: null, // Will be set when voucher is purchased/assigned to a customer
-          deviceMac: null,
-          startTime: null, // Will be set when customer actually logs in via MikroTik
-          endTime: null,
-          dataUsed: 0,
-          timeUsed: 0,
-          // Max duration (minutes) that will be applied when voucher is activated
-          maxDurationMinutes: duration,
-          // expectedEndTime will be set when voucher is activated (startTime + maxDurationMinutes)
-          expectedEndTime: null,
-          // Whether to start a purchase-based deadline for this voucher
-          timedOnPurchase: !!usageTimedOnPurchase,
-          // purchaseExpiresAt will be set when voucher is purchased (purchaseTime + maxDurationMinutes)
-          // The webhook will calculate this using the package duration
-          purchaseExpiresAt: null,
-          // Auto-terminate flag removed: cron expiry job will always remove hotspot users and mark vouchers expired
-        },
-        payment: {
-          method: null,
-          transactionId: null,
-          phoneNumber: null,
-          amount: price,
-          commission: price * (commissionRate / 100),
-          paymentDate: null,
-        },
-        batch: {
-          batchId: batchId,
-          batchSize: quantity,
-          generatedBy: new ObjectId(userId),
-        },
-        expiry: {
-          // Activation expiry (when voucher can no longer be activated). Null means no activation expiry.
-          expiresAt: activationExpiresAt,
-          autoDelete: autoExpire,
-        },
-        // CRITICAL: Store MikroTik user ID for future operations
-        mikrotikUserId: mikrotikUserId,
-        status: 'active',
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      };
+        vouchers.push(voucher);
+        console.log(`[Voucher ${genVoucher.code}] Generated via provider`);
+      }
+    } else {
+      // Fallback: Generate codes manually (vouchers not synced to router)
+      const voucherCodes = new Set<string>();
+      
+      for (let i = 0; i < quantity; i++) {
+        let code = generateVoucherCode();
+        while (voucherCodes.has(code)) {
+          code = generateVoucherCode();
+        }
+        voucherCodes.add(code);
 
-      vouchers.push(voucher);
-      console.log(`[Voucher ${code}] Generated. MikroTik ID: ${mikrotikUserId || 'not synced'}`);
+        const paymentReference = `VCH${(Date.now().toString(36) + Math.random().toString(36).slice(2, 4)).toUpperCase().slice(-9)}`;
+
+        const voucher = {
+          _id: new ObjectId(),
+          routerId: new ObjectId(routerId),
+          userId: new ObjectId(userId),
+          reference: paymentReference,
+          routerType,
+          serviceType,
+          voucherInfo: {
+            code: code,
+            password: code,
+            packageType: packageName,
+            packageDisplayName: displayName,
+            duration: duration,
+            dataLimit: packageData.dataLimit || 0,
+            bandwidth: bandwidth,
+            price: price,
+            currency: 'KES',
+          },
+          usage: {
+            used: false,
+            customerId: null,
+            deviceMac: null,
+            startTime: null,
+            endTime: null,
+            dataUsed: 0,
+            timeUsed: 0,
+            maxDurationMinutes: duration,
+            expectedEndTime: null,
+            timedOnPurchase: !!usageTimedOnPurchase,
+            purchaseExpiresAt: null,
+          },
+          payment: {
+            method: null,
+            transactionId: null,
+            phoneNumber: null,
+            amount: price,
+            commission: price * (commissionRate / 100),
+            paymentDate: null,
+          },
+          batch: {
+            batchId: batchId,
+            batchSize: quantity,
+            generatedBy: new ObjectId(userId),
+          },
+          expiry: {
+            expiresAt: activationExpiresAt,
+            autoDelete: autoExpire,
+          },
+          vendorSpecific: {},
+          status: 'active',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        };
+
+        vouchers.push(voucher);
+        console.log(`[Voucher ${code}] Generated (not synced to router)`);
+      }
     }
 
     // Insert vouchers into database (with mikrotikUserId)
@@ -379,10 +455,10 @@ export async function POST(
     });
 
     // Calculate sync success rate
-    const syncedCount = mikrotikCreationResults.filter((r) => r.success).length;
-    const failedCount = mikrotikCreationResults.filter((r) => !r.success).length;
+    const syncedCount = voucherResult ? voucherResult.vouchers.length : 0;
+    const failedCount = voucherResult ? 0 : quantity;
 
-    // Return generated vouchers (including mikrotikUserId in response)
+    // Return generated vouchers (including router/service types in response)
     const response = vouchers.map((v) => ({
       id: v._id.toString(),
       reference: v.reference, // Payment reference for M-Pesa (public, NOT the password)
@@ -394,8 +470,10 @@ export async function POST(
       durationMinutes: v.voucherInfo.duration,
       price: v.voucherInfo.price,
       expiresAt: v.expiry.expiresAt ? new Date(v.expiry.expiresAt).toISOString() : null,
-      mikrotikUserId: v.mikrotikUserId, // Include in response for transparency
-      syncedToRouter: v.mikrotikUserId !== null,
+      routerType: v.routerType,
+      serviceType: v.serviceType,
+      syncedToRouter: !!voucherResult,
+      vendorData: v.vendorSpecific,
     }));
 
     // Create notification for user
@@ -439,11 +517,12 @@ export async function POST(
           synced: syncedCount,
           failed: failedCount,
           successRate: quantity > 0 ? `${Math.round((syncedCount / quantity) * 100)}%` : '0%',
-          details: mikrotikCreationResults,
+          routerType,
+          serviceType,
         }
         : {
           enabled: false,
-          message: 'Vouchers created in database only. Sync to router manually.',
+          message: 'Vouchers created in database only. Will sync to router upon purchase.',
         },
     });
   } catch (error) {
