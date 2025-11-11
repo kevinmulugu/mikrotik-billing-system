@@ -7,6 +7,8 @@ import { ObjectId } from 'mongodb';
 import { MikroTikService } from '@/lib/services/mikrotik';
 import { getRouterConnectionConfig } from '@/lib/services/router-connection';
 import { NotificationService } from '@/lib/services/notification';
+import { RouterProviderFactory } from '@/lib/factories/router-provider.factory';
+import type { ServiceType } from '@/lib/interfaces/router-provider.interface';
 
 interface RouteParams {
   params: Promise<{
@@ -14,6 +16,12 @@ interface RouteParams {
   }>;
 }
 
+/**
+ * POST /api/routers/[id]/packages/sync
+ * 
+ * Sync packages from router for a specific service type (hotspot or pppoe)
+ * Uses RouterProvider abstraction for multi-router support
+ */
 export async function POST(request: NextRequest, { params }: RouteParams) {
   try {
     const session = await getServerSession(authOptions);
@@ -24,6 +32,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     const userId = session.user.id;
     const { id: routerId } = await params;
+    
+    // Get service type from query params (defaults to hotspot)
+    const { searchParams } = new URL(request.url);
+    const serviceType = (searchParams.get('service') || 'hotspot') as ServiceType;
 
     // Validate ObjectId
     if (!ObjectId.isValid(routerId)) {
@@ -54,24 +66,41 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       );
     }
 
+    // Get router type (defaults to mikrotik for backward compatibility)
+    const routerType = router.routerType || 'mikrotik';
+
+    // Check if service is enabled
+    const serviceConfig = router.services?.[serviceType];
+    if (!serviceConfig?.enabled) {
+      return NextResponse.json(
+        { error: `${serviceType} service is not enabled on this router` },
+        { status: 400 }
+      );
+    }
+
     // Get connection config
-    // const connectionConfig = {
-    //   ipAddress: router.connection?.ipAddress || '',
-    //   port: router.connection?.port || 8728,
-    //   username: router.connection?.apiUser || 'admin',
-    //   password: MikroTikService.decryptPassword(router.connection?.apiPassword || ''),
-    // };
     const connectionConfig = getRouterConnectionConfig(router, {
       forceLocal: false,
       forceVPN: true,
     });
 
-    // Fetch hotspot user profiles from router with error handling
-    let routerProfiles: any[] = [];
+    // Create router provider instance
+    const provider = RouterProviderFactory.create(routerType, connectionConfig);
+
+    // Check if provider supports this service
+    if (!provider.supportsService(serviceType)) {
+      return NextResponse.json(
+        { error: `${routerType} router does not support ${serviceType} service` },
+        { status: 400 }
+      );
+    }
+
+    // Sync packages from router using provider
+    let syncResult;
     try {
-      routerProfiles = await MikroTikService.getHotspotUserProfiles(connectionConfig);
+      syncResult = await provider.syncPackagesFromRouter!(serviceType);
     } catch (error) {
-      console.error('Failed to fetch hotspot profiles:', error);
+      console.error('Failed to sync packages from router:', error);
       return NextResponse.json(
         {
           error: 'Failed to connect to router',
@@ -81,149 +110,28 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       );
     }
 
-    if (!routerProfiles || routerProfiles.length === 0) {
+    if (!syncResult.success) {
       return NextResponse.json(
-        { error: 'No packages found on router' },
-        { status: 404 }
+        { error: syncResult.error || 'Package sync failed' },
+        { status: 500 }
       );
     }
 
-    // Get current packages from database
-    const dbPackages = router.packages?.hotspot || [];
-
-    // Sync results
-    const syncResults = {
-      synced: 0,
-      newOnRouter: 0,
-      outOfSync: 0,
-      notOnRouter: 0,
-      packages: [] as any[],
-    };
-
-    // Process each router profile
-    for (const profile of routerProfiles) {
-      const profileName = profile.name;
-
-      // Skip default profiles
-      if (profileName === 'default' || profileName === 'default-encryption') {
-        continue;
-      }
-
-      // Find matching package in database
-      const dbPackage = dbPackages.find((pkg: any) => pkg.name === profileName);
-
-      if (dbPackage) {
-        // Ensure disabled field exists (migration for old packages)
-        if (dbPackage.disabled === undefined) {
-          dbPackage.disabled = false;
-        }
-
-        // Package exists in database - check for discrepancies
-        const hasDiscrepancy =
-          dbPackage.sessionTimeout !== profile['session-timeout'] ||
-          dbPackage.rateLimit !== profile['rate-limit'] ||
-          dbPackage.idleTimeout !== profile['idle-timeout'];
-
-        if (hasDiscrepancy) {
-          syncResults.outOfSync++;
-          syncResults.packages.push({
-            name: profileName,
-            syncStatus: 'out_of_sync',
-            routerConfig: profile,
-            dbConfig: dbPackage,
-          });
-        } else {
-          syncResults.synced++;
-          syncResults.packages.push({
-            name: profileName,
-            syncStatus: 'synced',
-          });
-        }
-      } else {
-        // New package found on router
-        syncResults.newOnRouter++;
-
-        // Extract pricing from profile name (e.g., "1hour-10ksh" -> 10)
-        const priceMatch = profileName.match(/(\d+)ksh/i);
-        const price = priceMatch ? parseInt(priceMatch[1]) : 0;
-
-        // Extract duration from profile name and session-timeout
-        let duration = 0;
-        const durationStr = profile['session-timeout'] || '0';
-
-        if (durationStr.includes('h')) {
-          duration = parseInt(durationStr) * 60;
-        } else if (durationStr.includes('d')) {
-          duration = parseInt(durationStr) * 1440;
-        } else if (durationStr.includes('w')) {
-          duration = parseInt(durationStr) * 10080;
-        } else {
-          duration = parseInt(durationStr);
-        }
-
-        // Extract bandwidth from rate-limit
-        const rateLimit = profile['rate-limit'] || '';
-        const [upload, download] = rateLimit.split('/').map((s: string) => {
-          const match = s.match(/(\d+)([KMG]?)/i);
-          if (!match) return 0;
-          const value = parseInt(match[1] || '0');
-          const unit = match[2]?.toUpperCase();
-          if (unit === 'M') return value * 1024;
-          if (unit === 'G') return value * 1024 * 1024;
-          return value;
-        });
-
-        const newPackage = {
-          mikrotikId: profile['.id'],
-          name: profileName,
-          displayName: profileName.replace(/-/g, ' ').toUpperCase(),
-          price: price,
-          duration: duration,
-          bandwidth: {
-            upload: upload || 0,
-            download: download || 0,
-          },
-          sessionTimeout: profile['session-timeout'],
-          idleTimeout: profile['idle-timeout'],
-          rateLimit: profile['rate-limit'],
-          addressPool: profile['address-pool'] || 'hotspot-pool',
-          sharedUsers: profile['shared-users'] || '1',
-          transparentProxy: profile['transparent-proxy'] || 'yes',
-          disabled: false, // Allow purchases by default
-          syncStatus: 'synced',
-          lastSynced: new Date(),
-        };
-
-        syncResults.packages.push({
-          ...newPackage,
-          syncStatus: 'new_on_router',
-        });
-
-        // Add to database
-        dbPackages.push(newPackage);
-      }
-    }
-
-    // Check for packages in DB that are not on router
-    for (const dbPackage of dbPackages) {
-      const exists = routerProfiles.find((p: any) => p.name === dbPackage.name);
-      if (!exists && dbPackage.name !== 'default') {
-        syncResults.notOnRouter++;
-        syncResults.packages.push({
-          name: dbPackage.name,
-          syncStatus: 'not_on_router',
-          dbConfig: dbPackage,
-        });
-      }
-    }
-
-    // Update router packages in database
+    // Update router packages in database (service-aware)
+    const updatePath = `services.${serviceType}.packages`;
+    const lastSyncedPath = `services.${serviceType}.lastSynced`;
+    
     await db.collection('routers').updateOne(
       { _id: new ObjectId(routerId) },
       {
         $set: {
-          'packages.hotspot': dbPackages,
-          'packages.lastSynced': new Date(),
+          [updatePath]: syncResult.packages,
+          [lastSyncedPath]: new Date(),
+          // Also update legacy packages for backward compatibility
+          ...(serviceType === 'hotspot' && {
+            'packages.hotspot': syncResult.packages,
+            'packages.lastSynced': new Date(),
+          }),
           updatedAt: new Date(),
         },
       }
@@ -242,29 +150,31 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
         type: 'update',
         resource: 'router_packages',
         resourceId: new ObjectId(routerId),
-        description: `Synced packages for router: ${router.routerInfo?.name}`,
+        description: `Synced ${serviceType} packages for router: ${router.routerInfo?.name}`,
       },
       changes: {
-        before: { packageCount: router.packages?.hotspot?.length || 0 },
-        after: { packageCount: dbPackages.length },
-        fields: ['packages'],
+        before: { packageCount: serviceConfig.packages?.length || 0 },
+        after: { packageCount: syncResult.packages.length },
+        fields: ['packages', serviceType],
       },
       metadata: {
         sessionId: '',
-        correlationId: `sync-packages-${routerId}`,
+        correlationId: `sync-packages-${routerId}-${serviceType}`,
         source: 'web',
         severity: 'info',
+        routerType,
+        serviceType,
       },
       timestamp: new Date(),
     });
 
     // Create notification for user if there are changes
     try {
-      if (syncResults.newOnRouter > 0 || syncResults.outOfSync > 0) {
+      if (syncResult.added > 0 || syncResult.updated > 0) {
         const routerName = router.routerInfo?.name || 'Router';
         const changes: string[] = [];
-        if (syncResults.newOnRouter > 0) changes.push(`${syncResults.newOnRouter} new`);
-        if (syncResults.outOfSync > 0) changes.push(`${syncResults.outOfSync} updated`);
+        if (syncResult.added > 0) changes.push(`${syncResult.added} new`);
+        if (syncResult.updated > 0) changes.push(`${syncResult.updated} updated`);
         
         await NotificationService.createNotification({
           userId,
@@ -272,11 +182,12 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
           category: 'router',
           priority: 'low',
           title: 'Packages Synced',
-          message: `${routerName}: ${changes.join(', ')} package(s) synced from MikroTik.`,
+          message: `${routerName} (${serviceType}): ${changes.join(', ')} package(s) synced.`,
           metadata: {
             resourceType: 'router',
             resourceId: routerId,
             link: `/routers/${routerId}`,
+            serviceType,
           },
           sendEmail: false, // Background operation, no email needed
         });
@@ -288,8 +199,16 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     return NextResponse.json({
       success: true,
-      message: 'Packages synced successfully',
-      results: syncResults,
+      message: `${serviceType} packages synced successfully`,
+      serviceType,
+      routerType,
+      results: {
+        total: syncResult.packages.length,
+        added: syncResult.added,
+        updated: syncResult.updated,
+        removed: syncResult.removed,
+        packages: syncResult.packages,
+      },
     });
   } catch (error) {
     console.error('Error syncing packages:', error);
