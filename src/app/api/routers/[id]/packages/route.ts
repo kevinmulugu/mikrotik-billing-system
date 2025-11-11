@@ -245,8 +245,19 @@ export async function POST(request: NextRequest, context: RouteContext) {
     };
 
     // If syncToRouter is enabled and router is online, create profile on MikroTik
+    // UniFi routers skip this step - packages are database-only
     let mikrotikSyncResult = null;
-    if (syncToRouter && router.health?.status === 'online') {
+    const routerType = router.routerType || 'mikrotik';
+    
+    if (routerType === 'unifi') {
+      // UniFi packages are database-only, no router sync needed
+      packageData.syncStatus = 'synced'; // Mark as synced since no actual sync is needed
+      packageData.lastSynced = new Date();
+      mikrotikSyncResult = {
+        success: true,
+        message: 'UniFi packages are managed in the database. No router sync required.',
+      };
+    } else if (syncToRouter && router.health?.status === 'online') {
       try {
         console.log(`Syncing package "${name}" to router...`);
 

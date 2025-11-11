@@ -31,6 +31,7 @@ export default function CreatePackagePage({ params }: CreatePackagePageProps) {
   
   const [loading, setLoading] = useState(false);
   const [routerData, setRouterData] = useState<any>(null);
+  const [routerType, setRouterType] = useState<'mikrotik' | 'unifi'>('mikrotik');
   const [syncAfterCreate, setSyncAfterCreate] = useState(true);
 
   // Form state
@@ -71,6 +72,7 @@ export default function CreatePackagePage({ params }: CreatePackagePageProps) {
       }
 
       setRouterData(data.router);
+      setRouterType(data.router.routerType || 'mikrotik');
     } catch (error) {
       console.error('Error fetching router:', error);
       toast.error('Failed to fetch router data');
@@ -201,7 +203,8 @@ export default function CreatePackagePage({ params }: CreatePackagePageProps) {
           download: parseInt(formData.downloadSpeed),
         },
         validity: parseInt(formData.validity),
-        syncToRouter: syncAfterCreate,
+        // UniFi routers always "sync" (database-only), MikroTik respects user preference
+        syncToRouter: routerType === 'unifi' ? true : syncAfterCreate,
       };
 
       const response = await fetch(`/api/routers/${routerId}/packages`, {
@@ -217,11 +220,16 @@ export default function CreatePackagePage({ params }: CreatePackagePageProps) {
         return;
       }
 
-      toast.success(
-        syncAfterCreate 
-          ? 'Package created and synced to router successfully!' 
-          : 'Package created! Remember to sync it to the router.'
-      );
+      // Show appropriate success message based on router type
+      if (routerType === 'unifi') {
+        toast.success('Package created successfully! Ready for voucher generation.');
+      } else {
+        toast.success(
+          syncAfterCreate 
+            ? 'Package created and synced to router successfully!' 
+            : 'Package created! Remember to sync it to the router.'
+        );
+      }
 
       router.push(`/routers/${routerId}/packages/${formData.name}`);
     } catch (error) {
@@ -283,8 +291,17 @@ export default function CreatePackagePage({ params }: CreatePackagePageProps) {
       <Alert>
         <Info className="h-4 w-4" />
         <AlertDescription>
-          Package names cannot be changed after creation. Choose a descriptive technical name 
-          (e.g., "1hour-10ksh", "daily-premium"). Use the display name for customer-facing text.
+          {routerType === 'unifi' ? (
+            <>
+              UniFi packages are stored in the database for voucher generation. 
+              Guest network settings (bandwidth, time limits) are managed in your UniFi Controller.
+            </>
+          ) : (
+            <>
+              Package names cannot be changed after creation. Choose a descriptive technical name 
+              (e.g., "1hour-10ksh", "daily-premium"). Use the display name for customer-facing text.
+            </>
+          )}
         </AlertDescription>
       </Alert>
 
@@ -527,33 +544,35 @@ export default function CreatePackagePage({ params }: CreatePackagePageProps) {
           </CardContent>
         </Card>
 
-        {/* Sync Option */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Router Synchronization</CardTitle>
-            <CardDescription>
-              Choose whether to sync this package to the router immediately
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-center justify-between">
-              <div className="space-y-1">
-                <Label htmlFor="syncAfterCreate">Sync to Router After Creation</Label>
-                <p className="text-sm text-muted-foreground">
-                  {syncAfterCreate 
-                    ? 'Package will be immediately available for voucher generation'
-                    : 'You can manually sync the package later from the package details page'
-                  }
-                </p>
+        {/* Sync Option - Only for MikroTik routers */}
+        {routerType === 'mikrotik' && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Router Synchronization</CardTitle>
+              <CardDescription>
+                Choose whether to sync this package to the router immediately
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center justify-between">
+                <div className="space-y-1">
+                  <Label htmlFor="syncAfterCreate">Sync to Router After Creation</Label>
+                  <p className="text-sm text-muted-foreground">
+                    {syncAfterCreate 
+                      ? 'Package will be immediately available for voucher generation'
+                      : 'You can manually sync the package later from the package details page'
+                    }
+                  </p>
+                </div>
+                <Switch
+                  id="syncAfterCreate"
+                  checked={syncAfterCreate}
+                  onCheckedChange={setSyncAfterCreate}
+                />
               </div>
-              <Switch
-                id="syncAfterCreate"
-                checked={syncAfterCreate}
-                onCheckedChange={setSyncAfterCreate}
-              />
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Action Buttons */}
         <div className="flex gap-3 justify-end">
