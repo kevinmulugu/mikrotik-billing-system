@@ -53,24 +53,75 @@ export class RouterSyncService {
 
       // UniFi routers are synced via controller API, not direct connection
       if (router.routerType === 'unifi') {
-        // Update last seen timestamp and maintain online status
-        // UniFi controller connectivity should be checked separately via UniFi API
-        await db.collection('routers').updateOne(
-          { _id: new ObjectId(routerId) },
-          {
-            $set: {
-              'health.status': 'online', // UniFi routers are considered online if they exist
-              'health.lastSeen': new Date(),
-              updatedAt: new Date(),
-            },
+        // Test UniFi Controller connectivity
+        try {
+          const { UniFiService } = await import('./unifi');
+          const unifiService = new UniFiService({
+            controllerUrl: router.connection?.controllerUrl,
+            username: router.connection?.apiUser,
+            password: router.connection?.apiPassword,
+            site: router.connection?.siteId || 'default',
+          });
+
+          // Attempt login to verify connectivity
+          const loginSuccess = await unifiService.login();
+          
+          if (loginSuccess) {
+            // Controller is reachable
+            await db.collection('routers').updateOne(
+              { _id: new ObjectId(routerId) },
+              {
+                $set: {
+                  'health.status': 'online',
+                  'health.lastSeen': new Date(),
+                  updatedAt: new Date(),
+                },
+              }
+            );
+
+            return {
+              success: true,
+              message: 'UniFi Controller is online and accessible',
+              changes: [],
+            };
+          } else {
+            // Login failed - controller may be offline or credentials invalid
+            await db.collection('routers').updateOne(
+              { _id: new ObjectId(routerId) },
+              {
+                $set: {
+                  'health.status': 'offline',
+                  'health.lastSeen': new Date(),
+                  updatedAt: new Date(),
+                },
+              }
+            );
+
+            return {
+              success: false,
+              message: 'Failed to authenticate with UniFi Controller',
+              error: 'Authentication failed',
+            };
           }
-        );
-        
-        return {
-          success: true,
-          message: 'UniFi routers sync from controller automatically',
-          changes: [],
-        };
+        } catch (error) {
+          // Connection error - controller is offline or unreachable
+          await db.collection('routers').updateOne(
+            { _id: new ObjectId(routerId) },
+            {
+              $set: {
+                'health.status': 'offline',
+                'health.lastSeen': new Date(),
+                updatedAt: new Date(),
+              },
+            }
+          );
+
+          return {
+            success: false,
+            message: 'UniFi Controller is unreachable',
+            error: error instanceof Error ? error.message : 'Connection failed',
+          };
+        }
       }
 
       // Prepare connection config (MikroTik only)
