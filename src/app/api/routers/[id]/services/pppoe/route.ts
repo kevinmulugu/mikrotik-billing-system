@@ -65,6 +65,17 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: 'Router not found' }, { status: 404 });
     }
 
+    // UniFi routers don't support PPPoE service
+    if (router.routerType === 'unifi') {
+      return NextResponse.json(
+        { 
+          error: 'PPPoE service is not available for UniFi controllers. Manage services through your UniFi Controller UI.',
+          routerType: 'unifi'
+        },
+        { status: 400 }
+      );
+    }
+
     // Check if router is online
     if (router.health?.status !== 'online') {
       return NextResponse.json(

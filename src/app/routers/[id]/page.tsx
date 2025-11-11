@@ -8,11 +8,12 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import {
   ArrowLeft, Settings, Users, Ticket, BarChart3, Wifi, Activity,
   DollarSign, Clock, AlertTriangle, MapPin, Cpu, HardDrive, Thermometer,
   Server, Radio, Network, Package, RefreshCw, CheckCircle2, XCircle,
-  Zap, Eye, Edit, Trash2, Power, PowerOff, Loader2
+  Zap, Eye, Edit, Trash2, Power, PowerOff, Loader2, Info
 } from 'lucide-react';
 import Link from 'next/link';
 import { toast } from 'sonner';
@@ -35,6 +36,7 @@ export default function RouterPage({ params }: RouterPageProps) {
   const [activeUsers, setActiveUsers] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [routerType, setRouterType] = useState<'mikrotik' | 'unifi'>('mikrotik');
 
   useEffect(() => {
     if (status === 'unauthenticated') {
@@ -47,6 +49,12 @@ export default function RouterPage({ params }: RouterPageProps) {
       fetchRouterData();
     }
   }, [status, routerId]);
+
+  useEffect(() => {
+    if (routerData) {
+      setRouterType(routerData.routerType || 'mikrotik');
+    }
+  }, [routerData]);
 
   const fetchRouterData = async () => {
     try {
@@ -414,19 +422,21 @@ export default function RouterPage({ params }: RouterPageProps) {
                   View Active Users
                 </Button>
 
-                <Button
-                  className="w-full justify-start"
-                  variant="outline"
-                  onClick={handleSyncPackages}
-                  disabled={routerActions.isLoading}
-                >
-                  {routerActions.isLoading ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  ) : (
-                    <Package className="mr-2 h-4 w-4" />
-                  )}
-                  Sync Packages
-                </Button>
+                {routerType === 'mikrotik' && (
+                  <Button
+                    className="w-full justify-start"
+                    variant="outline"
+                    onClick={handleSyncPackages}
+                    disabled={routerActions.isLoading}
+                  >
+                    {routerActions.isLoading ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <Package className="mr-2 h-4 w-4" />
+                    )}
+                    Sync Packages
+                  </Button>
+                )}
 
                 <Button className="w-full justify-start" variant="outline" asChild>
                   <Link href={`/routers/${routerId}/settings`}>
@@ -471,9 +481,10 @@ export default function RouterPage({ params }: RouterPageProps) {
 
         {/* Services Tab */}
         <TabsContent value="services" className="space-y-6">
-          <div className="grid gap-6 md:grid-cols-2">
-            {/* Hotspot Service */}
-            <Card>
+          {routerType === 'mikrotik' ? (
+            <div className="grid gap-6 md:grid-cols-2">
+              {/* Hotspot Service */}
+              <Card>
               <CardHeader>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
@@ -640,9 +651,57 @@ export default function RouterPage({ params }: RouterPageProps) {
               </CardContent>
             </Card>
           </div>
+          ) : (
+            // UniFi Router - Controller-Managed Services
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Network className="h-5 w-5" />
+                  UniFi Controller
+                </CardTitle>
+                <CardDescription>Services are managed through your UniFi Controller</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <Alert>
+                  <Info className="h-4 w-4" />
+                  <AlertTitle>Controller-Managed Services</AlertTitle>
+                  <AlertDescription>
+                    WiFi networks, guest portal, and network settings are configured directly in your UniFi Controller.
+                    Use this platform to manage vouchers and track revenue.
+                  </AlertDescription>
+                </Alert>
+                <div className="space-y-3">
+                  <div className="flex justify-between items-center py-2 border-b">
+                    <span className="text-sm text-muted-foreground">Controller URL</span>
+                    <span className="font-mono text-xs">{routerData.connection?.controllerUrl || 'N/A'}</span>
+                  </div>
+                  <div className="flex justify-between items-center py-2 border-b">
+                    <span className="text-sm text-muted-foreground">Site</span>
+                    <span className="font-medium">{routerData.connection?.siteId || 'default'}</span>
+                  </div>
+                  <div className="flex justify-between items-center py-2">
+                    <span className="text-sm text-muted-foreground">Status</span>
+                    {routerData.status === 'online' ? (
+                      <Badge className="bg-green-500">Connected</Badge>
+                    ) : (
+                      <Badge variant="destructive">Disconnected</Badge>
+                    )}
+                  </div>
+                </div>
+                <div className="pt-2">
+                  <Button size="sm" variant="outline" className="w-full" asChild>
+                    <Link href={`/routers/${routerId}/settings`}>
+                      <Settings className="mr-2 h-4 w-4" />
+                      Configure Settings
+                    </Link>
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
-          {/* Configuration Status */}
-          {routerData.configurationStatus?.configured && (
+          {/* Configuration Status - Only show for MikroTik */}
+          {routerType === 'mikrotik' && routerData.configurationStatus?.configured && (
             <Card>
               <CardHeader>
                 <CardTitle>Configuration Status</CardTitle>
@@ -695,19 +754,21 @@ export default function RouterPage({ params }: RouterPageProps) {
               </p>
             </div>
             <div className="flex gap-2">
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={handleSyncPackages}
-                disabled={routerActions.isLoading || routerData.status !== 'online'}
-              >
-                {routerActions.isLoading ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                ) : (
-                  <RefreshCw className="mr-2 h-4 w-4" />
-                )}
-                Sync Packages
-              </Button>
+              {routerType === 'mikrotik' && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={handleSyncPackages}
+                  disabled={routerActions.isLoading || routerData.status !== 'online'}
+                >
+                  {routerActions.isLoading ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <RefreshCw className="mr-2 h-4 w-4" />
+                  )}
+                  Sync Packages
+                </Button>
+              )}
               <Button size="sm" asChild>
                 <Link href={`/routers/${routerId}/packages/create`}>
                   <Package className="mr-2 h-4 w-4" />
@@ -716,6 +777,17 @@ export default function RouterPage({ params }: RouterPageProps) {
               </Button>
             </div>
           </div>
+
+          {routerType === 'unifi' && (
+            <Alert>
+              <Info className="h-4 w-4" />
+              <AlertTitle>Database-Only Packages</AlertTitle>
+              <AlertDescription>
+                UniFi packages are managed directly in the database. They are not synced from the controller.
+                Create packages here and they will be available for voucher generation.
+              </AlertDescription>
+            </Alert>
+          )}
 
           {routerData.packages?.hotspot && routerData.packages.hotspot.length > 0 ? (
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
@@ -806,22 +878,39 @@ export default function RouterPage({ params }: RouterPageProps) {
                 Real-time view of connected users
               </p>
             </div>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={fetchActiveUsers}
-              disabled={routerActions.isLoading || routerData.status !== 'online'}
-            >
-              {routerActions.isLoading ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : (
-                <RefreshCw className="mr-2 h-4 w-4" />
-              )}
-              Refresh
-            </Button>
+            {routerType === 'mikrotik' && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={fetchActiveUsers}
+                disabled={routerActions.isLoading || routerData.status !== 'online'}
+              >
+                {routerActions.isLoading ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <RefreshCw className="mr-2 h-4 w-4" />
+                )}
+                Refresh
+              </Button>
+            )}
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {routerType === 'unifi' ? (
+            <Card>
+              <CardContent className="py-12 text-center">
+                <Alert className="max-w-2xl mx-auto">
+                  <Info className="h-4 w-4" />
+                  <AlertTitle>UniFi Controller Integration</AlertTitle>
+                  <AlertDescription>
+                    Active users for UniFi controllers will be fetched from the UniFi Controller API.
+                    This feature is currently under development.
+                  </AlertDescription>
+                </Alert>
+              </CardContent>
+            </Card>
+          ) : (
+            <>
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <Card>
               <CardContent className="p-6">
                 <div className="space-y-2">
@@ -974,6 +1063,8 @@ export default function RouterPage({ params }: RouterPageProps) {
               )}
             </CardContent>
           </Card>
+            </>
+          )}
         </TabsContent>
 
         {/* Network Tab */}

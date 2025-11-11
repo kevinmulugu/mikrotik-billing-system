@@ -61,6 +61,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     // Format response matching the database structure with complete network data
     const router = {
       id: routerDoc._id.toString(),
+      routerType: routerDoc.routerType || 'mikrotik', // Router type for conditional UI rendering
       name: routerDoc.routerInfo?.name || 'Unknown',
       model: routerDoc.routerInfo?.model || 'Unknown',
       serialNumber: routerDoc.routerInfo?.serialNumber || '',
@@ -82,6 +83,9 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         apiUser: routerDoc.connection?.apiUser || 'admin',
         restApiEnabled: routerDoc.connection?.restApiEnabled ?? true,
         sshEnabled: routerDoc.connection?.sshEnabled ?? false,
+        // UniFi-specific fields
+        controllerUrl: routerDoc.connection?.controllerUrl || null,
+        siteId: routerDoc.connection?.siteId || null,
       },
       configuration: {
         hotspot: {

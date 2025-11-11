@@ -58,6 +58,27 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       return NextResponse.json({ error: 'Router not found' }, { status: 404 });
     }
 
+    // For UniFi routers, packages are managed in the database only
+    if (router.routerType === 'unifi') {
+      const packageCount = router.packages?.hotspot?.length || 0;
+      return NextResponse.json({
+        success: true,
+        message: 'Packages for UniFi routers are managed in the database only. Use "Create Package" to add new pricing tiers.',
+        results: {
+          synced: packageCount,
+          newOnRouter: 0,
+          outOfSync: 0,
+          notOnRouter: 0,
+          packages: (router.packages?.hotspot || []).map((pkg: any) => ({
+            name: pkg.name,
+            displayName: pkg.displayName,
+            price: pkg.price,
+            syncStatus: 'synced',
+          })),
+        },
+      });
+    }
+
     // Check if router is online
     if (router.health?.status !== 'online') {
       return NextResponse.json(
