@@ -34,6 +34,7 @@ export default function EditPackagePage({ params }: EditPackagePageProps) {
   const [saving, setSaving] = useState(false);
   const [packageData, setPackageData] = useState<any>(null);
   const [routerData, setRouterData] = useState<any>(null);
+  const [routerType, setRouterType] = useState<'mikrotik' | 'unifi'>('mikrotik');
 
   // Form state
   const [formData, setFormData] = useState({
@@ -77,6 +78,7 @@ export default function EditPackagePage({ params }: EditPackagePageProps) {
       }
 
       setRouterData(routerDataResult.router);
+      setRouterType(routerDataResult.router.routerType || 'mikrotik');
 
       // Find the specific package
       const pkg = routerDataResult.router.packages?.hotspot?.find(
@@ -320,7 +322,17 @@ export default function EditPackagePage({ params }: EditPackagePageProps) {
           </AlertDescription>
         </Alert>
 
-        {hasRouterChanges && (
+        {routerType === 'unifi' && (
+          <Alert>
+            <Info className="h-4 w-4" />
+            <AlertDescription>
+              <strong>UniFi Router:</strong> Packages are stored in the database only. No router synchronization is performed.
+              Bandwidth and duration limits are enforced through your UniFi Controller's hotspot portal configuration.
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {hasRouterChanges && routerType === 'mikrotik' && (
           <Alert>
             <AlertTriangle className="h-4 w-4" />
             <AlertDescription>
@@ -430,7 +442,7 @@ export default function EditPackagePage({ params }: EditPackagePageProps) {
                 <p className="text-sm text-red-500">{errors.price}</p>
               )}
               <p className="text-xs text-muted-foreground">
-                Price changes take effect immediately and don't require router sync.
+                Price changes take effect immediately{routerType === 'mikrotik' && " and don't require router sync"}.
               </p>
             </div>
           </CardContent>
@@ -441,13 +453,17 @@ export default function EditPackagePage({ params }: EditPackagePageProps) {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               Usage Limits
-              <Badge variant="outline" className="text-xs">
-                <AlertTriangle className="mr-1 h-3 w-3" />
-                Sync Required
-              </Badge>
+              {routerType === 'mikrotik' && (
+                <Badge variant="outline" className="text-xs">
+                  <AlertTriangle className="mr-1 h-3 w-3" />
+                  Sync Required
+                </Badge>
+              )}
             </CardTitle>
             <CardDescription>
-              Changes to these fields require syncing to the router
+              {routerType === 'mikrotik' 
+                ? 'Changes to these fields require syncing to the router'
+                : 'Define voucher usage limits for your customers'}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -472,7 +488,7 @@ export default function EditPackagePage({ params }: EditPackagePageProps) {
               {errors.duration && (
                 <p className="text-sm text-red-500">{errors.duration}</p>
               )}
-              {formData.duration !== originalFormData?.duration && (
+              {routerType === 'mikrotik' && formData.duration !== originalFormData?.duration && (
                 <p className="text-xs text-amber-600 flex items-center gap-1">
                   <AlertTriangle className="h-3 w-3" />
                   Router sync required for this change
@@ -501,7 +517,7 @@ export default function EditPackagePage({ params }: EditPackagePageProps) {
               {errors.dataLimit && (
                 <p className="text-sm text-red-500">{errors.dataLimit}</p>
               )}
-              {formData.dataLimit !== originalFormData?.dataLimit && (
+              {routerType === 'mikrotik' && formData.dataLimit !== originalFormData?.dataLimit && (
                 <p className="text-xs text-amber-600 flex items-center gap-1">
                   <AlertTriangle className="h-3 w-3" />
                   Router sync required for this change
@@ -539,13 +555,17 @@ export default function EditPackagePage({ params }: EditPackagePageProps) {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               Bandwidth Settings
-              <Badge variant="outline" className="text-xs">
-                <AlertTriangle className="mr-1 h-3 w-3" />
-                Sync Required
-              </Badge>
+              {routerType === 'mikrotik' && (
+                <Badge variant="outline" className="text-xs">
+                  <AlertTriangle className="mr-1 h-3 w-3" />
+                  Sync Required
+                </Badge>
+              )}
             </CardTitle>
             <CardDescription>
-              Speed limit changes require syncing to the router
+              {routerType === 'mikrotik'
+                ? 'Speed limit changes require syncing to the router'
+                : 'Define maximum upload and download speeds'}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -571,7 +591,7 @@ export default function EditPackagePage({ params }: EditPackagePageProps) {
                 {errors.uploadSpeed && (
                   <p className="text-sm text-red-500">{errors.uploadSpeed}</p>
                 )}
-                {formData.uploadSpeed !== originalFormData?.uploadSpeed && (
+                {routerType === 'mikrotik' && formData.uploadSpeed !== originalFormData?.uploadSpeed && (
                   <p className="text-xs text-amber-600 flex items-center gap-1">
                     <AlertTriangle className="h-3 w-3" />
                     Sync required
@@ -600,7 +620,7 @@ export default function EditPackagePage({ params }: EditPackagePageProps) {
                 {errors.downloadSpeed && (
                   <p className="text-sm text-red-500">{errors.downloadSpeed}</p>
                 )}
-                {formData.downloadSpeed !== originalFormData?.downloadSpeed && (
+                {routerType === 'mikrotik' && formData.downloadSpeed !== originalFormData?.downloadSpeed && (
                   <p className="text-xs text-amber-600 flex items-center gap-1">
                     <AlertTriangle className="h-3 w-3" />
                     Sync required

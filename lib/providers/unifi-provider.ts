@@ -47,14 +47,20 @@ export class UniFiProvider implements RouterProvider {
 
   constructor(config: RouterConnectionConfig) {
     this.config = config;
-    // UniFi site stored in vendorConfig or default to 'default'
-    this.selectedSite = 'default';
+    // UniFi site from config or default to 'default'
+    this.selectedSite = config.site || 'default';
     
     // Map RouterConnectionConfig to UniFiConnectionConfig
+    // If ipAddress starts with http:// or https://, use it as-is (full URL)
+    // Otherwise construct URL from ipAddress and port
+    const isFullUrl = config.ipAddress.startsWith('http://') || config.ipAddress.startsWith('https://');
+    
     this.unifiConfig = {
-      controllerUrl: config.useVPN && config.vpnIP 
-        ? `https://${config.vpnIP}:${config.port}`
-        : `https://${config.ipAddress}:${config.port}`,
+      controllerUrl: isFullUrl 
+        ? config.ipAddress
+        : (config.useVPN && config.vpnIP 
+            ? `https://${config.vpnIP}:${config.port}`
+            : `https://${config.ipAddress}:${config.port}`),
       username: config.username,
       password: config.password,
       site: this.selectedSite,

@@ -213,10 +213,28 @@ export async function POST(
     let voucherResult = null;
     
     if (syncToRouter && router.health?.status === 'online') {
-      const connectionConfig = getRouterConnectionConfig(router, {
-        forceLocal: false,
-        forceVPN: true,
-      });
+      let connectionConfig;
+      
+      if (routerType === 'unifi') {
+        // UniFi controllers use direct HTTP/HTTPS connection, not VPN
+        // The RouterConnectionConfig expects ipAddress, but UniFiProvider will build the full URL
+        const controllerUrl = router.connection?.controllerUrl || 'https://localhost:8443';
+        const url = new URL(controllerUrl);
+        
+        connectionConfig = {
+          ipAddress: controllerUrl, // Pass full URL for UniFi (UniFiProvider will parse it)
+          port: parseInt(url.port) || 8443,
+          username: router.connection?.apiUser || 'admin',
+          password: router.connection?.apiPassword,
+          site: router.connection?.siteId || 'default',
+        };
+      } else {
+        // MikroTik routers use VPN for secure access
+        connectionConfig = getRouterConnectionConfig(router, {
+          forceLocal: false,
+          forceVPN: true,
+        });
+      }
 
       // Create router provider instance
       provider = RouterProviderFactory.create(routerType, connectionConfig);

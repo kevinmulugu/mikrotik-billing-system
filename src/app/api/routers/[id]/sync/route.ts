@@ -61,18 +61,132 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       );
     }
 
-    // UniFi routers are synced differently (via controller API)
+    // Handle UniFi routers - Test connection via UniFi Controller API
     if (router.routerType === 'unifi') {
-      return NextResponse.json({
-        success: true,
-        message: 'UniFi routers sync from the controller automatically. Status updated.',
-        router: {
-          id: routerId,
-          name: router.routerInfo?.name,
-          status: router.health?.status || 'offline',
-          lastSeen: router.health?.lastSeen || new Date(),
-        },
-      });
+      try {
+        // Import UniFi provider
+        const { UniFiProvider } = await import('@/lib/providers/unifi-provider');
+        
+        // Build connection config for UniFi
+        const controllerUrl = router.connection?.controllerUrl || 'https://localhost:8443';
+        const url = new URL(controllerUrl);
+        
+        const connectionConfig = {
+          ipAddress: controllerUrl, // Full URL for UniFi
+          port: parseInt(url.port) || 8443,
+          username: router.connection?.apiUser || 'admin',
+          password: router.connection?.apiPassword || '', // Password as stored (already encrypted, UniFi service handles it)
+          site: router.connection?.siteId || 'default',
+        };
+
+        // Create provider and test connection
+        const provider = new UniFiProvider(connectionConfig);
+        const connectionResult = await provider.testConnection();
+
+        if (!connectionResult.success) {
+          // Update router status to offline
+          await db.collection('routers').updateOne(
+            { _id: new ObjectId(routerId) },
+            {
+              $set: {
+                'health.status': 'offline',
+                'health.lastSeen': new Date(),
+                updatedAt: new Date(),
+              },
+            }
+          );
+
+          return NextResponse.json({
+            success: false,
+            error: connectionResult.error || 'Failed to connect to UniFi Controller',
+            router: {
+              status: 'offline',
+              lastSeen: new Date(),
+            },
+          });
+        }
+
+        // Get router info from connection result
+        const routerInfo = connectionResult.data?.routerInfo;
+
+        // Update router health in database
+        await db.collection('routers').updateOne(
+          { _id: new ObjectId(routerId) },
+          {
+            $set: {
+              'health.status': 'online',
+              'health.lastSeen': new Date(),
+              'routerInfo.firmwareVersion': routerInfo?.version || router.routerInfo?.firmwareVersion,
+              updatedAt: new Date(),
+            },
+          }
+        );
+
+        // Log audit entry
+        await db.collection('audit_logs').insertOne({
+          user: {
+            userId: new ObjectId(userId),
+            email: session.user.email || '',
+            role: 'homeowner',
+            ipAddress: request.headers.get('x-forwarded-for') || 'unknown',
+            userAgent: request.headers.get('user-agent') || 'unknown',
+          },
+          action: {
+            type: 'update',
+            resource: 'router_sync',
+            resourceId: new ObjectId(routerId),
+            description: `UniFi Controller sync for: ${router.routerInfo?.name}`,
+          },
+          changes: {
+            before: {},
+            after: { health: true },
+            fields: ['health'],
+          },
+          metadata: {
+            sessionId: '',
+            correlationId: `sync-router-${routerId}`,
+            source: 'web',
+            severity: 'info',
+          },
+          timestamp: new Date(),
+        });
+
+        return NextResponse.json({
+          success: true,
+          message: 'UniFi Controller synced successfully',
+          syncResults: {
+            health: true,
+          },
+          router: {
+            status: 'online',
+            lastSeen: new Date(),
+            firmwareVersion: routerInfo?.version,
+          },
+        });
+      } catch (error) {
+        console.error('UniFi sync error:', error);
+        
+        // Update router status to offline on error
+        await db.collection('routers').updateOne(
+          { _id: new ObjectId(routerId) },
+          {
+            $set: {
+              'health.status': 'offline',
+              'health.lastSeen': new Date(),
+              updatedAt: new Date(),
+            },
+          }
+        );
+
+        return NextResponse.json({
+          success: false,
+          error: error instanceof Error ? error.message : 'Failed to sync UniFi Controller',
+          router: {
+            status: 'offline',
+            lastSeen: new Date(),
+          },
+        });
+      }
     }
 
     // Prepare connection config (MikroTik only)

@@ -192,9 +192,22 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       ...updatedFields,
     };
 
+    // Check router type before attempting sync
+    const routerType = router.routerType || 'mikrotik';
+    
     // Try to sync updated package to MikroTik if router is online and we have router connection info.
     let mikrotikSyncResult = null;
-    if (router.health?.status === 'online') {
+    
+    if (routerType === 'unifi') {
+      // UniFi packages are database-only, no router sync needed
+      mergedPackage.syncStatus = 'synced';
+      mergedPackage.lastSynced = new Date();
+      mergedPackage.syncError = null;
+      mikrotikSyncResult = {
+        success: true,
+        message: 'UniFi packages are managed in the database. No router sync required.',
+      };
+    } else if (router.health?.status === 'online') {
       try {
         const routerConfig = getRouterConnectionConfig(router, {
           forceLocal: false,
