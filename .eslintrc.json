@@ -112,6 +112,8 @@
     "dist/",
     "out/",
     "build/",
-    "*.config.js"
+    "*.config.js",
+    "src/components/ui/**",
+    "components/ui/**"
   ]
 }
