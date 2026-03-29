@@ -212,8 +212,11 @@ export default function AddRouterPage() {
         </div>
       </div>
 
+      {/* Add Router Wizard */}
+      <AddRouterWizard />
+
       {/* Router Type Tabs for Instructions */}
-      <Tabs value={routerType} onValueChange={(v) => setRouterType(v as 'mikrotik' | 'unifi')} className="mb-6">
+      <Tabs value={routerType} onValueChange={(v) => setRouterType(v as 'mikrotik' | 'unifi')} className="mt-8 mb-6">
         <TabsList className="grid w-full grid-cols-2">
           <TabsTrigger value="mikrotik" className="flex items-center gap-2">
             <Network className="h-4 w-4" />
@@ -257,7 +260,7 @@ export default function AddRouterPage() {
                   <strong>Router's IP address</strong> - Usually <code className="bg-background px-1 py-0.5 rounded">192.168.88.1</code> after reset
                 </li>
                 <li>
-                  <strong>Admin password</strong> - Blank by default after reset (you'll be prompted to set one)
+                  <strong>Admin password</strong> - Set one in Winbox before adding here (required)
                 </li>
                 <li>
                   <strong>Router connected to internet</strong> - Via WAN port or cellular
@@ -514,7 +517,7 @@ export default function AddRouterPage() {
       </Tabs>
 
       {/* Mobile App Note */}
-      <Alert className="mb-6 bg-blue-50 dark:bg-blue-950 border-blue-200 dark:border-blue-800">
+      <Alert className="mt-6 bg-blue-50 dark:bg-blue-950 border-blue-200 dark:border-blue-800">
         <Smartphone className="h-4 w-4 text-blue-600 dark:text-blue-400" />
         <AlertTitle className="text-blue-900 dark:text-blue-100">Coming Soon: Mobile App</AlertTitle>
         <AlertDescription className="text-blue-800 dark:text-blue-200">
@@ -523,9 +526,6 @@ export default function AddRouterPage() {
           </p>
         </AlertDescription>
       </Alert>
-
-      {/* Add Router Wizard */}
-      <AddRouterWizard />
 
       {/* Support Note */}
       <div className="mt-6 text-center text-sm text-muted-foreground">

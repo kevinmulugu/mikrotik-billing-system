@@ -1,5 +1,5 @@
 // scripts/seed-database.ts
-import { MongoClient, ObjectId } from 'mongodb';
+import { MongoClient, ObjectId, Int32, Long } from 'mongodb';
 import * as dotenv from 'dotenv';
 import * as path from 'path';
 
@@ -564,6 +564,297 @@ async function seedDatabase() {
       console.log('  ⊙ Demo ISP already exists');
     }
 
+    // Resolve actual ISP user ID (handles re-runs where user already exists)
+    const actualIspUser = await db.collection('users').findOne({ email: 'isp@demo.com' });
+    const actualIspUserId = actualIspUser?._id ?? ispUserId;
+
+    // ==========================================
+    // 3C. SEED ISP DEMO ROUTERS (2 routers)
+    // ==========================================
+    console.log('\n🔌 Creating ISP demo routers...');
+
+    const ispRouter1Id = new ObjectId();
+    const ispRouter2Id = new ObjectId();
+
+    const ispRouter1Exists = await db
+      .collection('routers')
+      .findOne({ 'routerInfo.serialNumber': 'DEMO-ISP-001' });
+
+    const ispRouter2Exists = await db
+      .collection('routers')
+      .findOne({ 'routerInfo.serialNumber': 'DEMO-ISP-002' });
+
+    if (!ispRouter1Exists) {
+      // ISP Router 1 — MikroTik with VPN tunnel connected
+      await db.collection('routers').insertOne({
+        _id: ispRouter1Id,
+        userId: actualIspUserId,
+        routerType: 'mikrotik',
+        routerInfo: {
+          name: 'CBD Hotspot Hub',
+          model: 'MikroTik hAP ax²',
+          serialNumber: 'DEMO-ISP-001',
+          macAddress: '00:AA:BB:CC:DD:01',
+          firmwareVersion: '7.14',
+          location: {
+            name: 'CBD Main Branch',
+            coordinates: { latitude: -1.283, longitude: 36.819 },
+            address: '456 Moi Avenue, Nairobi CBD',
+          },
+        },
+        connection: {
+          localIP: '192.168.1.1',
+          vpnIP: '10.99.0.2',
+          preferVPN: true,
+          ipAddress: '10.99.0.2',
+          port: 8728,
+          apiUser: 'admin',
+          apiPassword: 'demo_encrypted_password_isp1',
+          restApiEnabled: true,
+          sshEnabled: false,
+        },
+        vpnTunnel: {
+          enabled: true,
+          clientPublicKey: 'ISP1DemoPublicKeyBase64Placeholder0000001==',
+          serverPublicKey: process.env.VPN_SERVER_PUBLIC_KEY || 'ServerPublicKeyPlaceholderBase64001==',
+          assignedVPNIP: '10.99.0.2',
+          status: 'connected',
+          lastHandshake: new Date(Date.now() - 4 * 60 * 1000),
+          provisionedAt: new Date(Date.now() - 45 * 24 * 60 * 60 * 1000),
+          error: null,
+          lastAttempt: null,
+        },
+        services: { hotspot: { enabled: true, packages: [], lastSynced: null } },
+        capabilities: {
+          supportsVPN: true,
+          supportedServices: ['hotspot'],
+          captivePortalMethod: 'http_upload',
+          voucherFormat: 'username_password',
+        },
+        vendorConfig: {
+          mikrotik: { firmwareVersion: '7.14', identity: 'CBD-Hub', architecture: 'arm64' },
+        },
+        configuration: {
+          hotspot: {
+            enabled: true, ssid: 'ISP-CBD-WiFi', password: 'hotspotisp1',
+            interface: 'wlan1', ipPool: '10.5.51.0/24', dnsServers: ['8.8.8.8', '8.8.4.4'], maxUsers: 100,
+          },
+          pppoe: { enabled: false, interface: 'ether1', ipPool: '', dnsServers: [], defaultProfile: 'default' },
+          network: { lanInterface: 'bridge', wanInterface: 'ether1', lanSubnet: '192.168.1.0/24', dhcpRange: '192.168.1.10-192.168.1.254' },
+        },
+        health: {
+          status: 'online', lastSeen: new Date(), uptime: 432000,
+          cpuUsage: 22, memoryUsage: 55, diskUsage: 18, temperature: 48, connectedUsers: 12,
+        },
+        statistics: {
+          totalDataUsage: 200000000000, monthlyDataUsage: 40000000000,
+          totalUsers: 120, activeUsers: 12,
+          revenue: { total: 18000, monthly: 4500, daily: 180 },
+        },
+        configurationStatus: {
+          configured: true, configuredAt: new Date(Date.now() - 45 * 24 * 60 * 60 * 1000),
+          completedSteps: ['Basic network configuration', 'Hotspot server setup', 'VPN tunnel established'],
+          failedSteps: [],
+        },
+        status: 'active',
+        createdAt: new Date(Date.now() - 45 * 24 * 60 * 60 * 1000),
+        updatedAt: new Date(),
+      });
+      console.log('  ✓ ISP Router 1 created: CBD Hotspot Hub (with VPN)');
+    } else {
+      console.log('  ⊙ ISP Router 1 already exists');
+    }
+
+    if (!ispRouter2Exists) {
+      // ISP Router 2 — MikroTik, VPN pending setup
+      await db.collection('routers').insertOne({
+        _id: ispRouter2Id,
+        userId: actualIspUserId,
+        routerType: 'mikrotik',
+        routerInfo: {
+          name: 'Westlands Branch',
+          model: 'MikroTik RB4011iGS+RM',
+          serialNumber: 'DEMO-ISP-002',
+          macAddress: '00:AA:BB:CC:DD:02',
+          firmwareVersion: '7.12',
+          location: {
+            name: 'Westlands Office',
+            coordinates: { latitude: -1.265, longitude: 36.806 },
+            address: '78 Westlands Road, Nairobi',
+          },
+        },
+        connection: {
+          localIP: '192.168.2.1',
+          vpnIP: null,
+          preferVPN: false,
+          ipAddress: '192.168.2.1',
+          port: 8728,
+          apiUser: 'admin',
+          apiPassword: 'demo_encrypted_password_isp2',
+          restApiEnabled: true,
+          sshEnabled: false,
+        },
+        vpnTunnel: {
+          enabled: false,
+          clientPublicKey: null,
+          serverPublicKey: null,
+          assignedVPNIP: null,
+          status: 'pending',
+          lastHandshake: null,
+          provisionedAt: null,
+          error: 'VPN configuration pending',
+          lastAttempt: null,
+        },
+        services: { hotspot: { enabled: true, packages: [], lastSynced: null } },
+        capabilities: {
+          supportsVPN: true,
+          supportedServices: ['hotspot'],
+          captivePortalMethod: 'http_upload',
+          voucherFormat: 'username_password',
+        },
+        vendorConfig: {
+          mikrotik: { firmwareVersion: '7.12', identity: 'Westlands', architecture: 'x86' },
+        },
+        configuration: {
+          hotspot: {
+            enabled: true, ssid: 'ISP-Westlands-WiFi', password: 'hotspotisp2',
+            interface: 'wlan1', ipPool: '10.5.52.0/24', dnsServers: ['8.8.8.8', '8.8.4.4'], maxUsers: 80,
+          },
+          pppoe: { enabled: false, interface: 'ether1', ipPool: '', dnsServers: [], defaultProfile: 'default' },
+          network: { lanInterface: 'bridge', wanInterface: 'ether1', lanSubnet: '192.168.2.0/24', dhcpRange: '192.168.2.10-192.168.2.254' },
+        },
+        health: {
+          status: 'online', lastSeen: new Date(), uptime: 172800,
+          cpuUsage: 18, memoryUsage: 42, diskUsage: 15, temperature: 44, connectedUsers: 7,
+        },
+        statistics: {
+          totalDataUsage: 80000000000, monthlyDataUsage: 18000000000,
+          totalUsers: 60, activeUsers: 7,
+          revenue: { total: 8500, monthly: 2200, daily: 80 },
+        },
+        configurationStatus: {
+          configured: true, configuredAt: new Date(Date.now() - 20 * 24 * 60 * 60 * 1000),
+          completedSteps: ['Basic network configuration', 'Hotspot server setup'],
+          failedSteps: [],
+          warnings: ['VPN not yet configured — router accessible only on local network'],
+        },
+        status: 'active',
+        createdAt: new Date(Date.now() - 20 * 24 * 60 * 60 * 1000),
+        updatedAt: new Date(),
+      });
+      console.log('  ✓ ISP Router 2 created: Westlands Branch (VPN pending)');
+    } else {
+      console.log('  ⊙ ISP Router 2 already exists');
+    }
+
+    // Update ISP user statistics
+    await db.collection('users').updateOne(
+      { _id: actualIspUserId },
+      { $set: { 'statistics.totalRouters': 2, updatedAt: new Date() } }
+    );
+
+    // ==========================================
+    // 3D. SEED VPN TUNNEL FOR ISP ROUTER 1
+    // ==========================================
+    console.log('\n🔐 Creating VPN tunnel for ISP Router 1...');
+
+    const resolvedIspRouter1Id = ispRouter1Exists
+      ? (await db.collection('routers').findOne({ 'routerInfo.serialNumber': 'DEMO-ISP-001' }))?._id
+      : ispRouter1Id;
+
+    const vpnTunnelExists = resolvedIspRouter1Id
+      ? await db.collection('vpn_tunnels').findOne({ routerId: resolvedIspRouter1Id })
+      : null;
+
+    if (!vpnTunnelExists && resolvedIspRouter1Id) {
+      // Generate demo WireGuard-like keys (random bytes base64)
+      const crypto = await import('crypto');
+      const demoPrivKey = crypto.randomBytes(32).toString('base64');
+
+      // Encrypt using same algorithm as VPNProvisioner.encryptPrivateKey
+      const encKey = crypto.scryptSync(
+        process.env.NEXTAUTH_SECRET || 'default-secret',
+        'salt',
+        32
+      );
+      const iv = crypto.randomBytes(16);
+      const cipher = crypto.createCipheriv('aes-256-cbc', encKey, iv);
+      let encrypted = cipher.update(demoPrivKey, 'utf8', 'hex');
+      encrypted += cipher.final('hex');
+      const encryptedPrivKey = `${iv.toString('hex')}:${encrypted}`;
+
+      await db.collection('vpn_tunnels').insertOne({
+        routerId: resolvedIspRouter1Id,
+        userId: actualIspUserId,
+        vpnConfig: {
+          clientPrivateKey: encryptedPrivKey,
+          clientPublicKey: 'ISP1DemoPublicKeyBase64Placeholder0000001==',
+          serverPublicKey: process.env.VPN_SERVER_PUBLIC_KEY || 'ServerPublicKeyPlaceholderBase64001==',
+          assignedIP: '10.99.0.2',
+          endpoint: process.env.VPN_SERVER_ENDPOINT || 'vpn.example.com:51820',
+          allowedIPs: process.env.VPN_NETWORK || '10.99.0.0/16',
+          persistentKeepalive: new Int32(25),
+        },
+        connection: {
+          status: 'connected',
+          lastHandshake: new Date(Date.now() - 4 * 60 * 1000),
+          bytesReceived: new Long(0),
+          bytesSent: new Long(0),
+          lastSeen: new Date(),
+        },
+        createdAt: new Date(Date.now() - 45 * 24 * 60 * 60 * 1000),
+        updatedAt: new Date(),
+      });
+      console.log('  ✓ VPN tunnel record created for ISP Router 1');
+    } else {
+      console.log('  ⊙ VPN tunnel already exists or router not found');
+    }
+
+    // ==========================================
+    // 3E. SEED ISP WIFI CUSTOMERS
+    // ==========================================
+    console.log('\n📱 Creating ISP demo customers...');
+
+    const ispCustomers = [
+      { phone: '254701112233', firstName: 'Alice', lastName: 'Wanjiku', name: 'Alice Wanjiku', email: 'alice@example.com' },
+      { phone: '254703334455', firstName: 'Brian', lastName: 'Otieno', name: 'Brian Otieno', email: null },
+      { phone: '254705556677', firstName: 'Carol', lastName: 'Mwangi', name: 'Carol Mwangi', email: 'carol@example.com' },
+      { phone: '254707778899', firstName: 'David', lastName: 'Kamau', name: 'David Kamau', email: null },
+    ];
+
+    const resolvedIspRouter1Id2 = resolvedIspRouter1Id ?? ispRouter1Id;
+    let ispCustomersCreated = 0;
+
+    for (const customer of ispCustomers) {
+      const exists = await db.collection('customers').findOne({ phone: customer.phone });
+      if (!exists) {
+        const crypto2 = await import('crypto');
+        const sha256Phone = crypto2.createHash('sha256').update(customer.phone).digest('hex');
+        await db.collection('customers').insertOne({
+          _id: new ObjectId(),
+          routerId: resolvedIspRouter1Id2,
+          phone: customer.phone,
+          sha256Phone,
+          name: customer.name,
+          firstName: customer.firstName,
+          lastName: customer.lastName,
+          email: customer.email,
+          createdAt: new Date(Date.now() - 40 * 24 * 60 * 60 * 1000),
+          updatedAt: new Date(),
+          lastPurchaseDate: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000),
+          totalPurchases: 5 + Math.floor(Math.random() * 15),
+          totalSpent: 200 + Math.floor(Math.random() * 800),
+        });
+        ispCustomersCreated++;
+      }
+    }
+
+    if (ispCustomersCreated > 0) {
+      console.log(`  ✓ Created ${ispCustomersCreated} ISP WiFi customers`);
+    } else {
+      console.log('  ⊙ ISP customers already exist');
+    }
+
     // ==========================================
     // 4. SEED DEMO VOUCHERS
     // ==========================================
@@ -653,65 +944,228 @@ async function seedDatabase() {
       .countDocuments({ userId: homeownerUserId });
 
     if (paymentsExist === 0) {
-      const payments = [];
+      // Package options matching the demo router
+      const packageOptions = [
+        { type: '1hour', amount: 10, description: 'Voucher purchase - 1 Hour Package' },
+        { type: '3hours', amount: 25, description: 'Voucher purchase - 3 Hours Package' },
+        { type: '1day', amount: 100, description: 'Voucher purchase - 1 Day Package' },
+      ];
 
-      for (let i = 0; i < 5; i++) {
+      // Demo customer phones — must match wifiCustomers names below
+      const customerPhones = ['254707861420', '254702209337', '254757096651', '254711223344', '254720998877'];
+
+      // Name map: phone → M-Pesa customer name (matches wifiCustomers section)
+      const phoneNameMap: Record<string, string> = {
+        '254707861420': 'Kevin Mulugi',
+        '254702209337': 'James Kariuki',
+        '254757096651': 'Grace Wambui',
+        '254711223344': 'Peter Ochieng',
+        '254720998877': 'Faith Njeri',
+      };
+
+      // Generate M-Pesa-style receipt number
+      const mpesaReceipt = (idx: number) => {
+        const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ0123456789';
+        return 'Q' + Array.from({ length: 9 }, (_, i) => chars[(idx * 7 + i * 13) % chars.length]).join('');
+      };
+
+      const payments = [];
+      const now = Date.now();
+      const day = 24 * 60 * 60 * 1000;
+
+      // Completed payments spread over 60 days (25 total)
+      const completedDaysAgo = [60, 58, 55, 52, 50, 47, 45, 42, 40, 37, 35, 32, 28, 25, 21, 18, 15, 12, 9, 7, 5, 3, 2, 1, 0];
+      for (let i = 0; i < completedDaysAgo.length; i++) {
+        const pkg = packageOptions[i % packageOptions.length]!;
+        const phone = customerPhones[i % customerPhones.length]!;
+        const createdAt = new Date(now - completedDaysAgo[i]! * day - Math.floor(Math.random() * 8) * 60 * 60 * 1000);
         payments.push({
           _id: new ObjectId(),
           userId: homeownerUserId,
-          transaction: {
-            type: 'voucher_purchase',
-            amount: 100,
-            currency: 'KES',
-            description: `Voucher purchase - 1 day package`,
-            reference: `TXN${Date.now() + i}`,
-          },
+          routerId,
           mpesa: {
-            transactionId: `MPESA${Date.now() + i}`,
-            phoneNumber: '+254712345678',
-            accountReference: 'VOUCHER',
-            transactionDesc: 'Voucher Purchase',
-            merchantRequestId: `MR${Date.now() + i}`,
-            checkoutRequestId: `CR${Date.now() + i}`,
+            checkoutRequestId: `ws_CO_${String(i).padStart(12, '0')}`,
+            merchantRequestId: `${String(i * 3).padStart(6, '0')}-${String(i * 7).padStart(6, '0')}`,
+            transactionId: mpesaReceipt(i),
+            phoneNumber: phone,
+            customerName: phoneNameMap[phone] ?? null,
             resultCode: 0,
-            resultDesc: 'Success',
+            resultDesc: 'The service request is processed successfully.',
           },
-          paybill: {
-            paybillNumber: '123456',
-            accountNumber: 'DEMO001',
-            type: 'company',
+          transaction: {
+            amount: pkg.amount,
+            type: 'voucher_purchase',
+            description: pkg.description,
           },
+          status: 'completed',
           reconciliation: {
             isReconciled: true,
-            reconciledAt: new Date(),
-            reconciledBy: adminUserId,
-            matchedTransactionId: `MPESA${Date.now() + i}`,
-            discrepancy: 0,
+            reconciledAt: createdAt,
+            matchedTransactionId: mpesaReceipt(i),
           },
-          commission: {
-            rate: 15,
-            amount: 15,
-            status: 'pending',
-            paidAt: null,
-          },
-          linkedItems: [
-            {
-              type: 'voucher',
-              itemId: new ObjectId(),
-              quantity: 1,
-            },
-          ],
-          status: 'completed',
-          createdAt: new Date(Date.now() - (5 - i) * 24 * 60 * 60 * 1000),
-          updatedAt: new Date(),
+          linkedItems: [{ type: 'voucher', itemId: new ObjectId(), quantity: 1 }],
+          metadata: {},
+          createdAt,
+          updatedAt: createdAt,
         });
       }
 
+      // Failed payments (4)
+      for (let i = 0; i < 4; i++) {
+        const pkg = packageOptions[i % packageOptions.length]!;
+        const phone = customerPhones[i % customerPhones.length]!;
+        const createdAt = new Date(now - [30, 20, 10, 4][i]! * day);
+        payments.push({
+          _id: new ObjectId(),
+          userId: homeownerUserId,
+          routerId,
+          mpesa: {
+            checkoutRequestId: `ws_CO_FAIL_${String(i).padStart(8, '0')}`,
+            merchantRequestId: `FAIL${String(i).padStart(6, '0')}-000000`,
+            transactionId: null,
+            phoneNumber: phone,
+            customerName: phoneNameMap[phone] ?? null,
+            resultCode: 1032,
+            resultDesc: 'Request cancelled by user',
+          },
+          transaction: {
+            amount: pkg.amount,
+            type: 'voucher_purchase',
+            description: pkg.description,
+          },
+          status: 'failed',
+          reconciliation: { isReconciled: false, reconciledAt: null, matchedTransactionId: null },
+          linkedItems: [],
+          metadata: {},
+          createdAt,
+          updatedAt: createdAt,
+        });
+      }
+
+      // Pending payment (1)
+      payments.push({
+        _id: new ObjectId(),
+        userId: homeownerUserId,
+        routerId,
+        mpesa: {
+          checkoutRequestId: `ws_CO_PEND_00000001`,
+          merchantRequestId: `PEND01-000000`,
+          transactionId: null,
+          phoneNumber: customerPhones[0]!,
+          resultCode: null,
+          resultDesc: null,
+        },
+        transaction: {
+          amount: 25,
+          type: 'voucher_purchase',
+          description: 'Voucher purchase - 3 Hours Package',
+        },
+        status: 'pending',
+        reconciliation: { isReconciled: false, reconciledAt: null, matchedTransactionId: null },
+        linkedItems: [],
+        metadata: {},
+        createdAt: new Date(now - 2 * 60 * 60 * 1000),
+        updatedAt: new Date(now - 2 * 60 * 60 * 1000),
+      });
+
       await db.collection('payments').insertMany(payments);
-      console.log(`  ✓ Created ${payments.length} demo payments`);
-      console.log('    Total: KES 500');
+      const totalRevenue = completedDaysAgo.reduce((sum, _, i) => sum + (packageOptions[i % packageOptions.length]?.amount ?? 0), 0);
+      console.log(`  ✓ Created ${payments.length} demo payments (25 completed, 4 failed, 1 pending)`);
+      console.log(`    Total completed revenue: KES ${totalRevenue}`);
     } else {
       console.log('  ⊙ Demo payments already exist');
+    }
+
+    // ==========================================
+    // 5B. SEED ISP PAYMENTS
+    // ==========================================
+    console.log('\n💰 Creating ISP demo payments...');
+
+    const ispPaymentsExist = await db
+      .collection('payments')
+      .countDocuments({ userId: actualIspUserId });
+
+    if (ispPaymentsExist === 0) {
+      const ispPackages = [
+        { type: '2hours', amount: 20, description: 'Voucher purchase - 2 Hours Package' },
+        { type: '6hours', amount: 50, description: 'Voucher purchase - 6 Hours Package' },
+        { type: '1day', amount: 150, description: 'Voucher purchase - 1 Day Package' },
+        { type: '1week', amount: 500, description: 'Voucher purchase - 1 Week Package' },
+      ];
+      const ispPhones = ['254701112233', '254703334455', '254705556677', '254707778899'];
+      const ispPhoneNameMap: Record<string, string> = {
+        '254701112233': 'Alice Wanjiku',
+        '254703334455': 'Brian Otieno',
+        '254705556677': 'Carol Mwangi',
+        '254707778899': 'David Kamau',
+      };
+      const ispMpesaReceipt = (idx: number) => {
+        const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ0123456789';
+        return 'R' + Array.from({ length: 9 }, (_, i) => chars[(idx * 11 + i * 17) % chars.length]).join('');
+      };
+
+      const ispPayments = [];
+      const now2 = Date.now();
+      const day2 = 24 * 60 * 60 * 1000;
+      const completedDaysAgoIsp = [42, 39, 36, 33, 30, 27, 24, 21, 18, 15, 12, 9, 6, 3, 1];
+
+      for (let i = 0; i < completedDaysAgoIsp.length; i++) {
+        const pkg = ispPackages[i % ispPackages.length]!;
+        const phone = ispPhones[i % ispPhones.length]!;
+        const createdAt = new Date(now2 - completedDaysAgoIsp[i]! * day2);
+        ispPayments.push({
+          _id: new ObjectId(),
+          userId: actualIspUserId,
+          routerId: resolvedIspRouter1Id ?? ispRouter1Id,
+          mpesa: {
+            checkoutRequestId: `ws_CO_ISP_${String(i).padStart(10, '0')}`,
+            merchantRequestId: `ISP${String(i * 3).padStart(6, '0')}-ISP`,
+            transactionId: ispMpesaReceipt(i),
+            phoneNumber: phone,
+            customerName: ispPhoneNameMap[phone] ?? null,
+            resultCode: 0,
+            resultDesc: 'The service request is processed successfully.',
+          },
+          transaction: { amount: pkg.amount, type: 'voucher_purchase', description: pkg.description },
+          status: 'completed',
+          reconciliation: { isReconciled: true, reconciledAt: createdAt, matchedTransactionId: ispMpesaReceipt(i) },
+          linkedItems: [{ type: 'voucher', itemId: new ObjectId(), quantity: 1 }],
+          metadata: {},
+          createdAt,
+          updatedAt: createdAt,
+        });
+      }
+
+      // 2 failed ISP payments
+      for (let i = 0; i < 2; i++) {
+        const createdAt = new Date(now2 - [14, 5][i]! * day2);
+        ispPayments.push({
+          _id: new ObjectId(),
+          userId: actualIspUserId,
+          routerId: resolvedIspRouter1Id ?? ispRouter1Id,
+          mpesa: {
+            checkoutRequestId: `ws_CO_ISP_FAIL_${i}`,
+            merchantRequestId: `ISPFAIL${i}`,
+            transactionId: null,
+            phoneNumber: ispPhones[i % ispPhones.length]!,
+            customerName: ispPhoneNameMap[ispPhones[i % ispPhones.length]!] ?? null,
+            resultCode: 1032,
+            resultDesc: 'Request cancelled by user',
+          },
+          transaction: { amount: 50, type: 'voucher_purchase', description: 'Voucher purchase - 6 Hours Package' },
+          status: 'failed',
+          reconciliation: { isReconciled: false, reconciledAt: null, matchedTransactionId: null },
+          linkedItems: [],
+          metadata: {},
+          createdAt,
+          updatedAt: createdAt,
+        });
+      }
+
+      await db.collection('payments').insertMany(ispPayments);
+      console.log(`  ✓ Created ${ispPayments.length} ISP payments (15 completed, 2 failed)`);
+    } else {
+      console.log('  ⊙ ISP payments already exist');
     }
 
     // ==========================================
@@ -772,18 +1226,48 @@ async function seedDatabase() {
     const wifiCustomers = [
       {
         phone: '254707861420',
-        name: 'Kevin Mulug',
+        firstName: 'Kevin',
+        lastName: 'Mulugi',
+        name: 'Kevin Mulugi',
         email: 'kevin@example.com',
+        totalPurchases: 6,
+        totalSpent: 635,
       },
       {
         phone: '254702209337',
-        name: 'King Malik',
-        email: 'malik@example.com',
+        firstName: 'James',
+        lastName: 'Kariuki',
+        name: 'James Kariuki',
+        email: 'james@example.com',
+        totalPurchases: 5,
+        totalSpent: 500,
       },
       {
         phone: '254757096651',
-        name: 'Bobo B',
-        email: null,  // Some customers may not provide email
+        firstName: 'Grace',
+        lastName: 'Wambui',
+        name: 'Grace Wambui',
+        email: null,
+        totalPurchases: 5,
+        totalSpent: 650,
+      },
+      {
+        phone: '254711223344',
+        firstName: 'Peter',
+        lastName: 'Ochieng',
+        name: 'Peter Ochieng',
+        email: null,
+        totalPurchases: 5,
+        totalSpent: 600,
+      },
+      {
+        phone: '254720998877',
+        firstName: 'Faith',
+        lastName: 'Njeri',
+        name: 'Faith Njeri',
+        email: 'faith@example.com',
+        totalPurchases: 5,
+        totalSpent: 500,
       },
     ];
 
@@ -807,10 +1291,14 @@ async function seedDatabase() {
           phone: customer.phone,
           sha256Phone,
           name: customer.name,
+          firstName: customer.firstName,
+          lastName: customer.lastName,
           email: customer.email,
-          createdAt: new Date(),
+          createdAt: new Date(Date.now() - 45 * 24 * 60 * 60 * 1000),
           updatedAt: new Date(),
-          lastPurchaseDate: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000), // 7 days ago
+          lastPurchaseDate: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000),
+          totalPurchases: customer.totalPurchases,
+          totalSpent: customer.totalSpent,
         });
         customersCreated++;
       }
@@ -828,10 +1316,11 @@ async function seedDatabase() {
     // Show summary
     console.log('📊 Seeded Data Summary:');
     console.log('  👤 Users: 3 (1 admin, 1 homeowner, 1 ISP)');
-    console.log('  📱 WiFi Customers: 3 (voucher purchasers)');
-    console.log('  🔌 Routers: 1 demo router');
+    console.log('  📱 WiFi Customers: 7 (3 homeowner + 4 ISP)');
+    console.log('  🔌 Routers: 3 (1 homeowner + 2 ISP — 1 with VPN, 1 VPN pending)');
+    console.log('  🔐 VPN Tunnels: 1 (ISP Router 1)');
     console.log('  🎫 Vouchers: 10 (3 used, 7 active)');
-    console.log('  💰 Payments: 5 completed transactions');
+    console.log('  💰 Payments: 47 (30 homeowner + 17 ISP)');
     console.log('  📱 Paybills: 1 company paybill');
     console.log('\n💡 Pricing Model:');
     console.log('  Homeowners: 20% commission per voucher sale');

@@ -111,7 +111,7 @@ interface Voucher {
     expiresAt: Date
     autoDelete: boolean
   }
-  status: "active" | "paid" | "used" | "expired" | "cancelled"
+  status: "active" | "assigned" | "paid" | "used" | "expired" | "cancelled"
   createdAt: Date
   updatedAt: Date
 }
@@ -133,6 +133,8 @@ const getStatusVariant = (status: string): BadgeProps["variant"] => {
   switch (status) {
     case "active":
       return "default"
+    case "assigned":
+      return "secondary"
     case "paid":
       return "secondary"
     case "used":
@@ -388,6 +390,7 @@ export function VoucherList({ routerId, filterStatus = "all" }: VoucherListProps
             <SelectContent>
               <SelectItem value="all">All Status</SelectItem>
               <SelectItem value="active">Active</SelectItem>
+              <SelectItem value="assigned">Assigned</SelectItem>
               <SelectItem value="paid">Paid</SelectItem>
               <SelectItem value="used">Used</SelectItem>
               <SelectItem value="expired">Expired</SelectItem>
@@ -483,7 +486,7 @@ export function VoucherList({ routerId, filterStatus = "all" }: VoucherListProps
                     <TableCell>
                       {voucher.usage.used ? (
                         <div className="text-sm">
-                          <div className="text-green-600">Used</div>
+                          <div className="text-foreground">Used</div>
                           {voucher.usage.dataUsed && voucher.usage.dataUsed > 0 && (
                             <div className="text-muted-foreground">
                               {formatDataUsage(voucher.usage.dataUsed)}
@@ -742,8 +745,8 @@ export function VoucherList({ routerId, filterStatus = "all" }: VoucherListProps
                       <div>{formatCurrency(selectedVoucher.payment.amount)}</div>
                     </div>
                     <div>
-                      <span className="text-muted-foreground">Commission:</span>
-                      <div className="text-green-600">
+                      <span className="text-muted-foreground">Platform fee:</span>
+                      <div className="text-muted-foreground">
                         {formatCurrency(selectedVoucher.payment.commission)}
                       </div>
                     </div>

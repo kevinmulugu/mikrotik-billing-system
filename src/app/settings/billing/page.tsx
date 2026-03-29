@@ -6,6 +6,7 @@ import { authOptions } from '@/lib/auth';
 import { BillingSettings } from '@/components/settings/billing-settings';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft } from 'lucide-react';
+import Link from 'next/link';
 
 export const metadata: Metadata = {
   title: 'Billing Settings - MikroTik Billing',
@@ -24,9 +25,9 @@ export default async function BillingSettingsPage() {
       {/* Header */}
       <div className="flex items-center gap-4">
         <Button variant="ghost" size="sm" asChild>
-          <a href="/settings">
+          <Link href="/settings">
             <ArrowLeft className="h-4 w-4" />
-          </a>
+          </Link>
         </Button>
         <div>
           <h1 className="text-2xl font-bold text-foreground">Billing Settings</h1>

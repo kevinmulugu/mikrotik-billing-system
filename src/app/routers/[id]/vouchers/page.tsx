@@ -2,6 +2,7 @@
 'use client'
 
 import React, { use, useState } from 'react'
+import Link from 'next/link'
 import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
@@ -92,9 +93,9 @@ export default function VouchersPage({ params }: VouchersPageProps) {
       {/* Header */}
       <div className="flex items-center gap-4">
         <Button variant="ghost" size="sm" asChild>
-          <a href={`/routers/${id}`}>
+          <Link href={`/routers/${id}`}>
             <ArrowLeft className="h-4 w-4" />
-          </a>
+          </Link>
         </Button>
         <div className="flex-1">
           <h1 className="text-2xl font-bold flex items-center gap-2">
@@ -114,10 +115,10 @@ export default function VouchersPage({ params }: VouchersPageProps) {
             </a>
           </Button>
           <Button asChild>
-            <a href={`/routers/${id}/vouchers/generate`}>
+            <Link href={`/routers/${id}/vouchers/generate`}>
               <Plus className="h-4 w-4 mr-2" />
               Generate
-            </a>
+            </Link>
           </Button>
         </div>
       </div>
@@ -126,68 +127,46 @@ export default function VouchersPage({ params }: VouchersPageProps) {
       <VoucherStats routerId={id} />
 
       {/* Quick Actions */}
-      <div className="grid md:grid-cols-2 gap-6">
-        <Card>
-          <CardHeader>
-            <CardTitle>Quick Actions</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <Button className="w-full justify-start" asChild>
-              <a href={`/routers/${id}/vouchers/generate`}>
-                <Plus className="h-4 w-4 mr-2" />
-                Generate New Vouchers
-              </a>
-            </Button>
+      <Card>
+        <CardHeader>
+          <CardTitle>Quick Actions</CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-wrap gap-3">
+          <Button asChild>
+            <Link href={`/routers/${id}/vouchers/generate`}>
+              <Plus className="h-4 w-4 mr-2" />
+              Generate New Vouchers
+            </Link>
+          </Button>
 
-            <Button className="w-full justify-start" variant="outline" asChild>
-              <a href={`/routers/${id}/vouchers/history`}>
-                <Ticket className="h-4 w-4 mr-2" />
-                View Sales History
-              </a>
-            </Button>
+          <Button variant="outline" asChild>
+            <Link href={`/routers/${id}/vouchers/history`}>
+              <Ticket className="h-4 w-4 mr-2" />
+              View Sales History
+            </Link>
+          </Button>
 
-            <Button
-              className="w-full justify-start"
-              variant="outline"
-              onClick={() => setShowSyncDialog(true)}
-              disabled={syncing}
-            >
-              {syncing ? (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              ) : (
-                <RefreshCw className="h-4 w-4 mr-2" />
-              )}
-              Sync All Vouchers
-            </Button>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Router Information</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="flex justify-between items-center">
-              <span className="text-sm text-gray-600">Router Status</span>
-              <Badge variant="default">Online</Badge>
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="text-sm text-gray-600">Active Packages</span>
-              <span className="font-semibold">8</span>
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="text-sm text-gray-600">Last Sync</span>
-              <span className="text-sm">Just now</span>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+          <Button
+            variant="outline"
+            onClick={() => setShowSyncDialog(true)}
+            disabled={syncing}
+          >
+            {syncing ? (
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            ) : (
+              <RefreshCw className="h-4 w-4 mr-2" />
+            )}
+            Sync All Vouchers
+          </Button>
+        </CardContent>
+      </Card>
 
       {/* Voucher Management Tabs */}
       <Tabs defaultValue="all" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-6">
+        <TabsList className="grid w-full grid-cols-7">
           <TabsTrigger value="all">All</TabsTrigger>
           <TabsTrigger value="active">Active</TabsTrigger>
+          <TabsTrigger value="assigned">Assigned</TabsTrigger>
           <TabsTrigger value="paid">Paid</TabsTrigger>
           <TabsTrigger value="used">Used</TabsTrigger>
           <TabsTrigger value="expired">Expired</TabsTrigger>
@@ -200,6 +179,10 @@ export default function VouchersPage({ params }: VouchersPageProps) {
 
         <TabsContent value="active">
           <VoucherList routerId={id} filterStatus="active" />
+        </TabsContent>
+
+        <TabsContent value="assigned">
+          <VoucherList routerId={id} filterStatus="assigned" />
         </TabsContent>
 
         <TabsContent value="paid">

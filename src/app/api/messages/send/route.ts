@@ -39,9 +39,13 @@ export async function POST(request: NextRequest) {
     }
 
     // Build query based on recipient type
-    let query: any = {
+    type CustomerQuery = {
+      routerId: ObjectId | { $in: ObjectId[] };
+      phone: { $ne: null; $exists: boolean };
+    };
+    let query: CustomerQuery = {
       routerId: { $in: routers.map((r) => r._id) },
-      phone: { $ne: null, $exists: true }, // Only customers with phone numbers
+      phone: { $ne: null, $exists: true },
     };
 
     if (recipientType === 'router') {

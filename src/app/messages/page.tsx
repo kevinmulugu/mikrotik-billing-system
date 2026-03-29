@@ -1,4 +1,3 @@
-// src/app/messages/page.tsx
 import { Metadata } from 'next';
 import { getServerSession } from 'next-auth/next';
 import { redirect } from 'next/navigation';
@@ -20,7 +19,6 @@ async function getMessagingData(userId: string) {
     const client = await clientPromise;
     const db = client.db(process.env.MONGODB_DB_NAME || 'mikrotik_billing');
 
-    // Get all routers owned by this user
     const routers = await db
       .collection('routers')
       .find({ userId: new ObjectId(userId) })
@@ -29,45 +27,27 @@ async function getMessagingData(userId: string) {
 
     const routerIds = routers.map((r) => r._id);
 
-    // Get total customer count
-    const totalCustomers = await db
-      .collection('customers')
-      .countDocuments({ routerId: { $in: routerIds } });
+    const [totalCustomers, customersByRouter, templates] = await Promise.all([
+      db.collection('customers').countDocuments({ routerId: { $in: routerIds } }),
 
-    // Get customers by router
-    const customersByRouter = await Promise.all(
-      routers.map(async (router) => {
-        const count = await db
-          .collection('customers')
-          .countDocuments({ routerId: router._id });
-
-        return {
+      Promise.all(
+        routers.map(async (router) => ({
           id: router._id.toString(),
           name: router.routerInfo?.name || 'Unnamed Router',
-          customerCount: count,
-        };
-      })
-    );
+          customerCount: await db
+            .collection('customers')
+            .countDocuments({ routerId: router._id }),
+        })),
+      ),
 
-    // Get message templates
-    const templates = await db
-      .collection('message_templates')
-      .find({
-        $or: [
-          { userId: new ObjectId(userId) },
-          { isSystem: true, isActive: true }
-        ]
-      })
-      .sort({ isSystem: -1, category: 1, name: 1 })
-      .toArray();
-
-    // Get recent messages
-    const recentMessages = await db
-      .collection('messages')
-      .find({ userId: new ObjectId(userId) })
-      .sort({ sentAt: -1 })
-      .limit(20)
-      .toArray();
+      db
+        .collection('message_templates')
+        .find({
+          $or: [{ userId: new ObjectId(userId) }, { isSystem: true, isActive: true }],
+        })
+        .sort({ isSystem: -1, category: 1, name: 1 })
+        .toArray(),
+    ]);
 
     return {
       routers: customersByRouter,
@@ -81,20 +61,6 @@ async function getMessagingData(userId: string) {
         isSystem: t.isSystem,
         usageCount: t.usageCount || 0,
       })),
-      recentMessages: recentMessages.map((m) => ({
-        id: m._id.toString(),
-        recipientType: m.recipientType,
-        routerId: m.routerId?.toString(),
-        routerName: m.recipientType === 'router' 
-          ? routers.find((r) => r._id.equals(m.routerId))?.routerInfo?.name || 'Unknown Router'
-          : null,
-        message: m.message,
-        recipientCount: m.recipientCount,
-        successfulDeliveries: m.successfulDeliveries || m.recipientCount,
-        failedDeliveries: m.failedDeliveries || 0,
-        status: m.status,
-        sentAt: m.sentAt,
-      })),
     };
   } catch (error) {
     console.error('Error fetching messaging data:', error);
@@ -104,18 +70,15 @@ async function getMessagingData(userId: string) {
 
 export default async function MessagesPage() {
   const session = await getServerSession(authOptions);
-
-  if (!session) {
-    redirect('/signin');
-  }
+  if (!session) redirect('/signin');
 
   const data = await getMessagingData(session.user.id);
 
   if (!data) {
     return (
-      <div className="flex items-center justify-center min-h-[400px]">
+      <div className="flex min-h-[400px] items-center justify-center">
         <div className="text-center">
-          <h2 className="text-xl font-semibold mb-2">Failed to load messaging</h2>
+          <h2 className="mb-2 text-xl font-semibold">Failed to load messaging</h2>
           <p className="text-muted-foreground">Please try again later</p>
         </div>
       </div>
@@ -131,15 +94,15 @@ export default async function MessagesPage() {
       </TabsList>
 
       <TabsContent value="send" className="space-y-6">
-        <SendMessageForm 
-          routers={data.routers} 
+        <SendMessageForm
+          routers={data.routers}
           totalCustomers={data.totalCustomers}
           templates={data.templates}
         />
       </TabsContent>
 
       <TabsContent value="history" className="space-y-6">
-        <MessageHistory messages={data.recentMessages} />
+        <MessageHistory routers={data.routers.map((r) => ({ id: r.id, name: r.name }))} />
       </TabsContent>
 
       <TabsContent value="templates" className="space-y-6">

@@ -14,23 +14,19 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
-import { 
-  Menu, 
-  Bell, 
-  User, 
-  Settings, 
+import {
+  Bell,
+  User,
+  Settings,
   LogOut,
   HelpCircle,
   CreditCard,
-  MessageSquare
+  MessageSquare,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { SidebarTrigger } from '@/components/ui/sidebar';
 
-interface HeaderProps {
-  onMenuClick: () => void;
-}
-
-export function Header({ onMenuClick }: HeaderProps) {
+export function Header() {
   const { data: session } = useSession();
   const [smsCredits, setSmsCredits] = useState<number | null>(null);
   const [unreadCount, setUnreadCount] = useState<number>(0);
@@ -103,19 +99,8 @@ export function Header({ onMenuClick }: HeaderProps) {
 
   return (
     <div className="sticky top-0 z-40 flex h-16 shrink-0 items-center gap-x-4 border-b bg-background px-4 shadow-sm sm:gap-x-6 sm:px-6 lg:px-8">
-      {/* Mobile menu button */}
-      <Button
-        variant="ghost"
-        size="icon"
-        className="lg:hidden"
-        onClick={onMenuClick}
-      >
-        <span className="sr-only">Open sidebar</span>
-        <Menu className="h-6 w-6" />
-      </Button>
-
-      {/* Separator */}
-      <div className="h-6 w-px bg-border lg:hidden" />
+      {/* Sidebar toggle — opens Sheet on mobile, collapses to icon on desktop */}
+      <SidebarTrigger className="-ml-1" />
 
       <div className="flex flex-1 gap-x-4 self-stretch lg:gap-x-6">
         {/* Search - Future feature */}

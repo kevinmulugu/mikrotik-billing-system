@@ -74,7 +74,14 @@ export async function POST(request: NextRequest) {
       TransTime,
       BusinessShortCode,
       OrgAccountBalance,
+      FirstName,
+      MiddleName,
+      LastName,
     } = body;
+
+    // Compose customer display name from M-Pesa-provided fields
+    const customerName: string | null =
+      [FirstName, MiddleName, LastName].filter(Boolean).join(' ').trim() || null;
 
     // Validate required fields
     if (!TransID || !TransAmount || !BillRefNumber) {
@@ -443,6 +450,7 @@ export async function POST(request: NextRequest) {
               $set: {
                 status: 'completed',
                 'mpesa.transactionId': TransID,
+                'mpesa.customerName': customerName,
                 updatedAt: purchaseTime,
               },
               $push: {
@@ -880,9 +888,11 @@ export async function POST(request: NextRequest) {
       // Note: We don't have the plain phone number from webhook, only the hash
       const customerResult = await db.collection('customers').insertOne({
         routerId: voucher.routerId,
-        phone: null, // Will be updated when we get plain phone from captive portal
+        phone: isSTKPayment ? phoneNumber : null,
         sha256Phone: sha256Phone,
-        name: null, // Will be updated when customer provides name
+        name: customerName,
+        firstName: FirstName || null,
+        lastName: LastName || null,
         email: null,
         createdAt: purchaseTime,
         updatedAt: purchaseTime,
@@ -900,6 +910,10 @@ export async function POST(request: NextRequest) {
           $set: {
             lastPurchaseDate: purchaseTime,
             updatedAt: purchaseTime,
+            // Backfill name from M-Pesa if not already set
+            ...(customerName && !wifiCustomer.name ? { name: customerName } : {}),
+            ...(FirstName && !wifiCustomer.firstName ? { firstName: FirstName } : {}),
+            ...(LastName && !wifiCustomer.lastName ? { lastName: LastName } : {}),
           },
           $inc: {
             totalPurchases: 1,

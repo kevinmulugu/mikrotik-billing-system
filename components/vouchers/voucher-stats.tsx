@@ -22,6 +22,7 @@ interface Stats {
   vouchers: {
     total: number
     active: number
+    assigned: number
     used: number
     expired: number
     cancelled: number
@@ -210,8 +211,8 @@ export function VoucherStats({ routerId }: VoucherStatsProps) {
               <p className="text-xl font-semibold">
                 {formatCurrency(stats.revenue.total)}
               </p>
-              <p className="text-sm text-green-600">
-                Commission: {formatCurrency(stats.revenue.commission)}
+              <p className="text-sm text-muted-foreground">
+                Platform fee: {formatCurrency(stats.revenue.commission)}
               </p>
             </div>
           </div>

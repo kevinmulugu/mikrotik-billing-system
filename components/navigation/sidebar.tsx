@@ -1,4 +1,3 @@
-// components/navigation/sidebar.tsx
 'use client';
 
 import { usePathname } from 'next/navigation';
@@ -6,7 +5,20 @@ import { useSession } from 'next-auth/react';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { 
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarFooter,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarHeader,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarRail,
+  useSidebar,
+} from '@/components/ui/sidebar';
+import {
   LayoutDashboard,
   Wifi,
   Users,
@@ -14,197 +26,160 @@ import {
   MessageSquare,
   HelpCircle,
   Settings,
-  Building2
+  Building2,
+  Percent,
 } from 'lucide-react';
 
 const navigation = [
-  { 
-    name: 'Dashboard', 
-    href: '/dashboard', 
-    icon: LayoutDashboard,
-  },
-  {
-    name: 'Routers',
-    href: '/routers',
-    icon: Wifi,
-  },
-  {
-    name: 'Customers',
-    href: '/customers',
-    icon: Users,
-  },
-  {
-    name: 'Messages',
-    href: '/messages',
-    icon: MessageSquare,
-  },
-  {
-    name: 'Payments',
-    href: '/payments', 
-    icon: DollarSign,
-  },
-  { 
-    name: 'Support', 
-    href: '/support', 
-    icon: HelpCircle,
-  },
-  { 
-    name: 'Settings', 
-    href: '/settings', 
-    icon: Settings,
-  },
+  { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+  { name: 'Routers', href: '/routers', icon: Wifi },
+  { name: 'Customers', href: '/customers', icon: Users },
+  { name: 'Messages', href: '/messages', icon: MessageSquare },
+  { name: 'Payments', href: '/payments', icon: DollarSign },
+  { name: 'Commission', href: '/commission', icon: Percent },
+  { name: 'Support', href: '/support', icon: HelpCircle },
+  { name: 'Settings', href: '/settings', icon: Settings },
 ];
 
-export function Sidebar() {
-  const pathname = usePathname();
-  const { data: session, update } = useSession();
+function UserFooter() {
+  const { data: session } = useSession();
+  const { state } = useSidebar();
   const [paymentMethod, setPaymentMethod] = useState<string | null>(null);
 
-  // Fetch fresh payment method from database
   useEffect(() => {
-    const fetchPaymentMethod = async () => {
-      if (!session?.user?.id) return;
+    if (!session?.user?.id) return;
 
+    const fetchPaymentMethod = async () => {
       try {
-        const response = await fetch('/api/user/payment-method');
-        if (response.ok) {
-          const data = await response.json();
+        const res = await fetch('/api/user/payment-method');
+        if (res.ok) {
+          const data = await res.json();
           setPaymentMethod(data.method || 'company_paybill');
         }
-      } catch (error) {
-        console.error('Failed to fetch payment method:', error);
-        // Fallback to session data
+      } catch {
         setPaymentMethod(
-          (session.user as any).paymentSettings?.method || 'company_paybill'
+          (session.user as { paymentSettings?: { method?: string } }).paymentSettings?.method ||
+            'company_paybill',
         );
       }
     };
 
     fetchPaymentMethod();
-
-    // Refresh when window gains focus (user comes back from another tab)
-    const handleFocus = () => fetchPaymentMethod();
-    
-    // Refresh when payment method is changed (custom event from payment-setup)
-    const handlePaymentChange = () => fetchPaymentMethod();
-    
-    window.addEventListener('focus', handleFocus);
-    window.addEventListener('paymentMethodChanged', handlePaymentChange);
-    
+    const onFocus = () => fetchPaymentMethod();
+    const onPaymentChange = () => fetchPaymentMethod();
+    window.addEventListener('focus', onFocus);
+    window.addEventListener('paymentMethodChanged', onPaymentChange);
     return () => {
-      window.removeEventListener('focus', handleFocus);
-      window.removeEventListener('paymentMethodChanged', handlePaymentChange);
+      window.removeEventListener('focus', onFocus);
+      window.removeEventListener('paymentMethodChanged', onPaymentChange);
     };
   }, [session?.user?.id]);
 
-  // Get user initials for avatar fallback
-  const getUserInitials = (name?: string | null) => {
+  const initials = (name?: string | null) => {
     if (!name) return 'U';
-    return name
-      .split(' ')
-      .map(n => n[0])
-      .join('')
-      .toUpperCase()
-      .slice(0, 2);
+    return name.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2);
   };
 
-  // Get app name from env or default
-  const appName = process.env.NEXT_PUBLIC_APP_NAME || 'MikroTik Billing';
-  const appShortName = process.env.NEXT_PUBLIC_APP_SHORT_NAME || 'MB';
+  return (
+    <SidebarFooter>
+      {/* Payment method card — hidden when icon-only */}
+      {paymentMethod && state === 'expanded' && (
+        <div className="mx-2 rounded-lg bg-sidebar-accent p-3">
+          <div className="mb-1 flex items-center gap-2">
+            <Building2 className="h-4 w-4 text-sidebar-primary" />
+            <span className="text-xs font-medium">Payment Method</span>
+          </div>
+          <p className="text-xs text-sidebar-foreground/60">
+            {paymentMethod === 'own_paybill' ? 'Your Paybill' : 'Company Paybill'}
+          </p>
+          <Link
+            href="/payments/setup"
+            className="text-xs font-medium text-sidebar-primary hover:underline"
+          >
+            Change →
+          </Link>
+        </div>
+      )}
+
+      {/* User row — shows avatar + name/email when expanded, avatar-only tooltip when collapsed */}
+      <SidebarMenu>
+        <SidebarMenuItem>
+          <SidebarMenuButton size="lg" asChild tooltip={session?.user?.name ?? 'Profile'}>
+            <Link href="/settings/profile">
+              <Avatar className="h-8 w-8 shrink-0 rounded-lg">
+                <AvatarImage
+                  src={session?.user?.image ?? undefined}
+                  alt={session?.user?.name ?? 'User'}
+                />
+                <AvatarFallback className="rounded-lg bg-sidebar-primary text-sidebar-primary-foreground text-xs">
+                  {initials(session?.user?.name)}
+                </AvatarFallback>
+              </Avatar>
+              <div className="grid flex-1 overflow-hidden text-left text-sm leading-tight">
+                <span className="truncate font-medium">{session?.user?.name ?? 'User'}</span>
+                <span className="truncate text-xs text-sidebar-foreground/60">
+                  {session?.user?.email}
+                </span>
+              </div>
+            </Link>
+          </SidebarMenuButton>
+        </SidebarMenuItem>
+      </SidebarMenu>
+    </SidebarFooter>
+  );
+}
+
+export function AppSidebar() {
+  const pathname = usePathname();
+  const appName = process.env.NEXT_PUBLIC_APP_NAME || 'PAY N BROWSE';
+  const appShortName = process.env.NEXT_PUBLIC_APP_SHORT_NAME || 'PB';
 
   return (
-    <div className="flex grow flex-col gap-y-5 overflow-y-auto border-r bg-background px-6 pb-4">
+    <Sidebar collapsible="icon">
       {/* Logo */}
-      <div className="flex h-16 shrink-0 items-center">
-        <Link href="/dashboard" className="flex items-center space-x-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
-            <span className="text-sm font-bold text-primary-foreground">{appShortName}</span>
-          </div>
-          <span className="font-semibold">{appName}</span>
-        </Link>
-      </div>
+      <SidebarHeader>
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton size="lg" asChild tooltip={appName}>
+              <Link href="/dashboard">
+                <div className="flex aspect-square size-8 shrink-0 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
+                  <span className="text-sm font-bold">{appShortName}</span>
+                </div>
+                <span className="truncate font-semibold">{appName}</span>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        </SidebarMenu>
+      </SidebarHeader>
 
-      {/* User Info */}
-      <div className="border-b pb-4">
-        <div className="flex items-center gap-3">
-          <Avatar className="h-10 w-10">
-            <AvatarImage 
-              src={session?.user?.image || undefined} 
-              alt={session?.user?.name || 'User'} 
-            />
-            <AvatarFallback className="bg-primary text-primary-foreground">
-              {getUserInitials(session?.user?.name)}
-            </AvatarFallback>
-          </Avatar>
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-medium">
-              {session?.user?.name || 'User'}
-            </p>
-            <p className="truncate text-xs text-muted-foreground">
-              {session?.user?.email}
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* Navigation */}
-      <nav className="flex flex-1 flex-col">
-        <ul role="list" className="flex flex-1 flex-col gap-y-7">
-          <li>
-            <ul role="list" className="-mx-2 space-y-1">
+      {/* Nav items */}
+      <SidebarContent>
+        <SidebarGroup>
+          <SidebarGroupContent>
+            <SidebarMenu>
               {navigation.map((item) => {
-                const isActive = pathname === item.href || pathname.startsWith(item.href + '/');
+                const isActive =
+                  pathname === item.href || pathname.startsWith(item.href + '/');
                 return (
-                  <li key={item.name}>
-                    <Link
-                      href={item.href}
-                      className={`
-                        group flex gap-x-3 rounded-md p-2 text-sm font-semibold leading-6 transition-colors
-                        ${isActive 
-                          ? 'bg-primary/10 text-primary' 
-                          : 'text-foreground hover:bg-muted hover:text-primary'
-                        }
-                      `}
-                    >
-                      <item.icon
-                        className={`h-6 w-6 shrink-0 transition-colors ${
-                          isActive 
-                            ? 'text-primary' 
-                            : 'text-muted-foreground group-hover:text-primary'
-                        }`}
-                      />
-                      <span className="flex-1">{item.name}</span>
-                    </Link>
-                  </li>
+                  <SidebarMenuItem key={item.name}>
+                    <SidebarMenuButton asChild isActive={isActive} tooltip={item.name}>
+                      <Link href={item.href}>
+                        <item.icon />
+                        <span>{item.name}</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
                 );
               })}
-            </ul>
-          </li>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+      </SidebarContent>
 
-          {/* Payment Method Indicator - Fetch from database */}
-          {session?.user?.id && paymentMethod && (
-            <li className="mt-auto">
-              <div className="rounded-lg bg-muted p-3">
-                <div className="mb-2 flex items-center gap-2">
-                  <Building2 className="h-4 w-4 text-primary" />
-                  <span className="text-sm font-medium">Payment Method</span>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  {paymentMethod === 'own_paybill' 
-                    ? 'Your Paybill' 
-                    : 'Company Paybill'}
-                </p>
-                <Link 
-                  href="/payments/setup"
-                  className="text-xs font-medium text-primary hover:underline"
-                >
-                  Change →
-                </Link>
-              </div>
-            </li>
-          )}
-        </ul>
-      </nav>
-    </div>
+      <UserFooter />
+
+      {/* Draggable rail to resize/collapse */}
+      <SidebarRail />
+    </Sidebar>
   );
 }

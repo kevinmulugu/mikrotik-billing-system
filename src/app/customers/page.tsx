@@ -1,282 +1,417 @@
-// src/app/customers/page.tsx
-import { Metadata } from 'next';
-import { getServerSession } from 'next-auth/next';
-import { redirect } from 'next/navigation';
-import { authOptions } from '@/lib/auth';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+'use client';
+
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Users, TrendingUp, DollarSign, ShoppingCart } from 'lucide-react';
-import clientPromise from '@/lib/mongodb';
-import { ObjectId } from 'mongodb';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Skeleton } from '@/components/ui/skeleton';
+import {
+  Users,
+  TrendingUp,
+  DollarSign,
+  ShoppingCart,
+  Search,
+  ChevronLeft,
+  ChevronRight,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
+  Wifi,
+} from 'lucide-react';
 
-export const metadata: Metadata = {
-  title: 'WiFi Customers - MikroTik Billing',
-  description: 'View all customers who purchased vouchers from your routers',
-};
+// ─── Types ────────────────────────────────────────────────────────────────────
 
-async function getCustomersData(userId: string) {
-  try {
-    const client = await clientPromise;
-    const db = client.db(process.env.MONGODB_DB_NAME || 'mikrotik_billing');
-
-    // Get all routers owned by this user
-    const routers = await db
-      .collection('routers')
-      .find({ userId: new ObjectId(userId) })
-      .toArray();
-
-    const routerIds = routers.map((r) => r._id);
-
-    // Get all customers for these routers
-    const customers = await db
-      .collection('customers')
-      .find({ routerId: { $in: routerIds } })
-      .sort({ lastPurchaseDate: -1 })
-      .limit(100)
-      .toArray();
-
-    // Calculate statistics
-    const totalCustomers = customers.length;
-    const totalSpent = customers.reduce((sum, c) => sum + (c.totalSpent || 0), 0);
-    const totalPurchases = customers.reduce((sum, c) => sum + (c.totalPurchases || 0), 0);
-
-    // Get recent customers (last 7 days)
-    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-    const recentCustomers = customers.filter(
-      (c) => new Date(c.lastPurchaseDate) >= sevenDaysAgo
-    ).length;
-
-    // Group customers by router
-    const customersByRouter = await Promise.all(
-      routers.map(async (router) => {
-        const routerCustomers = await db
-          .collection('customers')
-          .countDocuments({ routerId: router._id });
-
-        return {
-          routerId: router._id.toString(),
-          routerName: router.routerInfo?.name || 'Unnamed Router',
-          customerCount: routerCustomers,
-        };
-      })
-    );
-
-    // Format customers for display
-    const formattedCustomers = customers.map((customer) => {
-      const router = routers.find((r) => r._id.equals(customer.routerId));
-      return {
-        id: customer._id.toString(),
-        phone: customer.phone,
-        name: customer.name,
-        email: customer.email,
-        routerName: router?.routerInfo?.name || 'Unknown Router',
-        lastPurchaseDate: customer.lastPurchaseDate,
-        totalPurchases: customer.totalPurchases || 0,
-        totalSpent: customer.totalSpent || 0,
-      };
-    });
-
-    return {
-      statistics: {
-        totalCustomers,
-        totalSpent,
-        totalPurchases,
-        recentCustomers,
-      },
-      customersByRouter,
-      customers: formattedCustomers,
-    };
-  } catch (error) {
-    console.error('Error fetching customers data:', error);
-    return null;
-  }
+interface Customer {
+  id: string;
+  phone: string | null;
+  name: string | null;
+  email: string | null;
+  routerId: string;
+  routerName: string;
+  createdAt: string;
+  lastPurchaseDate: string;
+  totalPurchases: number;
+  totalSpent: number;
 }
 
-export default async function CustomersPage() {
-  const session = await getServerSession(authOptions);
+interface Pagination {
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
 
-  if (!session) {
-    redirect('/signin');
-  }
+interface Stats {
+  totalCustomers: number;
+  totalSpent: number;
+  totalPurchases: number;
+  recentCustomers: number;
+}
 
-  const data = await getCustomersData(session.user.id);
+interface Router {
+  id: string;
+  name: string;
+}
 
-  if (!data) {
-    return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <div className="text-center">
-          <Users className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-          <h2 className="text-xl font-semibold mb-2">Failed to load customers</h2>
-          <p className="text-muted-foreground">Please try again later</p>
+interface ApiResponse {
+  customers: Customer[];
+  pagination: Pagination;
+  stats: Stats;
+  routers: Router[];
+}
+
+type SortField = 'lastPurchaseDate' | 'totalSpent' | 'totalPurchases' | 'createdAt';
+type SortOrder = 'asc' | 'desc';
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+const formatCurrency = (amount: number) =>
+  new Intl.NumberFormat('en-KE', {
+    style: 'currency',
+    currency: 'KES',
+    minimumFractionDigits: 0,
+  }).format(amount);
+
+const formatDate = (value: string | Date | null | undefined) => {
+  if (!value) return '—';
+  return new Date(value).toLocaleDateString('en-KE', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  });
+};
+
+const displayName = (c: Customer) => c.name || c.phone || c.email || 'Unknown';
+
+// ─── Stat card ────────────────────────────────────────────────────────────────
+
+function StatCard({
+  label,
+  value,
+  sub,
+  icon: Icon,
+}: {
+  label: string;
+  value: string | number;
+  sub: string;
+  icon: React.ElementType;
+}) {
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <p className="text-sm text-muted-foreground">{label}</p>
+        <CardTitle className="text-2xl">{value}</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Icon className="h-4 w-4 shrink-0" />
+          <span>{sub}</span>
         </div>
-      </div>
-    );
-  }
+      </CardContent>
+    </Card>
+  );
+}
 
-  const { statistics, customersByRouter, customers } = data;
+// ─── Sort button ──────────────────────────────────────────────────────────────
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-KE', {
-      style: 'currency',
-      currency: 'KES',
-      minimumFractionDigits: 0,
-    }).format(amount);
+function SortButton({
+  field,
+  label,
+  sortBy,
+  sortOrder,
+  onSort,
+}: {
+  field: SortField;
+  label: string;
+  sortBy: SortField;
+  sortOrder: SortOrder;
+  onSort: (field: SortField) => void;
+}) {
+  const active = sortBy === field;
+  const Icon = active ? (sortOrder === 'asc' ? ArrowUp : ArrowDown) : ArrowUpDown;
+  return (
+    <button
+      onClick={() => onSort(field)}
+      className={`flex items-center gap-1 text-xs font-medium select-none ${
+        active ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'
+      }`}
+    >
+      {label} <Icon className="h-3 w-3" />
+    </button>
+  );
+}
+
+// ─── Page ─────────────────────────────────────────────────────────────────────
+
+export default function CustomersPage() {
+  const [data, setData] = useState<ApiResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [routerId, setRouterId] = useState('all');
+  const [sortBy, setSortBy] = useState<SortField>('lastPurchaseDate');
+  const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
+  const [page, setPage] = useState(1);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Debounce search input
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      setDebouncedSearch(search);
+      setPage(1);
+    }, 350);
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, [search]);
+
+  const fetchData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const params = new URLSearchParams({
+        page: String(page),
+        limit: '25',
+        sortBy,
+        sortOrder,
+      });
+      if (debouncedSearch) params.set('search', debouncedSearch);
+      if (routerId !== 'all') params.set('routerId', routerId);
+
+      const res = await fetch(`/api/customers?${params}`);
+      if (!res.ok) throw new Error('Failed to fetch');
+      const json: ApiResponse = await res.json();
+      setData(json);
+    } catch {
+      setData(null);
+    } finally {
+      setLoading(false);
+    }
+  }, [page, sortBy, sortOrder, debouncedSearch, routerId]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  // Reset page when filter/sort changes (except page itself)
+  const handleRouterChange = (val: string) => {
+    setRouterId(val);
+    setPage(1);
   };
 
-  const formatDate = (date: Date | string) => {
-    return new Date(date).toLocaleDateString('en-KE', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-    });
+  const handleSort = (field: SortField) => {
+    if (sortBy === field) {
+      setSortOrder((o) => (o === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortBy(field);
+      setSortOrder('desc');
+    }
+    setPage(1);
   };
+
+  const stats = data?.stats;
+  const pagination = data?.pagination;
+  const customers = data?.customers ?? [];
+  const routers = data?.routers ?? [];
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
-            <Users className="h-6 w-6 text-blue-600" />
-            WiFi Customers
-          </h1>
-          <p className="text-muted-foreground mt-1">
-            Customers who purchased vouchers from your routers
-          </p>
+      {/* Stats */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {stats ? (
+          <>
+            <StatCard
+              label="Total Customers"
+              value={stats.totalCustomers.toLocaleString()}
+              sub="Across all routers"
+              icon={Users}
+            />
+            <StatCard
+              label="Total Revenue"
+              value={formatCurrency(stats.totalSpent)}
+              sub="All-time purchases"
+              icon={DollarSign}
+            />
+            <StatCard
+              label="Total Purchases"
+              value={stats.totalPurchases.toLocaleString()}
+              sub="Vouchers sold"
+              icon={ShoppingCart}
+            />
+            <StatCard
+              label="Active (7 days)"
+              value={stats.recentCustomers.toLocaleString()}
+              sub="Recent customers"
+              icon={TrendingUp}
+            />
+          </>
+        ) : (
+          [...Array(4)].map((_, i) => (
+            <Card key={i}>
+              <CardHeader className="pb-2">
+                <Skeleton className="h-4 w-28" />
+                <Skeleton className="h-8 w-16 mt-1" />
+              </CardHeader>
+              <CardContent>
+                <Skeleton className="h-4 w-32" />
+              </CardContent>
+            </Card>
+          ))
+        )}
+      </div>
+
+      {/* Toolbar */}
+      <div className="flex flex-col sm:flex-row gap-3">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Search by name, phone or email…"
+            className="pl-9"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
         </div>
+
+        <Select value={routerId} onValueChange={handleRouterChange}>
+          <SelectTrigger className="w-full sm:w-52">
+            <Wifi className="h-4 w-4 mr-2 text-muted-foreground" />
+            <SelectValue placeholder="All Routers" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Routers</SelectItem>
+            {routers.map((r) => (
+              <SelectItem key={r.id} value={r.id}>
+                {r.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
-      {/* Statistics Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription>Total Customers</CardDescription>
-            <CardTitle className="text-2xl">{statistics.totalCustomers}</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Users className="h-4 w-4" />
-              <span>Across all routers</span>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription>Total Revenue</CardDescription>
-            <CardTitle className="text-2xl">{formatCurrency(statistics.totalSpent)}</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <DollarSign className="h-4 w-4" />
-              <span>All-time purchases</span>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription>Total Purchases</CardDescription>
-            <CardTitle className="text-2xl">{statistics.totalPurchases}</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <ShoppingCart className="h-4 w-4" />
-              <span>Vouchers sold</span>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2">
-            <CardDescription>Recent (7 days)</CardDescription>
-            <CardTitle className="text-2xl">{statistics.recentCustomers}</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <TrendingUp className="h-4 w-4" />
-              <span>New customers</span>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Customers by Router */}
+      {/* Table */}
       <Card>
-        <CardHeader>
-          <CardTitle>Customers by Router</CardTitle>
-          <CardDescription>Distribution of customers across your routers</CardDescription>
+        <CardHeader className="pb-3 border-b">
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Users className="h-4 w-4" />
+              Customers
+              {pagination && (
+                <Badge variant="secondary" className="ml-1">
+                  {pagination.total.toLocaleString()}
+                </Badge>
+              )}
+            </CardTitle>
+            {pagination && pagination.totalPages > 1 && (
+              <p className="text-xs text-muted-foreground">
+                Page {pagination.page} of {pagination.totalPages}
+              </p>
+            )}
+          </div>
         </CardHeader>
-        <CardContent>
-          {customersByRouter.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-4">
-              No routers found
-            </p>
-          ) : (
-            <div className="space-y-3">
-              {customersByRouter.map((router) => (
-                <div
-                  key={router.routerId}
-                  className="flex items-center justify-between p-3 rounded-lg border"
-                >
-                  <div>
-                    <p className="font-medium">{router.routerName}</p>
-                    <p className="text-sm text-muted-foreground">
-                      {router.customerCount} customer{router.customerCount !== 1 ? 's' : ''}
-                    </p>
+
+        <CardContent className="p-0">
+          {/* Column headers */}
+          <div className="grid grid-cols-[1fr_auto_auto_auto_auto] gap-4 items-center px-4 py-2 border-b bg-muted/40 text-xs font-medium text-muted-foreground hidden md:grid">
+            <span>Customer</span>
+            <SortButton field="lastPurchaseDate" label="Last Purchase" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} />
+            <SortButton field="totalPurchases" label="Purchases" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} />
+            <SortButton field="totalSpent" label="Total Spent" sortBy={sortBy} sortOrder={sortOrder} onSort={handleSort} />
+            <span>Router</span>
+          </div>
+
+          {loading ? (
+            <div className="divide-y">
+              {[...Array(8)].map((_, i) => (
+                <div key={i} className="grid grid-cols-[1fr_auto_auto_auto_auto] gap-4 items-center px-4 py-3 hidden md:grid">
+                  <div className="space-y-1.5">
+                    <Skeleton className="h-4 w-36" />
+                    <Skeleton className="h-3 w-24" />
                   </div>
-                  <Badge variant="secondary">{router.customerCount}</Badge>
+                  <Skeleton className="h-4 w-20" />
+                  <Skeleton className="h-4 w-10" />
+                  <Skeleton className="h-4 w-20" />
+                  <Skeleton className="h-5 w-24 rounded-full" />
                 </div>
               ))}
+              {/* Mobile skeleton */}
+              <div className="md:hidden divide-y">
+                {[...Array(5)].map((_, i) => (
+                  <div key={i} className="p-4 space-y-2">
+                    <Skeleton className="h-4 w-40" />
+                    <Skeleton className="h-3 w-28" />
+                    <Skeleton className="h-3 w-32" />
+                  </div>
+                ))}
+              </div>
             </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Recent Customers */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Recent Customers</CardTitle>
-          <CardDescription>Latest voucher purchases (up to 100)</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {customers.length === 0 ? (
-            <div className="text-center py-12 text-muted-foreground">
-              <Users className="h-12 w-12 mx-auto mb-4 opacity-50" />
-              <p className="text-lg font-medium">No customers yet</p>
-              <p className="text-sm">
-                Customers will appear here when they purchase vouchers
+          ) : customers.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16 text-center text-muted-foreground">
+              <Users className="h-12 w-12 mb-3 opacity-40" />
+              <p className="text-sm font-medium">
+                {debouncedSearch || routerId !== 'all' ? 'No customers match your filters' : 'No customers yet'}
+              </p>
+              <p className="text-xs mt-1">
+                {debouncedSearch || routerId !== 'all'
+                  ? 'Try adjusting your search or router filter'
+                  : 'Customers appear here when they purchase vouchers'}
               </p>
             </div>
           ) : (
-            <div className="space-y-3">
-              {customers.map((customer) => (
-                <div
-                  key={customer.id}
-                  className="flex items-center justify-between p-4 rounded-lg border hover:bg-accent/50 transition-colors"
-                >
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-1">
-                      <p className="font-medium">
-                        {customer.name || 'Unknown Customer'}
-                      </p>
-                      {customer.phone && (
-                        <span className="text-xs text-muted-foreground font-mono">
-                          {customer.phone}
-                        </span>
+            <div className="divide-y">
+              {customers.map((c) => (
+                <div key={c.id}>
+                  {/* Desktop row */}
+                  <div className="grid grid-cols-[1fr_auto_auto_auto_auto] gap-4 items-center px-4 py-3 hover:bg-muted/30 transition-colors hidden md:grid">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium truncate">{displayName(c)}</p>
+                      {c.name && c.phone && (
+                        <p className="text-xs text-muted-foreground font-mono">{c.phone}</p>
+                      )}
+                      {c.email && !c.name && !c.phone && (
+                        <p className="text-xs text-muted-foreground">{c.email}</p>
                       )}
                     </div>
-                    <div className="flex items-center gap-3 text-sm text-muted-foreground">
-                      <span>{customer.routerName}</span>
-                      <span>•</span>
-                      <span>{formatDate(customer.lastPurchaseDate)}</span>
-                    </div>
+                    <span className="text-sm text-muted-foreground whitespace-nowrap">
+                      {formatDate(c.lastPurchaseDate)}
+                    </span>
+                    <span className="text-sm text-center tabular-nums">
+                      {c.totalPurchases}
+                    </span>
+                    <span className="text-sm font-medium tabular-nums whitespace-nowrap">
+                      {formatCurrency(c.totalSpent)}
+                    </span>
+                    <Badge variant="outline" className="text-xs whitespace-nowrap">
+                      {c.routerName}
+                    </Badge>
                   </div>
-                  <div className="text-right">
-                    <p className="font-semibold">{formatCurrency(customer.totalSpent)}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {customer.totalPurchases} purchase{customer.totalPurchases !== 1 ? 's' : ''}
-                    </p>
+
+                  {/* Mobile row */}
+                  <div className="p-4 space-y-1 md:hidden hover:bg-muted/30 transition-colors">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium truncate">{displayName(c)}</p>
+                        {c.name && c.phone && (
+                          <p className="text-xs text-muted-foreground font-mono">{c.phone}</p>
+                        )}
+                      </div>
+                      <span className="text-sm font-semibold shrink-0">
+                        {formatCurrency(c.totalSpent)}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground flex-wrap">
+                      <Badge variant="outline" className="text-xs">{c.routerName}</Badge>
+                      <span>{c.totalPurchases} purchase{c.totalPurchases !== 1 ? 's' : ''}</span>
+                      <span>•</span>
+                      <span>{formatDate(c.lastPurchaseDate)}</span>
+                    </div>
                   </div>
                 </div>
               ))}
@@ -284,6 +419,36 @@ export default async function CustomersPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Pagination */}
+      {pagination && pagination.totalPages > 1 && (
+        <div className="flex items-center justify-between">
+          <p className="text-sm text-muted-foreground">
+            Showing {((page - 1) * 25) + 1}–{Math.min(page * 25, pagination.total)} of{' '}
+            {pagination.total.toLocaleString()} customers
+          </p>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={page === 1}
+            >
+              <ChevronLeft className="h-4 w-4" />
+              Previous
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setPage((p) => Math.min(pagination.totalPages, p + 1))}
+              disabled={page === pagination.totalPages}
+            >
+              Next
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

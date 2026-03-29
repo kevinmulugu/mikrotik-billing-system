@@ -428,18 +428,24 @@ async function initializeDatabase() {
 
     // Payments collection indexes
     console.log('\n  Payments indexes:');
-    await db.collection('payments').createIndex({ userId: 1 });
-    console.log('    ✓ userId (router owner)');
-    await db.collection('payments').createIndex({ 'mpesa.transactionId': 1 });
-    console.log('    ✓ mpesa.transactionId');
-    await db.collection('payments').createIndex({ 'transaction.reference': 1 });
-    console.log('    ✓ transaction.reference');
+    await db.collection('payments').createIndex({ userId: 1, createdAt: -1 });
+    console.log('    ✓ userId + createdAt (compound, desc)');
+    await db.collection('payments').createIndex(
+      { 'mpesa.checkoutRequestId': 1 },
+      { unique: true, sparse: true }
+    );
+    console.log('    ✓ mpesa.checkoutRequestId (unique sparse)');
+    await db.collection('payments').createIndex(
+      { 'mpesa.transactionId': 1 },
+      { sparse: true }
+    );
+    console.log('    ✓ mpesa.transactionId (sparse)');
     await db.collection('payments').createIndex({ status: 1 });
     console.log('    ✓ status');
+    await db.collection('payments').createIndex({ routerId: 1 });
+    console.log('    ✓ routerId');
     await db.collection('payments').createIndex({ 'reconciliation.isReconciled': 1 });
     console.log('    ✓ reconciliation.isReconciled');
-    await db.collection('payments').createIndex({ 'paybill.paybillNumber': 1 });
-    console.log('    ✓ paybill.paybillNumber');
     await db.collection('payments').createIndex({ createdAt: -1 });
     console.log('    ✓ createdAt (desc)');
 
@@ -1064,18 +1070,32 @@ async function initializeDatabase() {
       validator: {
         $jsonSchema: {
           bsonType: 'object',
-          required: ['userId', 'transaction', 'status'],
+          required: ['userId', 'transaction', 'status', 'createdAt'],
           properties: {
             userId: { bsonType: 'objectId' },
-            'transaction.amount': {
-              bsonType: 'number',
-              minimum: 0,
+            routerId: { bsonType: ['objectId', 'null'] },
+            mpesa: {
+              bsonType: 'object',
+              properties: {
+                checkoutRequestId: { bsonType: ['string', 'null'] },
+                merchantRequestId: { bsonType: ['string', 'null'] },
+                transactionId: { bsonType: ['string', 'null'] },
+                phoneNumber: { bsonType: ['string', 'null'] },
+                resultCode: { bsonType: ['int', 'double', 'null'] },
+                resultDesc: { bsonType: ['string', 'null'] },
+              },
             },
-            'transaction.currency': {
-              enum: ['KES', 'USD'],
+            transaction: {
+              bsonType: 'object',
+              required: ['amount', 'type'],
+              properties: {
+                amount: { bsonType: 'number', minimum: 0 },
+                type: { bsonType: 'string' },
+                description: { bsonType: ['string', 'null'] },
+              },
             },
             status: {
-              enum: ['pending', 'completed', 'failed', 'cancelled', 'refunded'],
+              enum: ['pending', 'completed', 'failed', 'pending_voucher', 'pending_confirmation'],
             },
           },
         },

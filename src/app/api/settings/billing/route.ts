@@ -21,9 +21,12 @@ export async function GET(req: NextRequest) {
     const db = client.db(process.env.MONGODB_DB_NAME || 'mikrotik_billing');
 
     // Read global system config values
-    const systemConfig = await db.collection('system_config').findOne({}) as any || {};
-    const commissionRates = systemConfig.commission_rates || {};
-    const subscriptionFees = systemConfig.subscription_fees || {};
+    const systemConfig = await db.collection('system_config').findOne<{
+      commission_rates?: Record<string, number>;
+      subscription_fees?: Record<string, number>;
+    }>({});
+    const commissionRates = systemConfig?.commission_rates ?? {};
+    const subscriptionFees = systemConfig?.subscription_fees ?? {};
 
     // Read user-specific data
     const user = await db

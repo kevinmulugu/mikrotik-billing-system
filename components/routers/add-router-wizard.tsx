@@ -1014,8 +1014,8 @@ export const AddRouterWizard: React.FC<AddRouterWizardProps> = ({
                   <div className="relative">
                     <Input
                       type={showPassword ? "text" : "password"}
-                      placeholder={formData.routerType === 'mikrotik' 
-                        ? 'Router admin password (blank if factory reset)' 
+                      placeholder={formData.routerType === 'mikrotik'
+                        ? 'Router admin password (required)'
                         : 'UniFi Controller password (required)'}
                       value={formData.apiPassword}
                       onChange={(e) => handleInputChange("apiPassword", e.target.value)}
@@ -1034,8 +1034,8 @@ export const AddRouterWizard: React.FC<AddRouterWizardProps> = ({
                     <p className="text-sm text-destructive">{errors.apiPassword}</p>
                   )}
                   <p className="text-xs text-muted-foreground">
-                    {formData.routerType === 'mikrotik' 
-                      ? 'Leave blank if router was just factory reset' 
+                    {formData.routerType === 'mikrotik'
+                      ? 'Password for your MikroTik router admin account'
                       : 'Password for your UniFi Controller admin account'}
                   </p>
                 </div>

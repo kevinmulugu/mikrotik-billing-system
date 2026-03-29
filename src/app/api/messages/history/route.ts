@@ -23,7 +23,12 @@ export async function GET(request: NextRequest) {
     const db = client.db(process.env.MONGODB_DB_NAME || 'mikrotik_billing');
 
     // Build query
-    const query: any = {
+    type MessageQuery = {
+      userId: ObjectId;
+      routerId?: ObjectId;
+      status?: string;
+    };
+    const query: MessageQuery = {
       userId: new ObjectId(session.user.id),
     };
 

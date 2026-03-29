@@ -1,3 +1,4 @@
+// src/app/routers/[id]/settings/page.tsx
 import { Metadata } from 'next';
 import { getServerSession } from 'next-auth/next';
 import { redirect } from 'next/navigation';
@@ -5,6 +6,7 @@ import { authOptions } from '@/lib/auth';
 import { RouterSettings } from '@/components/routers/router-settings';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft } from 'lucide-react';
+import Link from 'next/link';
 
 interface RouterSettingsPageProps {
   params: Promise<{
@@ -32,13 +34,13 @@ export default async function RouterSettingsPage({ params }: RouterSettingsPageP
       {/* Header */}
       <div className="flex items-center gap-4">
         <Button variant="ghost" size="sm" asChild>
-          <a href={`/routers/${id}`}>
+          <Link href={`/routers/${id}`}>
             <ArrowLeft className="h-4 w-4" />
-          </a>
+          </Link>
         </Button>
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Router Settings</h1>
-          <p className="text-gray-600 mt-1">
+          <h1 className="text-2xl font-bold">Router Settings</h1>
+          <p className="text-muted-foreground mt-1">
             Configure your router's network and service settings
           </p>
         </div>

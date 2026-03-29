@@ -27,9 +27,18 @@ import { ConnectionTab } from "./tabs/connection-tab"
 import { HotspotTab } from "./tabs/hotspot-tab"
 import { PPPoETab } from "./tabs/pppoe-tab"
 import { NetworkTab } from "./tabs/network-tab"
+import { VpnTab } from "./tabs/vpn-tab"
 
 interface RouterSettingsProps {
   routerId: string
+}
+
+interface VpnTunnelData {
+  enabled: boolean
+  status: 'connected' | 'disconnected' | 'pending' | 'failed' | 'setup'
+  assignedVPNIP?: string | null
+  lastHandshake?: string | null
+  provisionedAt?: string | null
 }
 
 interface RouterData {
@@ -40,6 +49,8 @@ interface RouterData {
   macAddress: string
   firmwareVersion: string
   status: string
+  routerType?: 'mikrotik' | 'unifi'
+  vpnTunnel?: VpnTunnelData
   ipAddress: string
   location: {
     name: string
@@ -434,12 +445,15 @@ export function RouterSettings({ routerId }: RouterSettingsProps) {
       <Card>
         <CardContent className="p-6">
           <Tabs value={activeTab} onValueChange={setActiveTab}>
-            <TabsList className="grid w-full grid-cols-5">
+            <TabsList className={`grid w-full ${router.routerType !== 'unifi' ? 'grid-cols-6' : 'grid-cols-5'}`}>
               <TabsTrigger value="general">General</TabsTrigger>
               <TabsTrigger value="connection">Connection</TabsTrigger>
               <TabsTrigger value="hotspot">Hotspot</TabsTrigger>
               <TabsTrigger value="pppoe">PPPoE</TabsTrigger>
               <TabsTrigger value="network">Network</TabsTrigger>
+              {router.routerType !== 'unifi' && (
+                <TabsTrigger value="vpn">VPN</TabsTrigger>
+              )}
             </TabsList>
 
             <TabsContent value="general" className="space-y-6">
@@ -489,6 +503,15 @@ export function RouterSettings({ routerId }: RouterSettingsProps) {
                 saving={saving}
               />
             </TabsContent>
+
+            {router.routerType !== 'unifi' && (
+              <TabsContent value="vpn" className="space-y-6">
+                <VpnTab
+                  routerId={routerId}
+                  vpnTunnel={router.vpnTunnel ?? { enabled: false, status: 'pending' }}
+                />
+              </TabsContent>
+            )}
           </Tabs>
         </CardContent>
       </Card>

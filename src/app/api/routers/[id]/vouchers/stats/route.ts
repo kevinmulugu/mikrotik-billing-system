@@ -83,42 +83,67 @@ export async function GET(
             }
           ],
           
-          // Revenue calculations
+          // Revenue calculations — only count sold vouchers (paid/used/assigned)
           revenue: [
             {
               $group: {
                 _id: null,
-                totalRevenue: { $sum: '$voucherInfo.price' },
-                totalCommission: { $sum: '$payment.commission' },
+                totalRevenue: {
+                  $sum: {
+                    $cond: [
+                      { $in: ['$status', ['paid', 'used', 'assigned']] },
+                      '$voucherInfo.price',
+                      0,
+                    ],
+                  },
+                },
+                totalCommission: {
+                  $sum: { $ifNull: ['$payment.commission', 0] },
+                },
                 todayRevenue: {
                   $sum: {
                     $cond: [
-                      { $gte: ['$createdAt', startOfToday] },
+                      {
+                        $and: [
+                          { $in: ['$status', ['paid', 'used', 'assigned']] },
+                          { $gte: [{ $ifNull: ['$payment.paymentDate', new Date(0)] }, startOfToday] },
+                        ],
+                      },
                       '$voucherInfo.price',
-                      0
-                    ]
-                  }
+                      0,
+                    ],
+                  },
                 },
                 weekRevenue: {
                   $sum: {
                     $cond: [
-                      { $gte: ['$createdAt', startOfWeek] },
+                      {
+                        $and: [
+                          { $in: ['$status', ['paid', 'used', 'assigned']] },
+                          { $gte: [{ $ifNull: ['$payment.paymentDate', new Date(0)] }, startOfWeek] },
+                        ],
+                      },
                       '$voucherInfo.price',
-                      0
-                    ]
-                  }
+                      0,
+                    ],
+                  },
                 },
                 monthRevenue: {
                   $sum: {
                     $cond: [
-                      { $gte: ['$createdAt', startOfMonth] },
+                      {
+                        $and: [
+                          { $in: ['$status', ['paid', 'used', 'assigned']] },
+                          { $gte: [{ $ifNull: ['$payment.paymentDate', new Date(0)] }, startOfMonth] },
+                        ],
+                      },
                       '$voucherInfo.price',
-                      0
-                    ]
-                  }
-                }
-              }
-            }
+                      0,
+                    ],
+                  },
+                },
+              },
+            },
           ],
 
           // Package type breakdown
@@ -186,6 +211,7 @@ export async function GET(
           vouchers: {
             total: 0,
             active: 0,
+            assigned: 0,
             used: 0,
             expired: 0,
             cancelled: 0,
@@ -214,6 +240,7 @@ export async function GET(
     const statusCounts = {
       total: 0,
       active: 0,
+      assigned: 0,
       used: 0,
       expired: 0,
       cancelled: 0,
