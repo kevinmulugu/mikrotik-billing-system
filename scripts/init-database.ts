@@ -911,8 +911,8 @@ async function initializeDatabase() {
         {
           name: 'Voucher Purchase Confirmation',
           category: 'sales',
-          message: 'Thank you for your purchase! Your voucher code is {{CODE}}. Valid for {{DURATION}}. Enjoy your internet!',
-          variables: ['CODE', 'DURATION'],
+          message: 'Dear {{NAME}}, thank you for your purchase! Your voucher code is {{CODE}}. Valid for {{DURATION}}. Enjoy your internet!',
+          variables: ['NAME', 'CODE', 'DURATION'],
           isSystem: true,
           isActive: true,
           userId: null,

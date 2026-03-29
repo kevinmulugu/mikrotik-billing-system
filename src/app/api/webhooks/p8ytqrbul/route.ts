@@ -533,6 +533,7 @@ export async function POST(request: NextRequest) {
 
               // Replace variables in template
               const smsMessage = MessagingService.replaceVariables(template.message, {
+                name: customerName || FirstName || 'Customer',
                 code: voucher.voucherInfo.code,
                 package: packageInfo.packageDisplayName || 'WiFi Access',
                 duration: durationText,
@@ -1041,6 +1042,7 @@ export async function POST(request: NextRequest) {
 
           // Replace variables in template
           const smsMessage = MessagingService.replaceVariables(template.message, {
+            name: customerName || FirstName || 'Customer',
             code: voucherCode || 'PENDING',
             package: packageName,
             duration: durationText || 'as specified',

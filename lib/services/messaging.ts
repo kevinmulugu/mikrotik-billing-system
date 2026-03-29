@@ -418,8 +418,9 @@ export class MessagingService {
   }
 
   /**
-   * Replace variables in message template
-   * Example: "Hello {name}, your voucher code is {code}"
+   * Replace variables in message template.
+   * Matches {{KEY}} double-brace placeholders, case-insensitive.
+   * Example: "Hello {{NAME}}, your code is {{CODE}}"
    */
   static replaceVariables(
     template: string,
@@ -428,7 +429,7 @@ export class MessagingService {
     let result = template;
 
     for (const [key, value] of Object.entries(variables)) {
-      const regex = new RegExp(`\\{${key}\\}`, 'g');
+      const regex = new RegExp(`\\{\\{${key}\\}\\}`, 'gi');
       result = result.replace(regex, value);
     }
 
