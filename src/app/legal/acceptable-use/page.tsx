@@ -83,6 +83,18 @@ export default function AcceptableUsePolicyPage() {
         <li>❌ Reverse engineer or decompile our software</li>
         <li>❌ Bypass security measures or authentication systems</li>
         <li>❌ Resell services without authorization</li>
+        <li>❌ Submit support tickets in bad faith or to harass staff</li>
+        <li>❌ Abuse the SMS OTP system by repeatedly requesting codes for phone numbers you do not own</li>
+      </ul>
+
+      <h3>3.5 Captive Portal Misuse</h3>
+      <p>If you operate a branded captive portal through PAY N BROWSE, you may NOT:</p>
+      <ul>
+        <li>❌ Display content that is illegal, defamatory, pornographic, or incites violence</li>
+        <li>❌ Collect sensitive personal data from customers through the portal (e.g., ID numbers, passwords) beyond what the platform provides for authentication</li>
+        <li>❌ Mimic or impersonate other services or government entities on the portal</li>
+        <li>❌ Modify or tamper with M-Pesa payment validation logic in portal code</li>
+        <li>❌ Use the portal to conduct phishing or redirect customers to malicious sites</li>
       </ul>
 
       <h2>4. Network Usage Guidelines</h2>

@@ -39,6 +39,7 @@ async function seedDatabase() {
         _id: adminUserId,
         name: 'System Administrator',
         email: 'admin@mikrotikbilling.com',
+        phone: '+254700000001', // OTP auth phone (E.164 format)
         emailVerified: new Date(),
         role: 'system_admin',
         status: 'active',
@@ -91,6 +92,7 @@ async function seedDatabase() {
         _id: homeownerUserId,
         name: 'John Homeowner',
         email: 'homeowner@demo.com',
+        phone: '+254712345678', // OTP auth phone (E.164 format)
         emailVerified: new Date(),
         role: 'homeowner',
         status: 'active',
@@ -480,6 +482,7 @@ async function seedDatabase() {
         _id: ispUserId,
         name: 'Demo ISP Networks',
         email: 'isp@demo.com',
+        phone: '+254722334455', // OTP auth phone (E.164 format)
         emailVerified: new Date(),
         role: 'isp',
         status: 'active',
@@ -1311,6 +1314,151 @@ async function seedDatabase() {
       console.log('  ⊙ WiFi customers already exist');
     }
 
+    // ==========================================
+    // SMS PLANS
+    // ==========================================
+    console.log('\n📲 Seeding SMS plans...');
+
+    const smsPlans = [
+      {
+        planId: 'starter',
+        name: 'Starter',
+        description: 'Perfect for testing and low-volume use',
+        pricePerCredit: 1.00,
+        minimumCredits: 100,
+        maximumCredits: 100,
+        bonusPercentage: 0,
+        isActive: true,
+        isCustom: false,
+        displayOrder: 1,
+        features: [
+          '100 SMS credits',
+          'Valid for 12 months',
+          'Standard delivery speed',
+        ],
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+      {
+        planId: 'basic',
+        name: 'Basic',
+        description: 'Good for small businesses and homeowners',
+        pricePerCredit: 0.90,
+        minimumCredits: 500,
+        maximumCredits: 500,
+        bonusPercentage: 0,
+        isActive: true,
+        isCustom: false,
+        displayOrder: 2,
+        features: [
+          '500 SMS credits',
+          '10% savings vs Starter',
+          'Valid for 12 months',
+          'Standard delivery speed',
+        ],
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+      {
+        planId: 'standard',
+        name: 'Standard',
+        description: 'Most popular — ideal for growing ISPs',
+        pricePerCredit: 0.80,
+        minimumCredits: 1000,
+        maximumCredits: 1000,
+        bonusPercentage: 0,
+        isActive: true,
+        isCustom: false,
+        displayOrder: 3,
+        features: [
+          '1,000 SMS credits',
+          '20% savings vs Starter',
+          'Valid for 12 months',
+          'Priority delivery',
+        ],
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+      {
+        planId: 'premium',
+        name: 'Premium',
+        description: 'For high-volume SMS users',
+        pricePerCredit: 0.70,
+        minimumCredits: 2500,
+        maximumCredits: 2500,
+        bonusPercentage: 0,
+        isActive: true,
+        isCustom: false,
+        displayOrder: 4,
+        features: [
+          '2,500 SMS credits',
+          '30% savings vs Starter',
+          'Valid for 12 months',
+          'Priority delivery',
+        ],
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+      {
+        planId: 'business',
+        name: 'Business',
+        description: 'For large ISPs with many customers',
+        pricePerCredit: 0.60,
+        minimumCredits: 5000,
+        maximumCredits: 5000,
+        bonusPercentage: 0,
+        isActive: true,
+        isCustom: false,
+        displayOrder: 5,
+        features: [
+          '5,000 SMS credits',
+          '40% savings vs Starter',
+          'Valid for 12 months',
+          'Priority delivery',
+          'Dedicated support',
+        ],
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+      {
+        planId: 'enterprise',
+        name: 'Enterprise',
+        description: 'Custom amount — buy as many credits as you need at the best rate',
+        pricePerCredit: 0.50,
+        minimumCredits: 10000,
+        maximumCredits: undefined,
+        bonusPercentage: 0,
+        isActive: true,
+        isCustom: true,
+        displayOrder: 6,
+        features: [
+          'Minimum 10,000 SMS credits',
+          '50% savings vs Starter',
+          'Valid for 24 months',
+          'Priority delivery',
+          'Dedicated support',
+          'Custom invoicing available',
+        ],
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    ];
+
+    let smsPlansCreated = 0;
+    for (const plan of smsPlans) {
+      const exists = await db.collection('sms_plans').findOne({ planId: plan.planId });
+      if (!exists) {
+        await db.collection('sms_plans').insertOne(plan);
+        smsPlansCreated++;
+      }
+    }
+
+    if (smsPlansCreated > 0) {
+      console.log(`  ✓ Created ${smsPlansCreated} SMS plans`);
+    } else {
+      console.log('  ⊙ SMS plans already exist');
+    }
+
     console.log('\n✅ Database seeding completed successfully!\n');
 
     // Show summary
@@ -1322,9 +1470,11 @@ async function seedDatabase() {
     console.log('  🎫 Vouchers: 10 (3 used, 7 active)');
     console.log('  💰 Payments: 47 (30 homeowner + 17 ISP)');
     console.log('  📱 Paybills: 1 company paybill');
+    console.log('  📲 SMS Plans: 6 (starter → enterprise)');
     console.log('\n💡 Pricing Model:');
     console.log('  Homeowners: 20% commission per voucher sale');
     console.log('  ISPs: KES 2,500/month (≤5 routers) or KES 3,900/month (unlimited)');
+    console.log('  SMS Credits: KES 1.00 → 0.50/credit depending on plan');
     console.log('\n🎉 Demo data ready for testing!\n');
 
     console.log('🔑 Demo Login Credentials:');

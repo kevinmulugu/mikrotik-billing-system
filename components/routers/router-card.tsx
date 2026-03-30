@@ -9,10 +9,8 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
-import {
-  Badge,
-  BadgeProps,
-} from "@/components/ui/badge"
+import { Badge, badgeVariants } from "@/components/ui/badge"
+import { type VariantProps } from "class-variance-authority"
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
@@ -144,7 +142,7 @@ interface RouterCardProps {
 }
 
 // Status badge variant mapping
-const getStatusVariant = (status: string): BadgeProps["variant"] => {
+const getStatusVariant = (status: string): VariantProps<typeof badgeVariants>["variant"] => {
   switch (status) {
     case "online":
       return "default"

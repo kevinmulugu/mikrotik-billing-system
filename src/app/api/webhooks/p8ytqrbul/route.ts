@@ -16,7 +16,7 @@ import { NotificationService } from '@/lib/services/notification';
  * It's called by Safaricom when a payment is successfully made to the paybill/till number.
  * 
  * ARCHITECTURE: SINGLE POINT OF VOUCHER ASSIGNMENT
- * - STK Callback: Only marks failures, does NOT assign vouchers
+ * - STK Callback: Only marks failurfes, does NOT assign vouchers
  * - C2B Confirmation (THIS FILE): Handles ALL successful voucher assignments
  * 
  * Benefits:

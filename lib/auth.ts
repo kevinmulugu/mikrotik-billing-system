@@ -2,8 +2,11 @@
 import { NextAuthOptions } from 'next-auth';
 import GoogleProvider from 'next-auth/providers/google';
 import EmailProvider from 'next-auth/providers/email';
+import CredentialsProvider from 'next-auth/providers/credentials';
 import { MongoDBAdapter } from '@auth/mongodb-adapter';
 import clientPromise from './database';
+import otpClientPromise from './mongodb';
+import { createHmac } from 'crypto';
 
 // Check if email configuration is available
 const isEmailConfigured = !!(
@@ -23,6 +26,16 @@ const isGoogleConfigured = !!(
   process.env.GOOGLE_CLIENT_SECRET
 );
 
+// Check if SMS OTP is configured
+const isOtpConfigured = !!process.env.MOBILESASA_API_KEY;
+
+function verifyOtpHash(requestId: string, otp: string, storedHash: string): boolean {
+  const expected = createHmac('sha256', process.env.NEXTAUTH_SECRET!)
+    .update(`${requestId}:${otp}`)
+    .digest('hex');
+  return expected === storedHash;
+}
+
 export const authOptions: NextAuthOptions = {
   adapter: MongoDBAdapter(clientPromise),
 
@@ -33,6 +46,79 @@ export const authOptions: NextAuthOptions = {
         GoogleProvider({
           clientId: process.env.GOOGLE_CLIENT_ID!,
           clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+        }),
+      ]
+      : []),
+
+    // SMS OTP via CredentialsProvider
+    ...(isOtpConfigured
+      ? [
+        CredentialsProvider({
+          id: 'phone-otp',
+          name: 'Phone OTP',
+          credentials: {
+            requestId: { label: 'Request ID', type: 'text' },
+            otp: { label: 'One-time code', type: 'text' },
+          },
+          async authorize(credentials) {
+            if (!credentials?.requestId || !credentials?.otp) return null;
+            if (!/^\d{6}$/.test(credentials.otp)) return null;
+
+            try {
+              const otpClient = await otpClientPromise;
+              const db = otpClient.db(process.env.MONGODB_DB_NAME || 'mikrotik_billing');
+              const { ObjectId } = await import('mongodb');
+              const now = new Date();
+
+              const token = await db.collection('otp_tokens').findOne({
+                requestId: credentials.requestId,
+                purpose: { $exists: false }, // login tokens have no purpose field
+              });
+
+              if (!token) return null;
+              if (token.used) return null;
+              if (token.expiresAt < now) return null;
+              if (!token.userExists) return null;
+              if (token.attemptCount >= 5) return null;
+
+              if (!verifyOtpHash(credentials.requestId, credentials.otp, token.otpHash)) {
+                await db.collection('otp_tokens').updateOne(
+                  { requestId: credentials.requestId },
+                  { $inc: { attemptCount: 1 } },
+                );
+                return null;
+              }
+
+              // Valid — mark used and fetch user
+              await db.collection('otp_tokens').updateOne(
+                { requestId: credentials.requestId },
+                { $set: { used: true, usedAt: now } },
+              );
+
+              const user = await db.collection('users').findOne(
+                { phone: token.phone },
+                { projection: { _id: 1, email: 1, name: 1, image: 1, role: 1, status: 1 } },
+              );
+
+              if (!user || user.status === 'suspended') return null;
+
+              // Update last login
+              db.collection('users').updateOne(
+                { _id: user._id },
+                { $set: { 'metadata.lastLogin': now } },
+              ).catch(() => {});
+
+              return {
+                id: user._id.toString(),
+                email: user.email,
+                name: user.name || null,
+                image: user.image || null,
+              };
+            } catch (err) {
+              console.error('[OTP authorize]', err);
+              return null;
+            }
+          },
         }),
       ]
       : []),
@@ -87,6 +173,17 @@ export const authOptions: NextAuthOptions = {
         return false;
       }
 
+      // For OTP — authorize() already verified the token; just double-check suspension
+      if (account.provider === 'phone-otp') {
+        const client = await clientPromise;
+        const db = client.db();
+        const existingUser = await db
+          .collection('users')
+          .findOne({ email: user.email.toLowerCase() }, { projection: { status: 1 } });
+        if (existingUser?.status === 'suspended') return '/signin?error=AccountSuspended';
+        return true;
+      }
+
       const client = await clientPromise;
       const db = client.db();
       const usersCollection = db.collection('users');
@@ -103,6 +200,12 @@ export const authOptions: NextAuthOptions = {
           // User doesn't exist - reject sign in
           console.log(`[Auth] Sign-in rejected: User ${user.email} does not exist`);
           return false;
+        }
+
+        // Block suspended accounts at the door
+        if (existingUser.status === 'suspended') {
+          console.log(`[Auth] Sign-in rejected: User ${user.email} is suspended`);
+          return '/signin?error=AccountSuspended';
         }
 
         // User exists - allow sign in and activate if pending
@@ -132,6 +235,12 @@ export const authOptions: NextAuthOptions = {
           // User doesn't exist - reject to prevent account takeover
           console.log(`[Auth] OAuth sign-in rejected: User ${user.email} does not exist. They must sign up first.`);
           return '/signup?error=AccountNotFound&email=' + encodeURIComponent(user.email);
+        }
+
+        // Block suspended accounts
+        if (existingUser.status === 'suspended') {
+          console.log(`[Auth] OAuth sign-in rejected: User ${user.email} is suspended`);
+          return '/signin?error=AccountSuspended';
         }
 
         // User exists - allow sign in and set up business fields if missing
@@ -271,6 +380,7 @@ export const authOptions: NextAuthOptions = {
 export const authConfig = {
   hasGoogle: isGoogleConfigured,
   hasEmail: isEmailConfigured,
+  hasOtp: isOtpConfigured,
 };
 
 // Email template functions

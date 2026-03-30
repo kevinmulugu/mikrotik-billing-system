@@ -28,6 +28,10 @@ import {
   Settings,
   Building2,
   Percent,
+  Shield,
+  BarChart3,
+  FileText,
+  CreditCard,
 } from 'lucide-react';
 
 const navigation = [
@@ -129,10 +133,24 @@ function UserFooter() {
   );
 }
 
+const adminNavigation = [
+  { name: 'Admin Overview', href: '/admin', icon: Shield },
+  { name: 'All Users', href: '/admin/users', icon: Users },
+  { name: 'All Payments', href: '/admin/payments', icon: DollarSign },
+  { name: 'All Routers', href: '/admin/routers', icon: Wifi },
+  { name: 'Tickets', href: '/admin/tickets', icon: HelpCircle },
+  { name: 'Messages', href: '/admin/messages', icon: MessageSquare },
+  { name: 'SMS Plans', href: '/admin/sms-plans', icon: CreditCard },
+  { name: 'Audit Logs', href: '/admin/audit-logs', icon: FileText },
+  { name: 'Analytics', href: '/admin', icon: BarChart3 },
+];
+
 export function AppSidebar() {
   const pathname = usePathname();
+  const { data: session } = useSession();
   const appName = process.env.NEXT_PUBLIC_APP_NAME || 'PAY N BROWSE';
   const appShortName = process.env.NEXT_PUBLIC_APP_SHORT_NAME || 'PB';
+  const isAdmin = (session?.user as { role?: string })?.role === 'system_admin';
 
   return (
     <Sidebar collapsible="icon">
@@ -174,6 +192,42 @@ export function AppSidebar() {
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
+
+        {isAdmin && (
+          <SidebarGroup>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    asChild
+                    isActive={pathname.startsWith('/admin')}
+                    tooltip="Admin Panel"
+                    className="font-medium"
+                  >
+                    <Link href="/admin">
+                      <Shield />
+                      <span>Admin Panel</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+                {adminNavigation.slice(1).map((item) => {
+                  const isActive =
+                    pathname === item.href || pathname.startsWith(item.href + '/');
+                  return (
+                    <SidebarMenuItem key={item.name}>
+                      <SidebarMenuButton asChild isActive={isActive} tooltip={item.name}>
+                        <Link href={item.href}>
+                          <item.icon />
+                          <span>{item.name}</span>
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  );
+                })}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
       </SidebarContent>
 
       <UserFooter />

@@ -34,14 +34,21 @@ export default function PrivacyPolicyPage() {
       
       <h3>2.1 Personal Information</h3>
       <ul>
-        <li><strong>Account Information:</strong> Name, email address, phone number</li>
-        <li><strong>Business Information:</strong> Business name, address, type of operation</li>
-        <li><strong>Payment Information:</strong> M-Pesa phone number, transaction records</li>
-        <li><strong>Router Information:</strong> IP addresses, MAC addresses, router configurations</li>
-        <li><strong>Usage Data:</strong> Login times, data usage, session duration</li>
+        <li><strong>Account Information:</strong> Name, email address</li>
+        <li><strong>Authentication Phone Number:</strong> Mobile number you register for SMS OTP sign-in. This is stored separately from your business contact phone and is used solely for sending one-time authentication codes.</li>
+        <li><strong>Business Information:</strong> Business name, address, contact phone number, type of operation</li>
+        <li><strong>Payment Information:</strong> M-Pesa phone number, paybill details, transaction records</li>
+        <li><strong>Router Information:</strong> IP addresses, MAC addresses, router model, firmware version, and configuration data</li>
+        <li><strong>Usage Data:</strong> Login times, session duration, active users, revenue figures</li>
+        <li><strong>Support Data:</strong> Ticket content and communications you submit through the support ticket system</li>
       </ul>
 
-      <h3>2.2 Automatically Collected Information</h3>
+      <h3>2.2 OTP Token Data</h3>
+      <p>
+        When you request an SMS OTP sign-in code, we temporarily store a cryptographic hash of the one-time code, your phone number, and your IP address. This data is automatically deleted after 5 minutes. It is never used for marketing, profiling, or shared with third parties.
+      </p>
+
+      <h3>2.3 Automatically Collected Information</h3>
       <ul>
         <li>Device information (type, operating system)</li>
         <li>IP addresses and location data</li>
@@ -57,7 +64,10 @@ export default function PrivacyPolicyPage() {
         <li>Monitor router performance and network usage</li>
         <li>Send service notifications and updates</li>
         <li>Provide customer support</li>
+        <li>Send SMS authentication codes (OTP) when you sign in via phone</li>
+        <li>Send SMS notifications to your customers (payment confirmations, expiry reminders) when you have purchased SMS credits</li>
         <li>Detect and prevent fraud or abuse</li>
+        <li>Maintain audit logs of account actions (profile updates, payment processing, router changes) for security and compliance</li>
         <li>Comply with legal obligations</li>
         <li>Improve our services and develop new features</li>
       </ul>
@@ -76,10 +86,10 @@ export default function PrivacyPolicyPage() {
       <h3>5.1 Third-Party Service Providers</h3>
       <p>We may share your information with:</p>
       <ul>
-        <li><strong>Payment Processors:</strong> Safaricom M-Pesa for payment processing</li>
-        <li><strong>Cloud Hosting:</strong> Secure data storage providers</li>
-        <li><strong>Analytics Services:</strong> To improve our platform performance</li>
-        <li><strong>Communication Services:</strong> Email and SMS providers for notifications</li>
+        <li><strong>Safaricom M-Pesa:</strong> Payment processing for voucher purchases and subscription billing. M-Pesa receives the payer's phone number and transaction amount.</li>
+        <li><strong>MobileSasa:</strong> SMS delivery service used to send authentication OTP codes and customer notifications. MobileSasa receives the recipient's phone number and message content only.</li>
+        <li><strong>Google:</strong> If you sign in using Google OAuth, your name, email address, and profile picture are shared with us by Google per their Privacy Policy.</li>
+        <li><strong>Cloud Hosting:</strong> Secure data storage and compute providers. All data is stored with encryption at rest.</li>
       </ul>
 
       <h3>5.2 Legal Requirements</h3>
@@ -94,10 +104,11 @@ export default function PrivacyPolicyPage() {
       <h2>6. Data Security</h2>
       <p>We implement appropriate technical and organizational measures to protect your data:</p>
       <ul>
-        <li>Encryption of data in transit and at rest</li>
-        <li>Secure access controls and authentication</li>
-        <li>Regular security audits and updates</li>
-        <li>Employee training on data protection</li>
+        <li>Encryption of data in transit (TLS) and at rest</li>
+        <li>Secure access controls: role-based permissions, Google OAuth, and SMS OTP authentication</li>
+        <li>Activity audit logs: all significant account actions (sign-ins, profile changes, payment events) are recorded with IP address, timestamp, and user agent for fraud detection and compliance</li>
+        <li>OTP codes are stored only as cryptographic hashes (HMAC-SHA256) and deleted automatically after 5 minutes</li>
+        <li>Regular security assessments and dependency updates</li>
         <li>Incident response procedures</li>
       </ul>
 

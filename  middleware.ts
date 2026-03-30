@@ -29,6 +29,14 @@ export default withAuth(
       return NextResponse.redirect(signInUrl);
     }
 
+    // Suspended users: block all protected routes except sign-out.
+    // Session invalidation (sessions collection delete) handles already-logged-in users;
+    // this guard catches any residual token before it expires.
+    const userStatus = (token as any).status as string | undefined;
+    if (userStatus === 'suspended' && !pathname.startsWith('/api/auth')) {
+      return NextResponse.redirect(new URL('/signin?error=AccountSuspended', request.url));
+    }
+
     // Check if user has required permissions for certain routes
     const userRole = token.role as string;
     const userId = token.sub as string;

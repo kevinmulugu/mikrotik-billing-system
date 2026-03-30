@@ -119,6 +119,40 @@ Every new page must include a `loading.tsx` sibling that mirrors the page layout
 
 `@/*` maps to `src/*` (configured in `tsconfig.json`). Use `@/lib/...`, `@/components/...`, etc.
 
+## Security Rules — Always Enforce
+
+These apply to every API route, component, and service. There are no exceptions.
+
+### Authentication & Authorisation
+- Every protected route must call `getServerSession(authOptions)` and check `session?.user?.id` before doing anything.
+- Admin routes additionally check `session.user.role === 'system_admin'`. Return `403` (not `401`) on role failure.
+- User-scoped queries **always** filter by `userId: new ObjectId(session.user.id)` — never accept a `userId` from the request body or query string.
+- Captive portal routes (`/api/captive/*`) are the only intentionally public routes.
+
+### No Mass Assignment
+- Never spread `req.body` / `formData` directly into a DB insert or update.
+- Always parse the body with a **Zod schema** first, then explicitly pick which validated fields to write.
+- `$set` in MongoDB updates must use an explicit object — not `{ $set: body }` or `{ $set: parsed.data }` when `parsed.data` contains fields that shouldn't be user-writable (e.g. `role`, `status`, `userId`, `isInternal`).
+
+### Input Validation
+- Validate all IDs with `ObjectId.isValid()` / `isValidObjectId()` before constructing `new ObjectId(id)`.
+- Use Zod `z.enum([...])` for status and action fields — never accept free-form strings for these.
+- For PATCH routes that dispatch on an `action` field, use `z.discriminatedUnion('action', [...])` to prevent ambiguous payloads.
+- Strip unknown fields: Zod schemas default to `.strip()` — do not use `.passthrough()` on user input.
+
+### Privilege Escalation Prevention
+- Users **cannot** set their own `role`, `permissions`, or `status` fields — these must only be writeable through admin-specific routes.
+- Admin routes that update user records must use an explicit field allowlist (e.g. only `status` or `role`), never blindly apply all validated fields.
+- `isInternal` on ticket communications can only be set to `true` by a `system_admin` — the user-facing ticket API must hardcode `isInternal: false`.
+
+### Output Safety
+- Never return password hashes, API credentials, private keys, or full MikroTik/M-Pesa credentials in API responses.
+- Projection in aggregations should use `{ $project: { passwordHash: 0, apiPassword: 0, ... } }` for user-facing endpoints.
+- Error messages returned to the client must not reveal internal paths, stack traces, or DB schema details.
+
+### Webhook Security
+- Treat all webhook payloads as untrusted: validate required fields, validate amounts are positive numbers, and never trust `userId` or `routerId` embedded in the payload — always look them up via the `BillRefNumber` reference.
+
 ## Environment Variables
 
 Critical vars: `MONGODB_URI`, `NEXTAUTH_SECRET`, `NEXTAUTH_URL`. M-Pesa requires `MPESA_*` vars. See existing `.env.example` or docs in `MPESA_PURCHASE_IMPLEMENTATION.md` and `AUTHENTICATION.md` for full list.

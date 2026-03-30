@@ -8,14 +8,6 @@ const nextConfig: NextConfig = {
   ],
   experimental: {
     optimizePackageImports: ['@radix-ui/react-icons', 'lucide-react'],
-    turbo: {
-      rules: {
-        '*.svg': {
-          loaders: ['@svgr/webpack'],
-          as: '*.js',
-        },
-      },
-    },
   },
   
   // Image optimization
@@ -118,12 +110,6 @@ const nextConfig: NextConfig = {
   // TypeScript configuration
   typescript: {
     ignoreBuildErrors: false,
-  },
-
-  // ESLint configuration
-  eslint: {
-    ignoreDuringBuilds: false,
-    dirs: ['app', 'components', 'lib', 'types', 'hooks'],
   },
 
   // Output configuration

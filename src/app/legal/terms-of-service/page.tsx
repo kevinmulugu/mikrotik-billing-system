@@ -33,13 +33,16 @@ export default function TermsOfServicePage() {
       <h2>2. Service Description</h2>
       <p>PAY N BROWSE provides:</p>
       <ul>
-        <li>WiFi hotspot management platform</li>
-        <li>PPPoE user management</li>
-        <li>Voucher generation and sales system</li>
-        <li>M-Pesa payment integration</li>
-        <li>Router configuration and monitoring</li>
-        <li>Commission-based revenue sharing for individual users</li>
-        <li>Subscription plans for ISP businesses</li>
+        <li><strong>WiFi Hotspot Management</strong> — configure and manage hotspot profiles on MikroTik RouterOS and Ubiquiti UniFi routers</li>
+        <li><strong>Branded Captive Portal</strong> — a customisable customer-facing sign-in page with your business name and M-Pesa payment form</li>
+        <li><strong>PPPoE User Management</strong> — create and manage PPPoE subscribers, assign bandwidth profiles, and track usage</li>
+        <li><strong>Voucher Generation & Sales</strong> — generate time-based or data-limited voucher codes for hotspot access</li>
+        <li><strong>M-Pesa Payment Integration</strong> — STK Push and Paybill collection with automated voucher activation</li>
+        <li><strong>SMS Customer Notifications</strong> — automated SMS for payment confirmations, voucher delivery, and expiry reminders</li>
+        <li><strong>Router Configuration & Monitoring</strong> — automated provisioning, real-time health checks, and connected-user tracking</li>
+        <li><strong>Support Ticket System</strong> — in-platform helpdesk for managing customer support interactions</li>
+        <li><strong>Commission Tracking & Payouts</strong> — automatic revenue attribution and monthly M-Pesa disbursements</li>
+        <li><strong>Subscription plans</strong> for ISP businesses with flat-rate monthly billing</li>
       </ul>
 
       <h2>3. User Eligibility</h2>
@@ -61,7 +64,15 @@ export default function TermsOfServicePage() {
         <li><strong>ISP Pro:</strong> KES 3,900/month, unlimited routers, 0% commission</li>
       </ul>
 
-      <h3>4.2 Account Responsibilities</h3>
+      <h3>4.2 Sign-In Methods</h3>
+      <p>We offer the following authentication methods:</p>
+      <ul>
+        <li><strong>Google OAuth:</strong> Sign in with your Google account</li>
+        <li><strong>Magic Link:</strong> A one-time sign-in link sent to your registered email address</li>
+        <li><strong>SMS OTP:</strong> A 6-digit one-time code sent to your registered phone number. OTP codes expire after 5 minutes and can only be used once. You must not share OTP codes with anyone. A maximum of 3 codes may be requested per hour per phone number.</li>
+      </ul>
+
+      <h3>4.3 Account Responsibilities</h3>
       <p>You are responsible for:</p>
       <ul>
         <li>Maintaining confidentiality of your account credentials</li>
@@ -187,7 +198,17 @@ export default function TermsOfServicePage() {
         <li>Your end-users' activities on your WiFi network</li>
       </ul>
 
-      <h2>13. Regulatory Compliance</h2>
+      <h2>13. Captive Portal & Customer Obligations</h2>
+      <p>If you operate a branded captive portal through PAY N BROWSE, you must:</p>
+      <ul>
+        <li>Not use the captive portal to display illegal, deceptive, or misleading content</li>
+        <li>Ensure your end-users are clearly informed that their internet session data may be logged</li>
+        <li>Not modify portal code in ways that circumvent M-Pesa payment validation</li>
+        <li>Not offer content that violates the Kenya Information and Communications Act or any applicable law</li>
+        <li>Ensure the portal does not collect sensitive personal data beyond what is needed for authentication</li>
+      </ul>
+
+      <h2>14. Regulatory Compliance</h2>
       <p>You must comply with:</p>
       <ul>
         <li><strong>Communications Authority of Kenya (CA):</strong> Obtain necessary licenses if required</li>
@@ -196,20 +217,20 @@ export default function TermsOfServicePage() {
         <li><strong>Consumer Protection:</strong> Kenya Consumer Protection Act, 2012</li>
       </ul>
 
-      <h2>14. Dispute Resolution</h2>
-      
-      <h3>14.1 Governing Law</h3>
+      <h2>15. Dispute Resolution</h2>
+
+      <h3>15.1 Governing Law</h3>
       <p>These terms are governed by the laws of Kenya.</p>
 
-      <h3>14.2 Arbitration</h3>
+      <h3>15.2 Arbitration</h3>
       <p>
         Disputes shall first be resolved through good faith negotiation. If unsuccessful, disputes shall be resolved through arbitration under the Kenyan Arbitration Act, 1995, in Nairobi, Kenya.
       </p>
 
-      <h3>14.3 Class Action Waiver</h3>
+      <h3>15.3 Class Action Waiver</h3>
       <p>You agree to resolve disputes individually and waive any right to participate in class actions.</p>
 
-      <h2>15. Changes to Terms</h2>
+      <h2>16. Changes to Terms</h2>
       <p>
         We may modify these terms at any time. Material changes will be notified via:
       </p>
@@ -220,21 +241,21 @@ export default function TermsOfServicePage() {
       </ul>
       <p>Continued use after changes constitutes acceptance of modified terms.</p>
 
-      <h2>16. Miscellaneous</h2>
-      
-      <h3>16.1 Entire Agreement</h3>
+      <h2>17. Miscellaneous</h2>
+
+      <h3>17.1 Entire Agreement</h3>
       <p>These terms, along with our Privacy Policy and other referenced policies, constitute the entire agreement between you and PAY N BROWSE.</p>
 
-      <h3>16.2 Severability</h3>
+      <h3>17.2 Severability</h3>
       <p>If any provision is found unenforceable, the remaining provisions remain in full effect.</p>
 
-      <h3>16.3 Waiver</h3>
+      <h3>17.3 Waiver</h3>
       <p>Our failure to enforce any right or provision does not constitute a waiver of that right.</p>
 
-      <h3>16.4 Assignment</h3>
+      <h3>17.4 Assignment</h3>
       <p>You may not assign these terms without our consent. We may assign our rights without restriction.</p>
 
-      <h2>17. Contact Information</h2>
+      <h2>18. Contact Information</h2>
       <div className="bg-muted p-4 rounded-lg my-4">
         <p className="m-0"><strong>PAY N BROWSE Support</strong></p>
         <p className="m-0">Email: support@paynbrowse.com</p>

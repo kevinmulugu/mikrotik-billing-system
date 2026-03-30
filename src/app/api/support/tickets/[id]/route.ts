@@ -3,8 +3,15 @@ import { getServerSession } from 'next-auth/next'
 import { authOptions } from '@/lib/auth'
 import { TicketHelpers, toObjectId, isValidObjectId } from '@/lib/mongodb-helpers'
 import { uploadFile } from '@/lib/storage'
+import { z } from 'zod'
 
-type RouteContext = { params: { id: string } }
+type RouteContext = { params: Promise<{ id: string }> }
+
+// Users can only close or reopen their own tickets — never set in_progress, waiting_customer, or resolved
+const ActionSchema = z.discriminatedUnion('action', [
+  z.object({ action: z.literal('close') }),
+  z.object({ action: z.literal('reopen') }),
+])
 
 // Helper: build aggregation to fetch a single ticket populated for UI
 async function fetchTicketForUser(ticketId: string, userId: string) {
@@ -98,7 +105,7 @@ async function fetchTicketForUser(ticketId: string, userId: string) {
 export async function GET(_request: NextRequest, { params }: RouteContext) {
   try {
     const session = await getServerSession(authOptions)
-    if (!session?.user) {
+    if (!session?.user?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
@@ -119,11 +126,12 @@ export async function GET(_request: NextRequest, { params }: RouteContext) {
   }
 }
 
-// PATCH: Update ticket - add message, change status, reopen
+// PATCH: Update ticket - add message (multipart), close, or reopen (JSON)
+// Users cannot set in_progress / waiting_customer / resolved — those are admin-only
 export async function PATCH(request: NextRequest, { params }: RouteContext) {
   try {
     const session = await getServerSession(authOptions)
-    if (!session?.user) {
+    if (!session?.user?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
@@ -133,49 +141,36 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
     }
 
     const ticketsCollection = await TicketHelpers.getCollection()
+    const now = new Date()
 
     const contentType = request.headers.get('content-type') || ''
+
+    // JSON: close or reopen actions only
     if (contentType.includes('application/json')) {
       const body = await request.json()
-      const action = body.action as string
-
-      if (action === 'updateStatus') {
-        const allowed = new Set(['open', 'in_progress', 'waiting_customer', 'resolved', 'closed'])
-        const newStatus: string | undefined = body.status
-        if (!newStatus || !allowed.has(newStatus)) {
-          return NextResponse.json({ error: 'Invalid status' }, { status: 400 })
-        }
-
-        const result = await ticketsCollection.updateOne(
-          { _id: toObjectId(ticketId), userId: toObjectId(session.user.id) },
-          { $set: { status: newStatus, updatedAt: new Date() } }
+      const parsed = ActionSchema.safeParse(body)
+      if (!parsed.success) {
+        return NextResponse.json(
+          { error: parsed.error.issues[0]?.message ?? 'Invalid action' },
+          { status: 400 },
         )
-
-        if (result.matchedCount === 0) {
-          return NextResponse.json({ error: 'Ticket not found' }, { status: 404 })
-        }
-
-        const ticket = await fetchTicketForUser(ticketId, session.user.id)
-        return NextResponse.json({ success: true, ticket })
       }
 
-      if (action === 'reopen') {
-        const result = await ticketsCollection.updateOne(
-          { _id: toObjectId(ticketId), userId: toObjectId(session.user.id) },
-          { $set: { status: 'open', updatedAt: new Date() } }
-        )
-        if (result.matchedCount === 0) {
-          return NextResponse.json({ error: 'Ticket not found' }, { status: 404 })
-        }
+      const newStatus = parsed.data.action === 'close' ? 'closed' : 'open'
+      const result = await ticketsCollection.updateOne(
+        { _id: toObjectId(ticketId), userId: toObjectId(session.user.id) },
+        { $set: { status: newStatus, updatedAt: now } },
+      )
 
-        const ticket = await fetchTicketForUser(ticketId, session.user.id)
-        return NextResponse.json({ success: true, ticket })
+      if (result.matchedCount === 0) {
+        return NextResponse.json({ error: 'Ticket not found' }, { status: 404 })
       }
 
-      return NextResponse.json({ error: 'Unsupported action' }, { status: 400 })
+      const ticket = await fetchTicketForUser(ticketId, session.user.id)
+      return NextResponse.json({ success: true, ticket })
     }
 
-    // Multipart/form-data: addMessage + attachments
+    // Multipart: addMessage + optional attachments
     if (contentType.includes('multipart/form-data')) {
       const formData = await request.formData()
       const action = (formData.get('action') as string) || ''
@@ -204,27 +199,24 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
             })
           } catch (err) {
             console.error('Attachment upload failed:', err)
-            // Continue with other files
           }
         }
       }
 
-      const updateDoc: any = {
-        $push: {
-          communication: {
-            from: toObjectId(session.user.id),
-            message,
-            attachments,
-            isInternal: false,
-            timestamp: new Date(),
-          }
-        },
-        $set: { updatedAt: new Date() }
-      }
-
       const update = await ticketsCollection.updateOne(
         { _id: toObjectId(ticketId), userId: toObjectId(session.user.id) } as any,
-        updateDoc
+        {
+          $push: {
+            communication: {
+              from: toObjectId(session.user.id),
+              message: message.trim(),
+              attachments,
+              isInternal: false, // users can never set internal notes
+              timestamp: now,
+            },
+          } as any,
+          $set: { updatedAt: now },
+        },
       )
 
       if (update.matchedCount === 0) {

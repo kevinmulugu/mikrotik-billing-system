@@ -23,7 +23,8 @@ import {
 } from "@/components/ui/form"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
-import { Badge, BadgeProps } from "@/components/ui/badge"
+import { Badge, badgeVariants } from "@/components/ui/badge"
+import { type VariantProps } from "class-variance-authority"
 import { Separator } from "@/components/ui/separator"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -114,7 +115,7 @@ interface TicketDetailsProps {
 }
 
 // Status badge variant mapping
-const getStatusVariant = (status: string): BadgeProps["variant"] => {
+const getStatusVariant = (status: string): VariantProps<typeof badgeVariants>["variant"] => {
   switch (status) {
     case "open":
       return "default"
@@ -132,7 +133,7 @@ const getStatusVariant = (status: string): BadgeProps["variant"] => {
 }
 
 // Priority badge variant mapping
-const getPriorityVariant = (priority: string): BadgeProps["variant"] => {
+const getPriorityVariant = (priority: string): VariantProps<typeof badgeVariants>["variant"] => {
   switch (priority) {
     case "urgent":
       return "destructive"
@@ -202,23 +203,22 @@ export function TicketDetails({ ticketId, onTicketUpdated, onTicketClosed }: Tic
     }
   }
 
-  // Send reply
+  // Send reply via multipart (supports future attachments)
   const onSubmit = async (data: ReplyForm) => {
     try {
       setSending(true)
-      const response = await fetch(`/api/support/tickets/${ticketId}/reply`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session?.user?.id}`,
-        },
-        body: JSON.stringify({
-          message: data.message,
-        }),
+      const formData = new FormData()
+      formData.append('action', 'addMessage')
+      formData.append('message', data.message)
+
+      const response = await fetch(`/api/support/tickets/${ticketId}`, {
+        method: 'PATCH',
+        body: formData,
       })
 
       if (!response.ok) {
-        throw new Error('Failed to send reply')
+        const err = await response.json().catch(() => ({}))
+        throw new Error(err.error || 'Failed to send reply')
       }
 
       toast.success('Reply sent successfully')
@@ -227,7 +227,7 @@ export function TicketDetails({ ticketId, onTicketUpdated, onTicketClosed }: Tic
       onTicketUpdated?.()
     } catch (error) {
       console.error('Error sending reply:', error)
-      toast.error('Failed to send reply')
+      toast.error(error instanceof Error ? error.message : 'Failed to send reply')
     } finally {
       setSending(false)
     }
@@ -236,15 +236,15 @@ export function TicketDetails({ ticketId, onTicketUpdated, onTicketClosed }: Tic
   // Close ticket
   const closeTicket = async () => {
     try {
-      const response = await fetch(`/api/support/tickets/${ticketId}/close`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${session?.user?.id}`,
-        },
+      const response = await fetch(`/api/support/tickets/${ticketId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'close' }),
       })
 
       if (!response.ok) {
-        throw new Error('Failed to close ticket')
+        const err = await response.json().catch(() => ({}))
+        throw new Error(err.error || 'Failed to close ticket')
       }
 
       toast.success('Ticket closed successfully')
@@ -252,22 +252,22 @@ export function TicketDetails({ ticketId, onTicketUpdated, onTicketClosed }: Tic
       onTicketClosed?.()
     } catch (error) {
       console.error('Error closing ticket:', error)
-      toast.error('Failed to close ticket')
+      toast.error(error instanceof Error ? error.message : 'Failed to close ticket')
     }
   }
 
   // Reopen ticket
   const reopenTicket = async () => {
     try {
-      const response = await fetch(`/api/support/tickets/${ticketId}/reopen`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${session?.user?.id}`,
-        },
+      const response = await fetch(`/api/support/tickets/${ticketId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'reopen' }),
       })
 
       if (!response.ok) {
-        throw new Error('Failed to reopen ticket')
+        const err = await response.json().catch(() => ({}))
+        throw new Error(err.error || 'Failed to reopen ticket')
       }
 
       toast.success('Ticket reopened successfully')
@@ -275,7 +275,7 @@ export function TicketDetails({ ticketId, onTicketUpdated, onTicketClosed }: Tic
       onTicketUpdated?.()
     } catch (error) {
       console.error('Error reopening ticket:', error)
-      toast.error('Failed to reopen ticket')
+      toast.error(error instanceof Error ? error.message : 'Failed to reopen ticket')
     }
   }
 

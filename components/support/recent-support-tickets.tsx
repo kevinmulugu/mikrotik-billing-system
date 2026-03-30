@@ -1,7 +1,8 @@
 'use client';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge, BadgeProps } from '@/components/ui/badge';
+import { Badge, badgeVariants } from '@/components/ui/badge'
+import { type VariantProps } from 'class-variance-authority';
 import { Button } from '@/components/ui/button';
 import { formatDistanceToNow } from 'date-fns';
 
@@ -26,7 +27,7 @@ interface RecentSupportTicketsProps {
   tickets: Ticket[];
 }
 
-const getStatusVariant = (status: string): BadgeProps['variant'] => {
+const getStatusVariant = (status: string): VariantProps<typeof badgeVariants>['variant'] => {
   switch (status) {
     case 'open':
       return 'destructive';
@@ -46,13 +47,13 @@ const getPriorityColor = (priority: string): string => {
   switch (priority.toLowerCase()) {
     case 'urgent':
     case 'high':
-      return 'border-red-500 text-red-600';
+      return 'border-red-500 text-red-500 dark:text-red-400';
     case 'medium':
-      return 'border-yellow-500 text-yellow-600';
+      return 'border-yellow-500 text-yellow-600 dark:text-yellow-400';
     case 'low':
-      return 'border-green-500 text-green-600';
+      return 'border-green-500 text-green-600 dark:text-green-400';
     default:
-      return 'border-gray-500 text-gray-600';
+      return 'border-border text-muted-foreground';
   }
 };
 
@@ -89,7 +90,7 @@ export function RecentSupportTickets({ tickets }: RecentSupportTicketsProps) {
             {recentTickets.map((ticket) => (
               <div 
                 key={ticket._id} 
-                className="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+                className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors"
               >
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-3 mb-2 flex-wrap">

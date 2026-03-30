@@ -9,19 +9,19 @@ import {
   Building2,
   Wifi,
   ArrowRight,
-  HelpCircle
+  HelpCircle,
 } from 'lucide-react';
 
 export const metadata: Metadata = {
   title: 'Pricing - PAY N BROWSE',
-  description: 'Simple, transparent pricing for WiFi hotspot and PPPoE management. No hidden fees.',
+  description: 'Simple, transparent pricing for WiFi hotspot and PPPoE management. Supports MikroTik & UniFi. No hidden fees.',
 };
 
 export default function PricingPage() {
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="border-b">
+      <header className="border-b sticky top-0 bg-background/95 backdrop-blur z-10">
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
             <Link href="/" className="flex items-center space-x-2">
@@ -30,6 +30,10 @@ export default function PricingPage() {
               </div>
               <span className="font-semibold text-foreground">PAY N BROWSE</span>
             </Link>
+            <nav className="hidden md:flex items-center gap-6">
+              <Link href="/" className="text-sm text-muted-foreground hover:text-foreground transition-colors">Home</Link>
+              <Link href="/support/knowledge-base" className="text-sm text-muted-foreground hover:text-foreground transition-colors">Support</Link>
+            </nav>
             <Button asChild variant="outline">
               <Link href="/signin">Sign In</Link>
             </Button>
@@ -42,13 +46,14 @@ export default function PricingPage() {
         <div className="container mx-auto px-4">
           <div className="text-center max-w-3xl mx-auto space-y-4">
             <Badge variant="secondary" className="mb-2">
-              15 Days Free Trial
+              15 Days Free Trial — No Credit Card Required
             </Badge>
             <h1 className="text-4xl md:text-5xl font-bold">
               Simple, Transparent Pricing
             </h1>
             <p className="text-xl text-muted-foreground">
-              Choose the plan that fits your business. No hidden fees, cancel anytime.
+              Choose the plan that fits your operation. No hidden fees, cancel anytime.
+              All plans include MikroTik & UniFi router support.
             </p>
           </div>
         </div>
@@ -58,7 +63,8 @@ export default function PricingPage() {
       <section className="pb-16 md:pb-24">
         <div className="container mx-auto px-4">
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8 max-w-6xl mx-auto">
-            {/* Apartment/Home Owners Plan */}
+
+            {/* Personal Plan */}
             <Card className="relative border-2 border-primary shadow-lg">
               <div className="absolute -top-4 left-1/2 -translate-x-1/2">
                 <Badge className="px-4 py-1">Most Popular</Badge>
@@ -69,7 +75,7 @@ export default function PricingPage() {
                 </div>
                 <CardTitle className="text-2xl">Personal Plan</CardTitle>
                 <CardDescription className="text-base">
-                  Perfect for apartments, homes, and small businesses
+                  Apartments, homes, guesthouses & small offices
                 </CardDescription>
                 <div className="pt-4">
                   <div className="flex items-baseline gap-2">
@@ -77,75 +83,32 @@ export default function PricingPage() {
                     <span className="text-muted-foreground">commission</span>
                   </div>
                   <p className="text-sm text-muted-foreground mt-1">
-                    Only charged on your earnings
+                    Only charged on your actual earnings
                   </p>
                 </div>
               </CardHeader>
               <CardContent className="space-y-6">
                 <div className="space-y-3">
-                  <div className="flex items-start gap-2">
-                    <CheckCircle2 className="w-5 h-5 text-primary mt-0.5 flex-shrink-0" />
-                    <div>
-                      <p className="font-medium">No Monthly Fees</p>
-                      <p className="text-sm text-muted-foreground">Pay only when you earn</p>
+                  {[
+                    { title: 'No Monthly Fees', desc: 'Pay only when you earn' },
+                    { title: '1 Router Included', desc: 'MikroTik or UniFi' },
+                    { title: 'M-Pesa STK Push', desc: 'Automated payment processing' },
+                    { title: 'Branded Captive Portal', desc: 'Your business name & colors' },
+                    { title: 'Voucher Management', desc: 'Generate and sell WiFi vouchers' },
+                    { title: 'SMS Customer Alerts', desc: 'Payment & expiry notifications' },
+                    { title: 'Free Trial WiFi', desc: 'Offer timed trials to customers' },
+                    { title: 'Monthly Withdrawals', desc: 'Paid to M-Pesa every month' },
+                    { title: 'Support Tickets', desc: 'Manage customer issues' },
+                    { title: 'Email Support', desc: 'Help when you need it' },
+                  ].map((item) => (
+                    <div key={item.title} className="flex items-start gap-2">
+                      <CheckCircle2 className="w-5 h-5 text-primary mt-0.5 flex-shrink-0" />
+                      <div>
+                        <p className="font-medium">{item.title}</p>
+                        <p className="text-sm text-muted-foreground">{item.desc}</p>
+                      </div>
                     </div>
-                  </div>
-                  <div className="flex items-start gap-2">
-                    <CheckCircle2 className="w-5 h-5 text-primary mt-0.5 flex-shrink-0" />
-                    <div>
-                      <p className="font-medium">1 Router Included</p>
-                      <p className="text-sm text-muted-foreground">Manage your WiFi hotspot</p>
-                    </div>
-                  </div>
-                  <div className="flex items-start gap-2">
-                    <CheckCircle2 className="w-5 h-5 text-primary mt-0.5 flex-shrink-0" />
-                    <div>
-                      <p className="font-medium">M-Pesa Integration</p>
-                      <p className="text-sm text-muted-foreground">Automated payment processing</p>
-                    </div>
-                  </div>
-                  <div className="flex items-start gap-2">
-                    <CheckCircle2 className="w-5 h-5 text-primary mt-0.5 flex-shrink-0" />
-                    <div>
-                      <p className="font-medium">Voucher Management</p>
-                      <p className="text-sm text-muted-foreground">Generate and sell WiFi vouchers</p>
-                    </div>
-                  </div>
-                  <div className="flex items-start gap-2">
-                    <CheckCircle2 className="w-5 h-5 text-primary mt-0.5 flex-shrink-0" />
-                    <div>
-                      <p className="font-medium">Hotspot Management</p>
-                      <p className="text-sm text-muted-foreground">Manage WiFi hotspot users</p>
-                    </div>
-                  </div>
-                  <div className="flex items-start gap-2">
-                    <CheckCircle2 className="w-5 h-5 text-primary mt-0.5 flex-shrink-0" />
-                    <div>
-                      <p className="font-medium">Trial WiFi</p>
-                      <p className="text-sm text-muted-foreground">Offer free trials to customers</p>
-                    </div>
-                  </div>
-                  <div className="flex items-start gap-2">
-                    <CheckCircle2 className="w-5 h-5 text-primary mt-0.5 flex-shrink-0" />
-                    <div>
-                      <p className="font-medium">Monthly Withdrawals</p>
-                      <p className="text-sm text-muted-foreground">Get paid every month</p>
-                    </div>
-                  </div>
-                  <div className="flex items-start gap-2">
-                    <CheckCircle2 className="w-5 h-5 text-primary mt-0.5 flex-shrink-0" />
-                    <div>
-                      <p className="font-medium">Mobile Dashboard</p>
-                      <p className="text-sm text-muted-foreground">Manage from anywhere</p>
-                    </div>
-                  </div>
-                  <div className="flex items-start gap-2">
-                    <CheckCircle2 className="w-5 h-5 text-primary mt-0.5 flex-shrink-0" />
-                    <div>
-                      <p className="font-medium">Email Support</p>
-                      <p className="text-sm text-muted-foreground">Get help when you need it</p>
-                    </div>
-                  </div>
+                  ))}
                 </div>
                 <Button asChild className="w-full" size="lg">
                   <Link href="/signup?plan=individual">
@@ -164,76 +127,39 @@ export default function PricingPage() {
                 </div>
                 <CardTitle className="text-2xl">ISP Basic</CardTitle>
                 <CardDescription className="text-base">
-                  For small to medium ISPs
+                  Small to medium ISPs and WISPs
                 </CardDescription>
                 <div className="pt-4">
                   <div className="flex items-baseline gap-2">
                     <span className="text-4xl font-bold">KSh 2,500</span>
                     <span className="text-muted-foreground">/month</span>
                   </div>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    Billed monthly
-                  </p>
+                  <p className="text-sm text-muted-foreground mt-1">Billed monthly • 0% commission</p>
                 </div>
               </CardHeader>
               <CardContent className="space-y-6">
                 <div className="space-y-3">
-                  <div className="flex items-start gap-2">
-                    <CheckCircle2 className="w-5 h-5 text-primary mt-0.5 flex-shrink-0" />
-                    <div>
-                      <p className="font-medium">Up to 5 Routers</p>
-                      <p className="text-sm text-muted-foreground">Manage multiple locations</p>
+                  {[
+                    { title: 'Up to 5 Routers', desc: 'MikroTik & UniFi supported' },
+                    { title: 'Unlimited Customers', desc: 'No limits on users' },
+                    { title: 'PPPoE Management', desc: 'Bandwidth profiles & subscriber control' },
+                    { title: 'Bulk Voucher Generation', desc: 'Print or export in batches' },
+                    { title: 'M-Pesa Paybill Integration', desc: 'Use your own paybill number' },
+                    { title: 'Branded Captive Portal', desc: 'Custom portal for each router' },
+                    { title: 'SMS Customer Notifications', desc: 'Buy SMS credits as needed' },
+                    { title: 'Commission Tracking', desc: 'Per-router revenue reports' },
+                    { title: 'Advanced Analytics', desc: 'Detailed reports & insights' },
+                    { title: 'Priority Support', desc: 'Email & in-platform tickets' },
+                    { title: '15-Day Free Trial', desc: 'Try before you commit' },
+                  ].map((item) => (
+                    <div key={item.title} className="flex items-start gap-2">
+                      <CheckCircle2 className="w-5 h-5 text-primary mt-0.5 flex-shrink-0" />
+                      <div>
+                        <p className="font-medium">{item.title}</p>
+                        <p className="text-sm text-muted-foreground">{item.desc}</p>
+                      </div>
                     </div>
-                  </div>
-                  <div className="flex items-start gap-2">
-                    <CheckCircle2 className="w-5 h-5 text-primary mt-0.5 flex-shrink-0" />
-                    <div>
-                      <p className="font-medium">Unlimited Users</p>
-                      <p className="text-sm text-muted-foreground">No limits on customers</p>
-                    </div>
-                  </div>
-                  <div className="flex items-start gap-2">
-                    <CheckCircle2 className="w-5 h-5 text-primary mt-0.5 flex-shrink-0" />
-                    <div>
-                      <p className="font-medium">PPPoE Management</p>
-                      <p className="text-sm text-muted-foreground">Manage PPPoE connections</p>
-                    </div>
-                  </div>
-                  <div className="flex items-start gap-2">
-                    <CheckCircle2 className="w-5 h-5 text-primary mt-0.5 flex-shrink-0" />
-                    <div>
-                      <p className="font-medium">Bulk Voucher Generation</p>
-                      <p className="text-sm text-muted-foreground">Create vouchers in bulk</p>
-                    </div>
-                  </div>
-                  <div className="flex items-start gap-2">
-                    <CheckCircle2 className="w-5 h-5 text-primary mt-0.5 flex-shrink-0" />
-                    <div>
-                      <p className="font-medium">M-Pesa Integration</p>
-                      <p className="text-sm text-muted-foreground">Automated payments</p>
-                    </div>
-                  </div>
-                  <div className="flex items-start gap-2">
-                    <CheckCircle2 className="w-5 h-5 text-primary mt-0.5 flex-shrink-0" />
-                    <div>
-                      <p className="font-medium">Advanced Analytics</p>
-                      <p className="text-sm text-muted-foreground">Detailed reports & insights</p>
-                    </div>
-                  </div>
-                  <div className="flex items-start gap-2">
-                    <CheckCircle2 className="w-5 h-5 text-primary mt-0.5 flex-shrink-0" />
-                    <div>
-                      <p className="font-medium">Priority Support</p>
-                      <p className="text-sm text-muted-foreground">Email & phone support</p>
-                    </div>
-                  </div>
-                  <div className="flex items-start gap-2">
-                    <CheckCircle2 className="w-5 h-5 text-primary mt-0.5 flex-shrink-0" />
-                    <div>
-                      <p className="font-medium">15-Day Free Trial</p>
-                      <p className="text-sm text-muted-foreground">Try before you commit</p>
-                    </div>
-                  </div>
+                  ))}
                 </div>
                 <Button asChild className="w-full" size="lg" variant="outline">
                   <Link href="/signup?plan=isp">
@@ -252,76 +178,38 @@ export default function PricingPage() {
                 </div>
                 <CardTitle className="text-2xl">ISP Pro</CardTitle>
                 <CardDescription className="text-base">
-                  For established ISPs & enterprises
+                  Established ISPs and enterprise operators
                 </CardDescription>
                 <div className="pt-4">
                   <div className="flex items-baseline gap-2">
                     <span className="text-4xl font-bold">KSh 3,900</span>
                     <span className="text-muted-foreground">/month</span>
                   </div>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    Billed monthly
-                  </p>
+                  <p className="text-sm text-muted-foreground mt-1">Billed monthly • 0% commission</p>
                 </div>
               </CardHeader>
               <CardContent className="space-y-6">
                 <div className="space-y-3">
-                  <div className="flex items-start gap-2">
-                    <CheckCircle2 className="w-5 h-5 text-primary mt-0.5 flex-shrink-0" />
-                    <div>
-                      <p className="font-medium">Unlimited Routers</p>
-                      <p className="text-sm text-muted-foreground">Scale without limits</p>
+                  {[
+                    { title: 'Unlimited Routers', desc: 'Scale to any number of sites' },
+                    { title: 'Everything in Basic', desc: 'All ISP Basic features included' },
+                    { title: 'UniFi Controller Support', desc: 'Full UniFi provisioning & sync' },
+                    { title: 'PPPoE Bandwidth Profiles', desc: 'Custom speed tiers per user' },
+                    { title: 'Bulk SMS Credits', desc: 'Higher volume at better rates' },
+                    { title: 'Automated Commission Payouts', desc: 'Scheduled M-Pesa disbursements' },
+                    { title: 'Full Audit Logs', desc: 'Complete activity trail for all users' },
+                    { title: 'Router Health Monitoring', desc: 'Alerts when routers go offline' },
+                    { title: 'Dedicated Support', desc: 'Priority queue & faster response' },
+                    { title: '15-Day Free Trial', desc: 'Try all Pro features free' },
+                  ].map((item) => (
+                    <div key={item.title} className="flex items-start gap-2">
+                      <CheckCircle2 className="w-5 h-5 text-primary mt-0.5 flex-shrink-0" />
+                      <div>
+                        <p className="font-medium">{item.title}</p>
+                        <p className="text-sm text-muted-foreground">{item.desc}</p>
+                      </div>
                     </div>
-                  </div>
-                  <div className="flex items-start gap-2">
-                    <CheckCircle2 className="w-5 h-5 text-primary mt-0.5 flex-shrink-0" />
-                    <div>
-                      <p className="font-medium">Everything in Basic</p>
-                      <p className="text-sm text-muted-foreground">All Basic features included</p>
-                    </div>
-                  </div>
-                  <div className="flex items-start gap-2">
-                    <CheckCircle2 className="w-5 h-5 text-primary mt-0.5 flex-shrink-0" />
-                    <div>
-                      <p className="font-medium">Multi-User Accounts</p>
-                      <p className="text-sm text-muted-foreground">Team collaboration</p>
-                    </div>
-                  </div>
-                  <div className="flex items-start gap-2">
-                    <CheckCircle2 className="w-5 h-5 text-primary mt-0.5 flex-shrink-0" />
-                    <div>
-                      <p className="font-medium">White-Label Option</p>
-                      <p className="text-sm text-muted-foreground">Brand it as your own</p>
-                    </div>
-                  </div>
-                  <div className="flex items-start gap-2">
-                    <CheckCircle2 className="w-5 h-5 text-primary mt-0.5 flex-shrink-0" />
-                    <div>
-                      <p className="font-medium">Custom Integrations</p>
-                      <p className="text-sm text-muted-foreground">API access</p>
-                    </div>
-                  </div>
-                  <div className="flex items-start gap-2">
-                    <CheckCircle2 className="w-5 h-5 text-primary mt-0.5 flex-shrink-0" />
-                    <div>
-                      <p className="font-medium">Dedicated Support</p>
-                      <p className="text-sm text-muted-foreground">24/7 priority support</p>
-                    </div>
-                  </div>
-                  <div className="flex items-start gap-2">
-                    <CheckCircle2 className="w-5 h-5 text-primary mt-0.5 flex-shrink-0" />
-                    <div>
-                      <p className="font-medium">Custom Training</p>
-                      <p className="text-sm text-muted-foreground">Onboarding for your team</p>
-                    </div>
-                  </div>
-                  <div className="flex items-start gap-2">
-                    <CheckCircle2 className="w-5 h-5 text-primary mt-0.5 flex-shrink-0" />
-                    <div>
-                      <p className="font-medium">15-Day Free Trial</p>
-                      <p className="text-sm text-muted-foreground">Try all features free</p>
-                    </div>
-                  </div>
+                  ))}
                 </div>
                 <Button asChild className="w-full" size="lg" variant="outline">
                   <Link href="/signup?plan=isp_pro">
@@ -329,6 +217,18 @@ export default function PricingPage() {
                     <ArrowRight className="w-4 h-4 ml-2" />
                   </Link>
                 </Button>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* SMS Credits Note */}
+          <div className="max-w-3xl mx-auto mt-10">
+            <Card className="bg-muted/50">
+              <CardContent className="py-4 px-6">
+                <p className="text-sm text-center text-muted-foreground">
+                  <strong className="text-foreground">SMS Credits</strong> are separate from your plan and used for customer notifications.
+                  Purchase credits as needed — starting from KSh 1 per SMS. Credits never expire.
+                </p>
               </CardContent>
             </Card>
           </div>
@@ -343,75 +243,48 @@ export default function PricingPage() {
               Frequently Asked Questions
             </h2>
             <div className="space-y-6">
-              <Card>
-                <CardHeader>
-                  <div className="flex items-start gap-3">
-                    <HelpCircle className="w-5 h-5 text-primary mt-1 flex-shrink-0" />
-                    <div>
-                      <CardTitle className="text-lg">How does the 20% commission work?</CardTitle>
-                      <CardDescription className="mt-2">
-                        For Personal plan users, we only charge 20% on the money you actually earn. For example, if a customer pays KSh 100 for WiFi, you keep KSh 80 and we take KSh 20. There are no monthly fees or hidden charges.
-                      </CardDescription>
+              {[
+                {
+                  q: 'How does the 20% commission work?',
+                  a: 'For the Personal plan, we only charge 20% on money you actually earn. If a customer pays KSh 100 for WiFi, you keep KSh 80 and we take KSh 20. ISP plans pay a flat monthly fee with 0% commission on all sales.',
+                },
+                {
+                  q: 'Which routers are supported?',
+                  a: 'We support MikroTik RouterOS routers (hotspot and PPPoE) and Ubiquiti UniFi controllers (hotspot). Our provisioning wizard handles configuration automatically — you just need the router credentials.',
+                },
+                {
+                  q: 'What happens after the 15-day trial?',
+                  a: 'Personal plan users continue with the 20% commission model — no subscription needed. ISPs are billed monthly from day 16. You can cancel anytime before that with no charge.',
+                },
+                {
+                  q: 'Do I need technical knowledge to set up?',
+                  a: 'No. Our automated onboarding guides you step-by-step. The system pushes hotspot configuration, IP pools, and captive portal settings directly to your router. Most users are live in under 30 minutes.',
+                },
+                {
+                  q: 'How do SMS notifications work?',
+                  a: 'SMS credits are purchased separately and used to send payment confirmations, voucher codes, and expiry reminders to your customers. Credits are consumed per message sent and never expire.',
+                },
+                {
+                  q: 'When can I withdraw my earnings?',
+                  a: 'You can request withdrawals at the end of every month. Funds are processed via M-Pesa or bank transfer within 1–3 business days.',
+                },
+                {
+                  q: 'Can I use my own M-Pesa Paybill?',
+                  a: 'Yes. ISP plans support linking your own M-Pesa Paybill or Till number so customer payments go directly to your account. Personal plan users collect via the platform\'s shared paybill.',
+                },
+              ].map(({ q, a }) => (
+                <Card key={q}>
+                  <CardHeader>
+                    <div className="flex items-start gap-3">
+                      <HelpCircle className="w-5 h-5 text-primary mt-1 flex-shrink-0" />
+                      <div>
+                        <CardTitle className="text-lg">{q}</CardTitle>
+                        <CardDescription className="mt-2">{a}</CardDescription>
+                      </div>
                     </div>
-                  </div>
-                </CardHeader>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <div className="flex items-start gap-3">
-                    <HelpCircle className="w-5 h-5 text-primary mt-1 flex-shrink-0" />
-                    <div>
-                      <CardTitle className="text-lg">What happens after the 15-day trial?</CardTitle>
-                      <CardDescription className="mt-2">
-                        After your free trial, Personal plan users continue with the 20% commission model (no subscription). ISPs are automatically billed monthly based on their selected plan. You can cancel anytime.
-                      </CardDescription>
-                    </div>
-                  </div>
-                </CardHeader>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <div className="flex items-start gap-3">
-                    <HelpCircle className="w-5 h-5 text-primary mt-1 flex-shrink-0" />
-                    <div>
-                      <CardTitle className="text-lg">Do I need technical knowledge to setup?</CardTitle>
-                      <CardDescription className="mt-2">
-                        No! Our automated onboarding process guides you through everything step-by-step. The system handles router configuration automatically. You just need a MikroTik router and internet connection.
-                      </CardDescription>
-                    </div>
-                  </div>
-                </CardHeader>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <div className="flex items-start gap-3">
-                    <HelpCircle className="w-5 h-5 text-primary mt-1 flex-shrink-0" />
-                    <div>
-                      <CardTitle className="text-lg">When can I withdraw my earnings?</CardTitle>
-                      <CardDescription className="mt-2">
-                        You can request withdrawals at the end of every month. Funds are typically processed within 1-3 business days via M-Pesa or bank transfer.
-                      </CardDescription>
-                    </div>
-                  </div>
-                </CardHeader>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <div className="flex items-start gap-3">
-                    <HelpCircle className="w-5 h-5 text-primary mt-1 flex-shrink-0" />
-                    <div>
-                      <CardTitle className="text-lg">Can I upgrade or downgrade my plan?</CardTitle>
-                      <CardDescription className="mt-2">
-                        Yes! ISPs can switch between Basic and Pro plans anytime. Personal plan users can upgrade to ISP plans if they need to manage multiple routers. Changes take effect immediately.
-                      </CardDescription>
-                    </div>
-                  </div>
-                </CardHeader>
-              </Card>
+                  </CardHeader>
+                </Card>
+              ))}
             </div>
           </div>
         </div>
@@ -422,11 +295,9 @@ export default function PricingPage() {
         <div className="container mx-auto px-4">
           <Card className="bg-primary text-primary-foreground">
             <CardContent className="py-12 text-center">
-              <h2 className="text-3xl font-bold mb-4">
-                Ready to Get Started?
-              </h2>
+              <h2 className="text-3xl font-bold mb-4">Ready to Get Started?</h2>
               <p className="text-lg mb-8 opacity-90 max-w-2xl mx-auto">
-                Join WiFi providers making passive income today. Start your 15-day free trial - no credit card required.
+                Join WiFi providers making passive income today. 15-day free trial — no credit card required.
               </p>
               <Button asChild size="lg" variant="secondary">
                 <Link href="/signup">
@@ -442,19 +313,17 @@ export default function PricingPage() {
       {/* Footer */}
       <footer className="border-t py-8">
         <div className="container mx-auto px-4">
-          <div className="flex flex-col md:flex-row justify-between items-center gap-4">
-            <p className="text-sm text-muted-foreground">
-              © {new Date().getFullYear()} PAY N BROWSE. All rights reserved.
-            </p>
-            <div className="flex gap-6">
-              <Link href="/" className="text-sm text-muted-foreground hover:text-foreground">
-                Home
-              </Link>
-              <Link href="/support/knowledge-base" className="text-sm text-muted-foreground hover:text-foreground">
-                Support
-              </Link>
-            </div>
+          <div className="flex flex-wrap justify-center gap-x-6 gap-y-2 mb-4 text-sm text-muted-foreground">
+            <Link href="/" className="hover:text-foreground">Home</Link>
+            <Link href="/legal/terms-of-service" className="hover:text-foreground">Terms of Service</Link>
+            <Link href="/legal/privacy-policy" className="hover:text-foreground">Privacy Policy</Link>
+            <Link href="/legal/acceptable-use" className="hover:text-foreground">Acceptable Use</Link>
+            <Link href="/legal/sla" className="hover:text-foreground">SLA</Link>
+            <Link href="/support/knowledge-base" className="hover:text-foreground">Support</Link>
           </div>
+          <p className="text-center text-sm text-muted-foreground">
+            © {new Date().getFullYear()} PAY N BROWSE. All rights reserved.
+          </p>
         </div>
       </footer>
     </div>

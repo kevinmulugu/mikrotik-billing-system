@@ -187,6 +187,7 @@ async function initializeDatabase() {
       'system_config',
       'webhook_logs',
       'stk_initiations',
+      'otp_tokens',
     ];
 
     for (const collectionName of coreCollections) {
@@ -308,6 +309,25 @@ async function initializeDatabase() {
     console.log('    ✓ status');
     await db.collection('users').createIndex({ 'paymentSettings.paybillNumber': 1 });
     console.log('    ✓ paymentSettings.paybillNumber');
+    await db.collection('users').createIndex(
+      { phone: 1 },
+      { unique: true, sparse: true },
+    );
+    console.log('    ✓ phone (unique, sparse — for SMS OTP auth)');
+
+    // OTP tokens collection indexes
+    console.log('\n  OTP tokens indexes:');
+    await db.collection('otp_tokens').createIndex(
+      { expiresAt: 1 },
+      { expireAfterSeconds: 0 },
+    );
+    console.log('    ✓ expiresAt (TTL — auto-delete expired tokens)');
+    await db.collection('otp_tokens').createIndex({ requestId: 1 }, { unique: true });
+    console.log('    ✓ requestId (unique)');
+    await db.collection('otp_tokens').createIndex({ phone: 1, createdAt: -1 });
+    console.log('    ✓ phone + createdAt (rate limiting)');
+    await db.collection('otp_tokens').createIndex({ ipAddress: 1, createdAt: -1 });
+    console.log('    ✓ ipAddress + createdAt (rate limiting)');
 
     // Accounts collection indexes (NextAuth)
     console.log('\n  Accounts indexes:');

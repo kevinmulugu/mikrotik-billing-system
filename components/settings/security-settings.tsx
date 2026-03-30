@@ -1,28 +1,27 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Shield,
-  Key,
   Smartphone,
-  Lock,
+  Mail,
   LogOut,
   AlertTriangle,
   CheckCircle2,
-  Eye,
-  EyeOff,
   Loader2,
   Trash2,
   Monitor,
   MapPin,
   Clock,
+  Plus,
+  X,
+  ArrowLeft,
+  RefreshCw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Switch } from "@/components/ui/switch";
-import { Separator } from "@/components/ui/separator";
 import {
   Dialog,
   DialogContent,
@@ -34,476 +33,379 @@ import {
 } from "@/components/ui/dialog";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { toast } from "sonner";
+import { useSession } from "next-auth/react";
 
-interface ActiveSession {
-  id: string;
-  device: string;
-  browser: string;
-  location: string;
-  ipAddress: string;
-  lastActive: Date;
-  isCurrent: boolean;
+const RESEND_COOLDOWN_SEC = 60;
+
+function normalizePhone(raw: string): string | null {
+  const digits = raw.replace(/\D/g, '');
+  if (digits.startsWith('254') && digits.length === 12) return `+${digits}`;
+  if (digits.startsWith('0') && digits.length === 10) return `+254${digits.slice(1)}`;
+  if (digits.length === 9) return `+254${digits}`;
+  return null;
 }
 
-interface LoginHistory {
-  id: string;
-  device: string;
-  location: string;
-  ipAddress: string;
-  timestamp: Date;
-  status: "success" | "failed";
+// ── Phone OTP Management ─────────────────────────────────────────────────────
+
+function PhoneOtpSection() {
+  const [hasPhone, setHasPhone] = useState(false);
+  const [maskedPhone, setMaskedPhone] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [step, setStep] = useState<'phone' | 'otp'>('phone');
+  const [phone, setPhone] = useState('');
+  const [requestId, setRequestId] = useState('');
+  const [otp, setOtp] = useState('');
+  const [isSending, setIsSending] = useState(false);
+  const [isVerifying, setIsVerifying] = useState(false);
+  const [resendCooldown, setResendCooldown] = useState(0);
+  const cooldownRef = React.useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const [isRemoving, setIsRemoving] = useState(false);
+  const [removeDialogOpen, setRemoveDialogOpen] = useState(false);
+
+  useEffect(() => {
+    fetchPhoneStatus();
+  }, []);
+
+  const fetchPhoneStatus = async () => {
+    setIsLoading(true);
+    try {
+      const res = await fetch('/api/user/phone');
+      if (res.ok) {
+        const data = await res.json();
+        setHasPhone(data.hasOtpPhone);
+        setMaskedPhone(data.maskedPhone);
+      }
+    } catch {
+      // ignore
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const startCooldown = () => {
+    setResendCooldown(RESEND_COOLDOWN_SEC);
+    if (cooldownRef.current) clearInterval(cooldownRef.current);
+    cooldownRef.current = setInterval(() => {
+      setResendCooldown((prev) => {
+        if (prev <= 1) { if (cooldownRef.current) clearInterval(cooldownRef.current); return 0; }
+        return prev - 1;
+      });
+    }, 1000);
+  };
+
+  const handleSendOtp = async () => {
+    const normalized = normalizePhone(phone);
+    if (!normalized) { toast.error('Invalid phone number'); return; }
+
+    setIsSending(true);
+    try {
+      const res = await fetch('/api/user/phone', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: normalized }),
+      });
+      const data = await res.json();
+      if (!res.ok) { toast.error(data.error || 'Could not send code'); return; }
+      setRequestId(data.requestId);
+      setStep('otp');
+      setOtp('');
+      startCooldown();
+      toast.success('Verification code sent!');
+    } catch {
+      toast.error('Something went wrong. Please try again.');
+    } finally {
+      setIsSending(false);
+    }
+  };
+
+  const handleVerifyOtp = async () => {
+    if (!/^\d{6}$/.test(otp)) { toast.error('Enter the 6-digit code'); return; }
+    setIsVerifying(true);
+    try {
+      const res = await fetch('/api/user/phone', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ requestId, otp }),
+      });
+      const data = await res.json();
+      if (!res.ok) { toast.error(data.error || 'Verification failed'); return; }
+      toast.success('Phone number verified and saved!');
+      setDialogOpen(false);
+      setStep('phone');
+      setPhone('');
+      fetchPhoneStatus();
+    } catch {
+      toast.error('Something went wrong. Please try again.');
+    } finally {
+      setIsVerifying(false);
+    }
+  };
+
+  const handleRemovePhone = async () => {
+    setIsRemoving(true);
+    try {
+      const res = await fetch('/api/user/phone', { method: 'DELETE' });
+      if (!res.ok) { toast.error('Failed to remove phone number'); return; }
+      toast.success('Phone number removed. SMS sign-in disabled.');
+      setRemoveDialogOpen(false);
+      fetchPhoneStatus();
+    } catch {
+      toast.error('Something went wrong.');
+    } finally {
+      setIsRemoving(false);
+    }
+  };
+
+  const openAddDialog = () => {
+    setStep('phone');
+    setPhone('');
+    setOtp('');
+    setRequestId('');
+    setDialogOpen(true);
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+        <Loader2 className="h-4 w-4 animate-spin" />
+        Loading…
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-start justify-between gap-4 rounded-lg border p-4">
+        <div className="flex items-center gap-3">
+          <Smartphone className="h-5 w-5 text-muted-foreground" />
+          <div>
+            <p className="font-medium">SMS OTP</p>
+            {hasPhone && maskedPhone ? (
+              <p className="text-sm text-muted-foreground">Phone: {maskedPhone}</p>
+            ) : (
+              <p className="text-sm text-muted-foreground">Not configured</p>
+            )}
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          {hasPhone ? (
+            <Badge variant="default" className="text-xs">Active</Badge>
+          ) : (
+            <Badge variant="outline" className="text-xs">Not set up</Badge>
+          )}
+          <Button variant="outline" size="sm" onClick={openAddDialog}>
+            {hasPhone ? 'Change' : <><Plus className="h-3 w-3 mr-1" />Add</>}
+          </Button>
+          {hasPhone && (
+            <Dialog open={removeDialogOpen} onOpenChange={setRemoveDialogOpen}>
+              <DialogTrigger asChild>
+                <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive">
+                  <X className="h-4 w-4" />
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Remove phone number</DialogTitle>
+                  <DialogDescription>
+                    This will disable SMS sign-in. You can always add it back later.
+                  </DialogDescription>
+                </DialogHeader>
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setRemoveDialogOpen(false)}>Cancel</Button>
+                  <Button variant="destructive" onClick={handleRemovePhone} disabled={isRemoving}>
+                    {isRemoving ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Remove'}
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          )}
+        </div>
+      </div>
+
+      {/* Add/Change Phone Dialog */}
+      <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) setStep('phone'); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{hasPhone ? 'Change phone number' : 'Add phone number'}</DialogTitle>
+            <DialogDescription>
+              {step === 'phone'
+                ? 'Enter your Kenyan mobile number. We\'ll send a 6-digit verification code.'
+                : 'Enter the 6-digit code sent to your phone.'}
+            </DialogDescription>
+          </DialogHeader>
+
+          {step === 'phone' ? (
+            <div className="space-y-4">
+              <Input
+                type="tel"
+                placeholder="Phone number (e.g. 0712 345 678)"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+              />
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
+                <Button onClick={handleSendOtp} disabled={isSending || !phone.trim()}>
+                  {isSending ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Sending…</> : 'Send Code'}
+                </Button>
+              </DialogFooter>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div className="flex items-center gap-2">
+                <Button variant="ghost" size="sm" className="p-0 h-auto" onClick={() => setStep('phone')}>
+                  <ArrowLeft className="h-4 w-4 mr-1" />
+                  Change number
+                </Button>
+              </div>
+              <Input
+                placeholder="6-digit code"
+                value={otp}
+                onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                maxLength={6}
+                inputMode="numeric"
+                autoComplete="one-time-code"
+              />
+              <Button
+                variant="ghost"
+                size="sm"
+                className="w-full text-xs"
+                onClick={handleSendOtp}
+                disabled={isSending || resendCooldown > 0}
+              >
+                <RefreshCw className="h-3 w-3 mr-1" />
+                {resendCooldown > 0 ? `Resend in ${resendCooldown}s` : 'Resend code'}
+              </Button>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
+                <Button onClick={handleVerifyOtp} disabled={isVerifying || otp.length !== 6}>
+                  {isVerifying ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Verifying…</> : 'Verify & Save'}
+                </Button>
+              </DialogFooter>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
 }
+
+// ── Main Component ───────────────────────────────────────────────────────────
 
 export const SecuritySettings: React.FC = () => {
-  const [isChangingPassword, setIsChangingPassword] = useState(false);
-  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
-  const [showNewPassword, setShowNewPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
-  const [showSetup2FA, setShowSetup2FA] = useState(false);
+  const { data: session } = useSession();
+  const [connectedProviders, setConnectedProviders] = useState<string[]>([]);
+  const [isSmsAvailable, setIsSmsAvailable] = useState(false);
 
-  const [passwordForm, setPasswordForm] = useState({
-    currentPassword: "",
-    newPassword: "",
-    confirmPassword: "",
-  });
+  useEffect(() => {
+    // Fetch connected providers from profile API
+    fetch('/api/user/profile')
+      .then((r) => r.ok ? r.json() : null)
+      .then((data) => {
+        if (data?.connectedProviders) setConnectedProviders(data.connectedProviders);
+      })
+      .catch(() => {});
 
-  const [passwordErrors, setPasswordErrors] = useState<{
-    currentPassword?: string;
-    newPassword?: string;
-    confirmPassword?: string;
-  }>({});
+    // Check if SMS OTP is configured on the platform
+    fetch('/api/auth/providers')
+      .then((r) => r.ok ? r.json() : null)
+      .then((providers) => {
+        if (providers?.['phone-otp']) setIsSmsAvailable(true);
+      })
+      .catch(() => {});
+  }, []);
 
-  // Sample data - replace with API calls
-  const activeSessions: ActiveSession[] = [
-    {
-      id: "session-1",
-      device: "MacBook Pro",
-      browser: "Chrome 120",
-      location: "Nairobi, Kenya",
-      ipAddress: "197.232.61.123",
-      lastActive: new Date(),
-      isCurrent: true,
-    },
-    {
-      id: "session-2",
-      device: "iPhone 14",
-      browser: "Safari Mobile",
-      location: "Nairobi, Kenya",
-      ipAddress: "197.232.61.124",
-      lastActive: new Date(Date.now() - 2 * 60 * 60 * 1000),
-      isCurrent: false,
-    },
-    {
-      id: "session-3",
-      device: "Windows PC",
-      browser: "Edge 120",
-      location: "Mombasa, Kenya",
-      ipAddress: "41.90.64.45",
-      lastActive: new Date(Date.now() - 24 * 60 * 60 * 1000),
-      isCurrent: false,
-    },
-  ];
-
-  const loginHistory: LoginHistory[] = [
-    {
-      id: "login-1",
-      device: "MacBook Pro - Chrome",
-      location: "Nairobi, Kenya",
-      ipAddress: "197.232.61.123",
-      timestamp: new Date(),
-      status: "success",
-    },
-    {
-      id: "login-2",
-      device: "iPhone 14 - Safari",
-      location: "Nairobi, Kenya",
-      ipAddress: "197.232.61.124",
-      timestamp: new Date(Date.now() - 2 * 60 * 60 * 1000),
-      status: "success",
-    },
-    {
-      id: "login-3",
-      device: "Unknown Device - Chrome",
-      location: "Lagos, Nigeria",
-      ipAddress: "105.112.45.78",
-      timestamp: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000),
-      status: "failed",
-    },
-  ];
-
-  const passwordStrength = (password: string): {
-    score: number;
-    label: string;
-    color: string;
-  } => {
-    let score = 0;
-    if (password.length >= 8) score++;
-    if (password.length >= 12) score++;
-    if (/[a-z]/.test(password) && /[A-Z]/.test(password)) score++;
-    if (/\d/.test(password)) score++;
-    if (/[^a-zA-Z0-9]/.test(password)) score++;
-
-    if (score <= 2) return { score, label: "Weak", color: "text-destructive" };
-    if (score === 3) return { score, label: "Fair", color: "text-yellow-500" };
-    if (score === 4) return { score, label: "Good", color: "text-blue-500" };
-    return { score, label: "Strong", color: "text-green-500" };
-  };
-
-  const validatePasswordForm = (): boolean => {
-    const errors: typeof passwordErrors = {};
-
-    if (!passwordForm.currentPassword) {
-      errors.currentPassword = "Current password is required";
-    }
-
-    if (!passwordForm.newPassword) {
-      errors.newPassword = "New password is required";
-    } else if (passwordForm.newPassword.length < 8) {
-      errors.newPassword = "Password must be at least 8 characters";
-    }
-
-    if (!passwordForm.confirmPassword) {
-      errors.confirmPassword = "Please confirm your password";
-    } else if (passwordForm.newPassword !== passwordForm.confirmPassword) {
-      errors.confirmPassword = "Passwords do not match";
-    }
-
-    setPasswordErrors(errors);
-    return Object.keys(errors).length === 0;
-  };
-
-  const handleChangePassword = async () => {
-    if (!validatePasswordForm()) return;
-
-    setIsChangingPassword(true);
-
-    try {
-      // API call to change password
-      await new Promise((resolve) => setTimeout(resolve, 2000));
-
-      toast.success("Password changed successfully");
-      setPasswordForm({
-        currentPassword: "",
-        newPassword: "",
-        confirmPassword: "",
-      });
-      setPasswordErrors({});
-    } catch (error) {
-      toast.error("Failed to change password");
-    } finally {
-      setIsChangingPassword(false);
-    }
-  };
-
-  const handleEnable2FA = async () => {
-    try {
-      // API call to enable 2FA
-      await new Promise((resolve) => setTimeout(resolve, 1500));
-
-      setTwoFactorEnabled(true);
-      setShowSetup2FA(false);
-      toast.success("Two-factor authentication enabled");
-    } catch (error) {
-      toast.error("Failed to enable 2FA");
-    }
-  };
-
-  const handleDisable2FA = async () => {
-    try {
-      // API call to disable 2FA
-      await new Promise((resolve) => setTimeout(resolve, 1500));
-
-      setTwoFactorEnabled(false);
-      toast.success("Two-factor authentication disabled");
-    } catch (error) {
-      toast.error("Failed to disable 2FA");
-    }
-  };
-
-  const handleRevokeSession = async (sessionId: string) => {
-    try {
-      // API call to revoke session
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-
-      toast.success("Session revoked successfully");
-    } catch (error) {
-      toast.error("Failed to revoke session");
-    }
-  };
-
-  const handleRevokeAllSessions = async () => {
-    try {
-      // API call to revoke all sessions
-      await new Promise((resolve) => setTimeout(resolve, 1500));
-
-      toast.success("All sessions revoked. Please sign in again.");
-    } catch (error) {
-      toast.error("Failed to revoke sessions");
-    }
-  };
+  const hasGoogle = connectedProviders.includes('google');
+  const hasEmail = !!session?.user?.email;
 
   const formatRelativeTime = (date: Date): string => {
-    const now = new Date();
-    const diff = now.getTime() - date.getTime();
+    const diff = Date.now() - date.getTime();
     const minutes = Math.floor(diff / 60000);
     const hours = Math.floor(diff / 3600000);
     const days = Math.floor(diff / 86400000);
-
     if (minutes < 1) return "Just now";
     if (minutes < 60) return `${minutes} minute${minutes > 1 ? "s" : ""} ago`;
     if (hours < 24) return `${hours} hour${hours > 1 ? "s" : ""} ago`;
     return `${days} day${days > 1 ? "s" : ""} ago`;
   };
 
-  const strength = passwordStrength(passwordForm.newPassword);
-
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div>
         <h2 className="text-2xl font-bold">Security Settings</h2>
-        <p className="text-muted-foreground mt-1">
-          Manage your account security and login settings
-        </p>
+        <p className="text-muted-foreground mt-1">Manage your sign-in methods and account security</p>
       </div>
 
-      {/* Password Change */}
+      {/* Sign-in Methods */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Key className="h-5 w-5" />
-            Change Password
+            <Shield className="h-5 w-5" />
+            Sign-in Methods
           </CardTitle>
           <CardDescription>
-            Update your password regularly to keep your account secure
+            Ways you can sign in to your account. Having multiple methods means you won't get locked out.
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Current Password</label>
-            <div className="relative">
-              <Input
-                type={showCurrentPassword ? "text" : "password"}
-                placeholder="Enter current password"
-                value={passwordForm.currentPassword}
-                onChange={(e) => {
-                  setPasswordForm({ ...passwordForm, currentPassword: e.target.value });
-                  if (passwordErrors.currentPassword) {
-                    const { currentPassword, ...rest } = passwordErrors;
-                    setPasswordErrors(rest);
-                  }
-                }}
-              />
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="absolute right-0 top-0 h-full"
-                onClick={() => setShowCurrentPassword(!showCurrentPassword)}
-              >
-                {showCurrentPassword ? (
-                  <EyeOff className="h-4 w-4" />
-                ) : (
-                  <Eye className="h-4 w-4" />
+        <CardContent className="space-y-3">
+          {/* Google */}
+          <div className="flex items-start justify-between gap-4 rounded-lg border p-4">
+            <div className="flex items-center gap-3">
+              <svg className="h-5 w-5" viewBox="0 0 24 24">
+                <path fill="currentColor" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                <path fill="currentColor" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                <path fill="currentColor" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
+                <path fill="currentColor" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
+              </svg>
+              <div>
+                <p className="font-medium">Google</p>
+                {hasGoogle && (
+                  <p className="text-sm text-muted-foreground">{session?.user?.email}</p>
                 )}
-              </Button>
+              </div>
             </div>
-            {passwordErrors.currentPassword && (
-              <p className="text-sm text-destructive">{passwordErrors.currentPassword}</p>
-            )}
+            <Badge variant={hasGoogle ? 'default' : 'outline'} className="text-xs">
+              {hasGoogle ? 'Connected' : 'Not connected'}
+            </Badge>
           </div>
 
-          <div className="space-y-2">
-            <label className="text-sm font-medium">New Password</label>
-            <div className="relative">
-              <Input
-                type={showNewPassword ? "text" : "password"}
-                placeholder="Enter new password"
-                onChange={(e) => {
-                  setPasswordForm({ ...passwordForm, newPassword: e.target.value });
-                  if (passwordErrors.newPassword) {
-                    const { newPassword, ...rest } = passwordErrors;
-                    setPasswordErrors(rest);
-                  }
-                }}
-                
-              />
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="absolute right-0 top-0 h-full"
-                onClick={() => setShowNewPassword(!showNewPassword)}
-              >
-                {showNewPassword ? (
-                  <EyeOff className="h-4 w-4" />
-                ) : (
-                  <Eye className="h-4 w-4" />
+          {/* Magic Link */}
+          <div className="flex items-start justify-between gap-4 rounded-lg border p-4">
+            <div className="flex items-center gap-3">
+              <Mail className="h-5 w-5 text-muted-foreground" />
+              <div>
+                <p className="font-medium">Magic Link (Email)</p>
+                {hasEmail && (
+                  <p className="text-sm text-muted-foreground">{session?.user?.email}</p>
                 )}
-              </Button>
+              </div>
             </div>
-            {passwordForm.newPassword && (
-              <div className="flex items-center gap-2">
-                <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
-                  <div
-                    className={`h-full transition-all ${
-                      strength.score <= 2
-                        ? "bg-destructive"
-                        : strength.score === 3
-                        ? "bg-yellow-500"
-                        : strength.score === 4
-                        ? "bg-blue-500"
-                        : "bg-green-500"
-                    }`}
-                    style={{ width: `${(strength.score / 5) * 100}%` }}
-                  />
+            <Badge variant={hasEmail ? 'default' : 'outline'} className="text-xs">
+              {hasEmail ? 'Active' : 'No email'}
+            </Badge>
+          </div>
+
+          {/* SMS OTP */}
+          {isSmsAvailable ? (
+            <PhoneOtpSection />
+          ) : (
+            <div className="flex items-start justify-between gap-4 rounded-lg border p-4 opacity-50">
+              <div className="flex items-center gap-3">
+                <Smartphone className="h-5 w-5 text-muted-foreground" />
+                <div>
+                  <p className="font-medium">SMS OTP</p>
+                  <p className="text-sm text-muted-foreground">Not available on this platform</p>
                 </div>
-                <span className={`text-sm font-medium ${strength.color}`}>
-                  {strength.label}
-                </span>
               </div>
-            )}
-            {passwordErrors.newPassword && (
-              <p className="text-sm text-destructive">{passwordErrors.newPassword}</p>
-            )}
-            <p className="text-xs text-muted-foreground">
-              Use at least 8 characters with a mix of letters, numbers, and symbols
-            </p>
-          </div>
-
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Confirm New Password</label>
-            <div className="relative">
-              <Input
-                type={showConfirmPassword ? "text" : "password"}
-                onChange={(e) => {
-                  setPasswordForm({ ...passwordForm, confirmPassword: e.target.value });
-                  if (passwordErrors.confirmPassword) {
-                    const { confirmPassword, ...rest } = passwordErrors;
-                    setPasswordErrors(rest);
-                  }
-                }}
-              />
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="absolute right-0 top-0 h-full"
-                onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-              >
-                {showConfirmPassword ? (
-                  <EyeOff className="h-4 w-4" />
-                ) : (
-                  <Eye className="h-4 w-4" />
-                )}
-              </Button>
+              <Badge variant="outline" className="text-xs">Unavailable</Badge>
             </div>
-            {passwordErrors.confirmPassword && (
-              <p className="text-sm text-destructive">{passwordErrors.confirmPassword}</p>
-            )}
-          </div>
-
-          <Button onClick={handleChangePassword} disabled={isChangingPassword}>
-            {isChangingPassword ? (
-              <>
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                Changing Password...
-              </>
-            ) : (
-              "Change Password"
-            )}
-          </Button>
+          )}
         </CardContent>
       </Card>
 
-      {/* Two-Factor Authentication */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Smartphone className="h-5 w-5" />
-            Two-Factor Authentication
-          </CardTitle>
-          <CardDescription>
-            Add an extra layer of security to your account
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-start justify-between gap-4">
-            <div className="flex-1">
-              <div className="flex items-center gap-2 mb-2">
-                <p className="font-medium">2FA Status</p>
-                <Badge variant={twoFactorEnabled ? "default" : "outline"}>
-                  {twoFactorEnabled ? "Enabled" : "Disabled"}
-                </Badge>
-              </div>
-              <p className="text-sm text-muted-foreground">
-                {twoFactorEnabled
-                  ? "Your account is protected with two-factor authentication"
-                  : "Enable 2FA to add an extra security layer to your account"}
-              </p>
-            </div>
-            {twoFactorEnabled ? (
-              <Dialog>
-                <DialogTrigger asChild>
-                  <Button variant="outline">Disable 2FA</Button>
-                </DialogTrigger>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>Disable Two-Factor Authentication</DialogTitle>
-                    <DialogDescription>
-                      Are you sure you want to disable 2FA? This will make your account
-                      less secure.
-                    </DialogDescription>
-                  </DialogHeader>
-                  <DialogFooter>
-                    <Button variant="outline">Cancel</Button>
-                    <Button variant="destructive" onClick={handleDisable2FA}>
-                      Disable 2FA
-                    </Button>
-                  </DialogFooter>
-                </DialogContent>
-              </Dialog>
-            ) : (
-              <Dialog open={showSetup2FA} onOpenChange={setShowSetup2FA}>
-                <DialogTrigger asChild>
-                  <Button>Enable 2FA</Button>
-                </DialogTrigger>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>Enable Two-Factor Authentication</DialogTitle>
-                    <DialogDescription>
-                      Scan this QR code with your authenticator app
-                    </DialogDescription>
-                  </DialogHeader>
-                  <div className="space-y-4">
-                    <div className="flex justify-center p-4 bg-muted rounded-lg">
-                      <div className="h-48 w-48 bg-background rounded-lg flex items-center justify-center border-2 border-dashed">
-                        <p className="text-sm text-muted-foreground">QR Code</p>
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">Verification Code</label>
-                      <Input placeholder="Enter 6-digit code" maxLength={6} />
-                      <p className="text-xs text-muted-foreground">
-                        Enter the code from your authenticator app
-                      </p>
-                    </div>
-                  </div>
-                  <DialogFooter>
-                    <Button variant="outline" onClick={() => setShowSetup2FA(false)}>
-                      Cancel
-                    </Button>
-                    <Button onClick={handleEnable2FA}>Verify & Enable</Button>
-                  </DialogFooter>
-                </DialogContent>
-              </Dialog>
-            )}
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Active Sessions */}
+      {/* Active Sessions — placeholder (real data requires session store query) */}
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
@@ -513,136 +415,24 @@ export const SecuritySettings: React.FC = () => {
                 Active Sessions
               </CardTitle>
               <CardDescription>
-                Manage devices that are currently signed in to your account
+                Devices currently signed in to your account
               </CardDescription>
             </div>
-            <Dialog>
-              <DialogTrigger asChild>
-                <Button variant="outline" size="sm">
-                  <LogOut className="h-4 w-4 mr-2" />
-                  Revoke All
-                </Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>Revoke All Sessions</DialogTitle>
-                  <DialogDescription>
-                    This will sign you out from all devices. You'll need to sign in again
-                    on each device.
-                  </DialogDescription>
-                </DialogHeader>
-                <DialogFooter>
-                  <Button variant="outline">Cancel</Button>
-                  <Button variant="destructive" onClick={handleRevokeAllSessions}>
-                    Revoke All Sessions
-                  </Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
           </div>
         </CardHeader>
-        <CardContent className="space-y-4">
-          {activeSessions.map((session) => (
-            <div
-              key={session.id}
-              className="flex items-start justify-between gap-4 rounded-lg border p-4"
-            >
-              <div className="flex-1 space-y-2">
-                <div className="flex items-center gap-2">
-                  <Monitor className="h-4 w-4 text-muted-foreground" />
-                  <p className="font-medium">{session.device}</p>
-                  {session.isCurrent && (
-                    <Badge variant="default" className="text-xs">
-                      Current
-                    </Badge>
-                  )}
-                </div>
-                <div className="space-y-1 text-sm text-muted-foreground">
-                  <div className="flex items-center gap-2">
-                    <MapPin className="h-3 w-3" />
-                    <span>
-                      {session.location} • {session.browser}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Clock className="h-3 w-3" />
-                    <span>Last active {formatRelativeTime(session.lastActive)}</span>
-                  </div>
-                  <p className="text-xs">IP: {session.ipAddress}</p>
-                </div>
+        <CardContent>
+          <div className="flex items-start gap-4 rounded-lg border p-4">
+            <div className="flex-1 space-y-1">
+              <div className="flex items-center gap-2">
+                <Monitor className="h-4 w-4 text-muted-foreground" />
+                <p className="font-medium">Current session</p>
+                <Badge variant="default" className="text-xs">Current</Badge>
               </div>
-              {!session.isCurrent && (
-                <Dialog>
-                  <DialogTrigger asChild>
-                    <Button variant="ghost" size="sm">
-                      <LogOut className="h-4 w-4 mr-2" />
-                      Revoke
-                    </Button>
-                  </DialogTrigger>
-                  <DialogContent>
-                    <DialogHeader>
-                      <DialogTitle>Revoke Session</DialogTitle>
-                      <DialogDescription>
-                        This will sign out this device. The user will need to sign in again
-                        to access the account.
-                      </DialogDescription>
-                    </DialogHeader>
-                    <DialogFooter>
-                      <Button variant="outline">Cancel</Button>
-                      <Button
-                        variant="destructive"
-                        onClick={() => handleRevokeSession(session.id)}
-                      >
-                        Revoke Session
-                      </Button>
-                    </DialogFooter>
-                  </DialogContent>
-                </Dialog>
-              )}
+              <p className="text-sm text-muted-foreground">
+                {session?.user?.email}
+              </p>
             </div>
-          ))}
-        </CardContent>
-      </Card>
-
-      {/* Login History */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Clock className="h-5 w-5" />
-            Login History
-          </CardTitle>
-          <CardDescription>Recent login attempts to your account</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          {loginHistory.map((login) => (
-            <div
-              key={login.id}
-              className="flex items-start justify-between gap-4 rounded-lg border p-3"
-            >
-              <div className="flex-1 space-y-1">
-                <div className="flex items-center gap-2">
-                  <p className="text-sm font-medium">{login.device}</p>
-                  <Badge
-                    variant={login.status === "success" ? "default" : "destructive"}
-                    className="text-xs"
-                  >
-                    {login.status === "success" ? (
-                      <CheckCircle2 className="h-3 w-3 mr-1" />
-                    ) : (
-                      <AlertTriangle className="h-3 w-3 mr-1" />
-                    )}
-                    {login.status}
-                  </Badge>
-                </div>
-                <div className="text-xs text-muted-foreground space-y-1">
-                  <p>
-                    {login.location} • {login.timestamp.toLocaleString()}
-                  </p>
-                  <p>IP: {login.ipAddress}</p>
-                </div>
-              </div>
-            </div>
-          ))}
+          </div>
         </CardContent>
       </Card>
 
@@ -680,9 +470,7 @@ export const SecuritySettings: React.FC = () => {
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-2">
-                <label className="text-sm font-medium">
-                  Type "DELETE" to confirm
-                </label>
+                <label className="text-sm font-medium">Type "DELETE" to confirm</label>
                 <Input placeholder="DELETE" />
               </div>
               <DialogFooter>

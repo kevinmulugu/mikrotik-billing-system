@@ -18,10 +18,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import {
-  Badge,
-  BadgeProps,
-} from "@/components/ui/badge"
+import { Badge, badgeVariants } from "@/components/ui/badge"
+import { type VariantProps } from "class-variance-authority"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -145,7 +143,7 @@ interface FilterOptions {
 }
 
 // User status badge variant mapping
-const getStatusVariant = (status: string): BadgeProps["variant"] => {
+const getStatusVariant = (status: string): VariantProps<typeof badgeVariants>["variant"] => {
   switch (status) {
     case "active":
       return "default"
@@ -161,7 +159,7 @@ const getStatusVariant = (status: string): BadgeProps["variant"] => {
 }
 
 // Connection status variant mapping
-const getConnectionVariant = (isOnline: boolean): BadgeProps["variant"] => {
+const getConnectionVariant = (isOnline: boolean): VariantProps<typeof badgeVariants>["variant"] => {
   return isOnline ? "default" : "secondary"
 }
 
