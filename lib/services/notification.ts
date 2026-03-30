@@ -12,13 +12,18 @@
  * - Email notification support (optional)
  */
 
-import { getDatabase } from '@/lib/database';
+import clientPromise from '@/lib/mongodb';
 import { ObjectId } from 'mongodb';
-import Notification, { 
-  NotificationType, 
-  NotificationCategory, 
-  NotificationPriority 
+import type {
+  NotificationType,
+  NotificationCategory,
+  NotificationPriority
 } from '@/models/Notification';
+
+async function getDatabase() {
+  const client = await clientPromise;
+  return client.db(process.env.MONGODB_DB_NAME || 'mikrotik_billing');
+}
 
 interface NotificationMetadata {
   resourceType?: 'router' | 'voucher' | 'payment' | 'vpn' | 'ticket' | 'sms';
