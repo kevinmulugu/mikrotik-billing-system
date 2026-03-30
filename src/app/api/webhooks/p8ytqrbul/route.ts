@@ -1,7 +1,7 @@
 // src/app/api/webhooks/p8ytqrbul/route.ts  
 import { NextRequest, NextResponse } from 'next/server';
 import { headers } from 'next/headers';
-import { getDatabase } from '@/lib/database';
+import clientPromise from '@/lib/mongodb';
 import { ObjectId } from 'mongodb';
 import MikroTikService from '@/lib/services/mikrotik';
 import { getRouterConnectionConfig } from '@/lib/services/router-connection';
@@ -92,7 +92,8 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    const db = await getDatabase();
+    const dbClient = await clientPromise;
+    const db = dbClient.db(process.env.MONGODB_DB_NAME || 'mikrotik_billing');
     const purchaseTime = new Date();
 
     // C2B Confirmation is the PRIMARY voucher assignment handler
@@ -1115,7 +1116,8 @@ export async function POST(request: NextRequest) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     console.error('[M-Pesa Webhook] Error processing payment:', error);
 
-    const db = await getDatabase();
+    const dbClient = await clientPromise;
+    const db = dbClient.db(process.env.MONGODB_DB_NAME || 'mikrotik_billing');
 
     // Log error
     await db.collection('webhook_logs').insertOne({

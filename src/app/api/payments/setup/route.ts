@@ -2,7 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
-import { getDatabase } from '@/lib/database';
+import clientPromise from '@/lib/mongodb';
 import { ObjectId } from 'mongodb';
 import { NotificationService } from '@/lib/services/notification';
 
@@ -14,7 +14,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const db = await getDatabase();
+    const dbClient = await clientPromise;
+    const db = dbClient.db(process.env.MONGODB_DB_NAME || 'mikrotik_billing');
     const userId = new ObjectId(session.user.id);
     const body = await request.json();
     const { method, paybillData, credentials, phoneNumber } = body;
@@ -206,7 +207,8 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const db = await getDatabase();
+    const dbClient = await clientPromise;
+    const db = dbClient.db(process.env.MONGODB_DB_NAME || 'mikrotik_billing');
     const userId = new ObjectId(session.user.id);
 
     // Get user's payment settings

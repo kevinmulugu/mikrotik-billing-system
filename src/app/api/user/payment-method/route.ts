@@ -2,7 +2,7 @@
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
-import { getDatabase } from '@/lib/database';
+import clientPromise from '@/lib/mongodb';
 import { ObjectId } from 'mongodb';
 
 /**
@@ -28,7 +28,8 @@ export async function GET() {
       );
     }
 
-    const db = await getDatabase();
+    const client = await clientPromise;
+    const db = client.db(process.env.MONGODB_DB_NAME || 'mikrotik_billing');
     
     // Security: Use session user ID (cannot be manipulated)
     const userId = new ObjectId(session.user.id);

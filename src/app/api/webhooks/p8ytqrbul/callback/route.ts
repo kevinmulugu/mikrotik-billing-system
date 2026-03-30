@@ -1,6 +1,6 @@
 // src/app/api/webhooks/p8ytqrbul/callback/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import { getDatabase } from '@/lib/database';
+import clientPromise from '@/lib/mongodb';
 import { ObjectId } from 'mongodb';
 
 /**
@@ -99,7 +99,8 @@ export async function POST(request: NextRequest) {
     } = stkCallback;
 
     // Connect to database
-    const db = await getDatabase();
+    const dbClient = await clientPromise;
+    const db = dbClient.db(process.env.MONGODB_DB_NAME || 'mikrotik_billing');
 
     // Find the payment record
     const payment = await db.collection('payments').findOne({
@@ -278,7 +279,8 @@ export async function POST(request: NextRequest) {
 
     // Log error
     try {
-      const db = await getDatabase();
+      const dbClient = await clientPromise;
+    const db = dbClient.db(process.env.MONGODB_DB_NAME || 'mikrotik_billing');
       await db.collection('webhook_logs').insertOne({
         type: 'mpesa_stk_callback',
         status: 'error',
