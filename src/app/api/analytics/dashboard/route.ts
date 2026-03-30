@@ -42,6 +42,11 @@ export async function GET(req: NextRequest) {
       );
     }
 
+    // Commission rate — matches commission page logic
+    const plan: string = user.subscription?.plan || 'individual';
+    const isISP = plan === 'isp' || plan === 'isp_pro' || plan === 'isp_5_routers';
+    const commissionRate: number = isISP ? 0 : (user.paymentSettings?.commissionRate ?? 20);
+
     // ==========================================
     // 1. OVERVIEW STATISTICS
     // ==========================================
@@ -100,7 +105,6 @@ export async function GET(req: NextRequest) {
           $group: {
             _id: null,
             totalRevenue: { $sum: '$transaction.amount' },
-            totalCommission: { $sum: '$commission.amount' },
             monthlyRevenue: {
               $sum: {
                 $cond: [
@@ -127,11 +131,12 @@ export async function GET(req: NextRequest) {
 
     const revenue = revenueStats[0] || {
       totalRevenue: 0,
-      totalCommission: 0,
       monthlyRevenue: 0,
       todayRevenue: 0,
-      transactionCount: 0
+      transactionCount: 0,
     };
+
+    const totalCommission = Math.round((revenue.totalRevenue ?? 0) * commissionRate / 100);
 
     // ==========================================
     // 2. RECENT ACTIVITY
@@ -342,11 +347,11 @@ export async function GET(req: NextRequest) {
     }
 
     // Pending commissions
-    if (revenue.totalCommission > 0) {
+    if (totalCommission > 0) {
       alerts.push({
         type: 'info',
         title: 'Commission Available',
-        message: `KES ${revenue.totalCommission.toFixed(2)} commission pending payout`,
+        message: `KES ${totalCommission.toFixed(2)} commission pending payout`,
         timestamp: new Date(),
       });
     }
@@ -363,7 +368,7 @@ export async function GET(req: NextRequest) {
         totalRevenue: revenue.totalRevenue,
         monthlyRevenue: revenue.monthlyRevenue,
         todayRevenue: revenue.todayRevenue,
-        totalCommission: revenue.totalCommission,
+        totalCommission,
         transactionCount: revenue.transactionCount,
       },
       routers: routerStats,
