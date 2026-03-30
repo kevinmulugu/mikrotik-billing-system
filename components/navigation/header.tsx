@@ -33,8 +33,11 @@ import { SidebarTrigger } from '@/components/ui/sidebar';
 export function Header() {
   const { data: session } = useSession();
   const { resolvedTheme, setTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
   const [smsCredits, setSmsCredits] = useState<number | null>(null);
   const [unreadCount, setUnreadCount] = useState<number>(0);
+
+  useEffect(() => { setMounted(true); }, []);
 
   // Fetch SMS credits balance
   useEffect(() => {
@@ -163,7 +166,9 @@ export function Header() {
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="icon">
                 <span className="sr-only">Toggle theme</span>
-                {resolvedTheme === 'dark' ? (
+                {!mounted ? (
+                  <Sun className="h-5 w-5" />
+                ) : resolvedTheme === 'dark' ? (
                   <Moon className="h-5 w-5" />
                 ) : (
                   <Sun className="h-5 w-5" />
