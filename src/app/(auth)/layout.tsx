@@ -1,11 +1,16 @@
 import { ReactNode } from 'react';
 import Link from 'next/link';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth';
+import { redirect } from 'next/navigation';
 
 interface AuthLayoutProps {
   children: ReactNode;
 }
 
-export default function AuthLayout({ children }: AuthLayoutProps) {
+export default async function AuthLayout({ children }: AuthLayoutProps) {
+  const session = await getServerSession(authOptions);
+  if (session) redirect('/dashboard');
   const currentYear = new Date().getFullYear();
 
   return (
